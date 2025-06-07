@@ -577,6 +577,82 @@ function initPlayer(videoUrl) {
         }
     });
 
+    // 自动隐藏工具栏的逻辑
+    let hideTimer;
+    const HIDE_DELAY = 2000; // 2秒后隐藏
+
+    // 创建鼠标跟踪状态
+    let isMouseActive = false;
+    let isMouseOverPlayer = false;
+
+    function hideControls() {
+        if (isMouseActive || !isMouseOverPlayer) return;
+        art.controls.classList.add('art-controls-hide');
+    }
+
+    function showControls() {
+        art.controls.classList.remove('art-controls-hide');
+    }
+
+    function resetHideTimer() {
+        clearTimeout(hideTimer);
+        showControls();
+        isMouseActive = true;
+
+        hideTimer = setTimeout(() => {
+            isMouseActive = false;
+            hideControls();
+        }, HIDE_DELAY);
+    }
+
+    // 监听全屏状态变化
+    art.on('fullscreenWeb:enter', () => {
+        // 添加全局事件监听
+        document.addEventListener('mousemove', resetHideTimer);
+        document.addEventListener('mouseleave', handleMouseLeave);
+        document.addEventListener('mouseenter', handleMouseEnter);
+
+        // 添加播放器区域事件
+        art.player.addEventListener('mouseenter', () => isMouseOverPlayer = true);
+        art.player.addEventListener('mouseleave', () => isMouseOverPlayer = false);
+
+        // 初始状态
+        isMouseOverPlayer = true;
+        resetHideTimer();
+    });
+
+    art.on('fullscreenWeb:exit', () => {
+        // 移除所有事件监听
+        document.removeEventListener('mousemove', resetHideTimer);
+        document.removeEventListener('mouseleave', handleMouseLeave);
+        document.removeEventListener('mouseenter', handleMouseEnter);
+
+        art.player.removeEventListener('mouseenter', () => isMouseOverPlayer = true);
+        art.player.removeEventListener('mouseleave', () => isMouseOverPlayer = false);
+
+        // 清除定时器并显示控件
+        clearTimeout(hideTimer);
+        showControls();
+    });
+
+    // 处理鼠标离开浏览器窗口
+    function handleMouseLeave() {
+        // 立即隐藏工具栏
+        hideControls();
+        clearTimeout(hideTimer);
+    }
+    
+    // 处理鼠标返回浏览器窗口
+    function handleMouseEnter() {
+        isMouseActive = true;
+        resetHideTimer();
+    }
+
+    // 播放器加载完成后初始隐藏工具栏
+    art.on('ready', () => {
+        art.controls.classList.add('art-controls-hide');
+    });
+
     // 全屏模式处理
     art.on('fullscreen', function () {
         if (window.screen.orientation && window.screen.orientation.lock) {
