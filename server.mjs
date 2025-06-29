@@ -122,6 +122,13 @@ function isValidUrl(urlString) {
   }
 }
 
+// 修复反向代理处理过的路径
+app.use('/proxy', (req, res, next) => {
+  const targetUrl = req.url.replace(/^\//, '').replace(/(https?:)\/([^/])/, '$1//$2');
+  req.url = '/' + encodeURIComponent(targetUrl);
+  next();
+});
+
 // 代理路由
 app.get('/proxy/:encodedUrl', async (req, res) => {
   try {
