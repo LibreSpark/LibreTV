@@ -583,91 +583,70 @@ function initPlayer(videoUrl) {
         }
     });
 
-    // 自动隐藏工具栏的逻辑
+    // artplayer 没有 'fullscreenWeb:enter', 'fullscreenWeb:exit' 等事件
+    // 所以原控制栏隐藏代码并没有起作用
+    // 实际起作用的是 artplayer 默认行为，它支持自动隐藏工具栏
+    // 但有一个 bug： 在副屏全屏时，鼠标移出副屏后不会自动隐藏工具栏
+    // 下面进一并重构和修复：
     let hideTimer;
-    const HIDE_DELAY = 2000; // 2秒后隐藏
 
-    // 创建鼠标跟踪状态
-    let isMouseActive = false;
-    let isMouseOverPlayer = false;
-
+    // 隐藏控制栏
     function hideControls() {
-        if (isMouseActive || !isMouseOverPlayer) return;
-        art.controls.classList.add('art-controls-hide');
+        if (art && art.controls) {
+            art.controls.show = false;
+        }
     }
 
-    function showControls() {
-        art.controls.classList.remove('art-controls-hide');
-    }
-
+    // 重置计时器，计时器超时时间与 artplayer 保持一致
     function resetHideTimer() {
         clearTimeout(hideTimer);
-        showControls();
-        isMouseActive = true;
-
         hideTimer = setTimeout(() => {
-            isMouseActive = false;
             hideControls();
-        }, HIDE_DELAY);
+        }, Artplayer.CONTROL_HIDE_TIME);
     }
-
-    // 监听全屏状态变化
-    art.on('fullscreenWeb:enter', () => {
-        // 添加全局事件监听
-        document.addEventListener('mousemove', resetHideTimer);
-        document.addEventListener('mouseleave', handleMouseLeave);
-        document.addEventListener('mouseenter', handleMouseEnter);
-
-        // 添加播放器区域事件
-        art.player.addEventListener('mouseenter', () => isMouseOverPlayer = true);
-        art.player.addEventListener('mouseleave', () => isMouseOverPlayer = false);
-
-        // 初始状态
-        isMouseOverPlayer = true;
-        resetHideTimer();
-    });
-
-    art.on('fullscreenWeb:exit', () => {
-        // 移除所有事件监听
-        document.removeEventListener('mousemove', resetHideTimer);
-        document.removeEventListener('mouseleave', handleMouseLeave);
-        document.removeEventListener('mouseenter', handleMouseEnter);
-
-        art.player.removeEventListener('mouseenter', () => isMouseOverPlayer = true);
-        art.player.removeEventListener('mouseleave', () => isMouseOverPlayer = false);
-
-        // 清除定时器并显示控件
-        clearTimeout(hideTimer);
-        showControls();
-    });
 
     // 处理鼠标离开浏览器窗口
-    function handleMouseLeave() {
-        // 立即隐藏工具栏
-        hideControls();
-        clearTimeout(hideTimer);
+    function handleMouseOut(e) {
+        if (e && !e.relatedTarget) {
+            resetHideTimer();
+        }
     }
-    
-    // 处理鼠标返回浏览器窗口
-    function handleMouseEnter() {
-        isMouseActive = true;
-        resetHideTimer();
+
+    // 全屏状态切换时注册/移除 mouseout 事件，监听鼠标移出屏幕事件
+    // 从而对播放器状态栏进行隐藏倒计时
+    function handleFullScreen(isFullScreen, isWeb) {
+        if (isFullScreen) {
+            document.addEventListener('mouseout', handleMouseOut);
+        } else {
+            document.removeEventListener('mouseout', handleMouseOut);
+            // 退出全屏时清理计时器
+            clearTimeout(hideTimer);
+        }
+
+        if (!isWeb) {
+            if (window.screen.orientation && window.screen.orientation.lock) {
+                window.screen.orientation.lock('landscape')
+                    .then(() => {
+                    })
+                    .catch((error) => {
+                    });
+            }
+        }
     }
 
     // 播放器加载完成后初始隐藏工具栏
     art.on('ready', () => {
-        art.controls.classList.add('art-controls-hide');
+        hideControls();
+    });
+
+    // 全屏 Web 模式处理
+    art.on('fullscreenWeb', function (isFullScreen) {
+        handleFullScreen(isFullScreen, true);
     });
 
     // 全屏模式处理
-    art.on('fullscreen', function () {
-        if (window.screen.orientation && window.screen.orientation.lock) {
-            window.screen.orientation.lock('landscape')
-                .then(() => {
-                })
-                .catch((error) => {
-                });
-        }
+    art.on('fullscreen', function (isFullScreen) {
+        handleFullScreen(isFullScreen, false);
     });
 
     art.on('video:loadedmetadata', function() {
