@@ -1,7 +1,7 @@
 // 豆瓣热门电影电视剧推荐功能
 
 // 豆瓣标签列表 - 修改为默认标签
-let defaultMovieTags = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动作', '喜剧', '爱情', '科幻', '悬疑', '恐怖', '治愈'];
+let defaultMovieTags = ['同性', '热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动作', '喜剧', '爱情', '科幻', '悬疑', '恐怖', '治愈'];
 let defaultTvTags = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧', '港剧', '日本动画', '综艺', '纪录片'];
 
 // 用户标签列表 - 存储用户实际使用的标签（包含保留的系统标签和用户添加的自定义标签）
@@ -49,9 +49,9 @@ function saveUserTags() {
 }
 
 let doubanMovieTvCurrentSwitch = 'movie';
-let doubanCurrentTag = '热门';
+let doubanCurrentTag = '同性';
 let doubanPageStart = 0;
-const doubanPageSize = 16; // 一次显示的项目数量
+const doubanPageSize = 24; // 一次显示的项目数量
 
 // 初始化豆瓣功能
 function initDouban() {
@@ -122,14 +122,26 @@ function updateDoubanVisibility() {
         !document.getElementById('resultsArea').classList.contains('hidden');
     
     // 只有在启用且没有搜索结果显示时才显示豆瓣区域
-    if (isEnabled && !isSearching) {
-        doubanArea.classList.remove('hidden');
+    //if (isEnabled && !isSearching) {
+        //doubanArea.classList.remove('hidden');
         // 如果豆瓣结果为空，重新加载
-        if (document.getElementById('douban-results').children.length === 0) {
-            renderRecommend(doubanCurrentTag, doubanPageSize, doubanPageStart);
-        }
-    } else {
+        //if (document.getElementById('douban-results').children.length === 0) {
+            //renderRecommend(doubanCurrentTag, doubanPageSize, doubanPageStart);
+        //}
+    //} else {
+        //doubanArea.classList.add('hidden');
+    //}
+
+    // 默认显示豆瓣区域
+    doubanArea.classList.remove('hidden');
+
+    // 仅在搜索时隐藏
+    if (isSearching) {
         doubanArea.classList.add('hidden');
+    } 
+    // 如果结果为空则加载
+    else if (document.getElementById('douban-results').children.length === 0) {
+      renderRecommend(doubanCurrentTag, doubanPageSize, doubanPageStart);
     }
 }
 
@@ -177,11 +189,11 @@ function fillAndSearch(title) {
             // 使用HTML5 History API更新URL，不刷新页面
             window.history.pushState(
                 { search: safeTitle }, 
-                `搜索: ${safeTitle} - LibreTV`, 
+                `搜索: ${safeTitle} - BoyloveTV`, 
                 `/s=${encodedQuery}`
             );
             // 更新页面标题
-            document.title = `搜索: ${safeTitle} - LibreTV`;
+            document.title = `搜索: ${safeTitle} - BoyloveTV`;
         } catch (e) {
             console.error('更新浏览器历史失败:', e);
         }
@@ -237,11 +249,11 @@ async function fillAndSearchWithDouban(title) {
             // 使用HTML5 History API更新URL，不刷新页面
             window.history.pushState(
                 { search: safeTitle }, 
-                `搜索: ${safeTitle} - LibreTV`, 
+                `搜索: ${safeTitle} - BoyloveTV`, 
                 `/s=${encodedQuery}`
             );
             // 更新页面标题
-            document.title = `搜索: ${safeTitle} - LibreTV`;
+            document.title = `搜索: ${safeTitle} - BoyloveTV`;
         } catch (e) {
             console.error('更新浏览器历史失败:', e);
         }
@@ -273,7 +285,7 @@ function renderDoubanMovieTvSwitch() {
             tvToggle.classList.add('text-gray-300');
             
             doubanMovieTvCurrentSwitch = 'movie';
-            doubanCurrentTag = '热门';
+            doubanCurrentTag = '同性';
 
             // 重新加载豆瓣内容
             renderDoubanTags(movieTags);
@@ -749,7 +761,7 @@ function deleteTag(tag) {
         
         // 如果当前选中的是被删除的标签，则重置为"热门"
         if (doubanCurrentTag === tag) {
-            doubanCurrentTag = '热门';
+            doubanCurrentTag = '同性';
             doubanPageStart = 0;
             renderRecommend(doubanCurrentTag, doubanPageSize, doubanPageStart);
         }
@@ -774,7 +786,7 @@ function resetTagsToDefault() {
     }
     
     // 设置当前标签为热门
-    doubanCurrentTag = '热门';
+    doubanCurrentTag = '同性';
     doubanPageStart = 0;
     
     // 保存到本地存储

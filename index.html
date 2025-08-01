@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LibreTV - 免费在线视频搜索与观看平台</title>
-    <meta name="description" content="LibreTV是一个免费的在线视频搜索平台，无广告、安全，提供来自多个视频源的内容搜索与观看服务，无需注册即可使用。">
-    <meta name="keywords" content="在线视频,免费视频,视频搜索,电影,电视剧,LibreTV">
-    <meta name="author" content="LibreTV Team">
+    <title>BoyloveTV - 免费在线视频搜索与观看平台</title>
+    <meta name="description" content="BoyloveTV是一个免费的在线视频搜索平台，无广告、安全，提供来自多个视频源的内容搜索与观看服务，无需注册即可使用。">
+    <meta name="keywords" content="在线视频,免费视频,视频搜索,电影,电视剧,BoyloveTV">
+    <meta name="author" content="BoyloveTV Team">
 
     <!-- Favicon -->
     <link rel="icon" href="image/logo.png">
@@ -21,7 +21,7 @@
     <!-- 将历史记录按钮移到左上角，并缩小尺寸 -->
     <div class="fixed top-4 left-4 z-10">
         <button onclick="toggleHistory(event)" class="bg-[#222] hover:bg-[#333] border border-[#333] hover:border-white rounded-lg px-3 py-1.5 transition-colors" aria-label="观看历史">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
         </button>
@@ -30,7 +30,7 @@
     <!-- 设置按钮保留在右上角，并缩小尺寸 -->
     <div class="fixed top-4 right-4 z-10">
         <button onclick="toggleSettings(event)" class="bg-[#222] hover:bg-[#333] border border-[#333] hover:border-white rounded-lg px-3 py-1.5 transition-colors" aria-label="打开设置">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
             </svg>
@@ -183,16 +183,17 @@
     <div class="container mx-auto px-4 py-8 flex flex-col h-screen">
         <div class="flex-1 flex flex-col">
             <!-- 网站标志和口号 -->
-            <header class="text-center mb-2">
+            <header class="text-center mb-2 pt-6">
                 <div class="flex justify-center items-center mb-4">
                     <a href="#" onclick="resetToHome(); return false;" class="flex items-center">
-                        <svg class="w-10 h-10 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-10 h-10 mr-2" fill="none" stroke="#00ccff" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                         </svg>
-                        <h1 class="text-5xl font-bold gradient-text">LibreTV</h1>
+                        <h1 class="text-5xl font-bold gradient-text">BoyloveTV</h1>
                     </a>
                 </div>
-                <p class="text-gray-400 mb-8">自由观影，畅享精彩</p>
+                <p class="text-gray-400 mb-0.5">自由观影，畅享精彩</p>
+                <p class="text-gray-500 mb-7 text-xs font-serif">by JaneLe</p>
             </header>
             
 
@@ -294,12 +295,13 @@
             <div class="flex flex-col md:flex-row justify-between items-center">
                 <div class="mb-4 md:mb-0">
                     <div class="flex items-center justify-center md:justify-start">
-                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-6 h-6 mr-2" fill="none" stroke="#00ccff" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                         </svg>
-                        <span class="gradient-text font-bold">LibreTV</span>
+                        <span class="gradient-text font-bold">BoyloveTV</span>
                     </div>
-                    <p class="text-gray-500 text-sm mt-2 text-center md:text-left">© 2025 LibreTV - 自由观影，畅享精彩</p>
+                    <p class="text-gray-500 text-sm mt-2 text-center md:text-left">© 2025 BoyloveTV - 自由观影，畅享精彩</p>
+                    <p class="text-gray-500 text-sm mt-2 text-center md:text-left">JaneLe修改版</p>
                 </div>
                 
                 <div class="text-center md:text-right">
@@ -358,10 +360,10 @@
             <h2 class="text-2xl font-bold gradient-text mb-6 text-center">使用声明</h2>
             <div class="text-gray-300 space-y-4">
                 <p>
-                    欢迎使用 LibreTV。在开始使用前，请您了解并同意以下条款：
+                    欢迎使用 BoyloveTV。在开始使用前，请您了解并同意以下条款：
                 </p>
                 <p>
-                    <strong class="text-blue-400">服务性质：</strong> LibreTV 仅提供视频搜索服务，不直接提供、存储或上传任何视频内容。所有搜索结果均来自第三方公开接口。
+                    <strong class="text-blue-400">服务性质：</strong> BoyloveTV 仅提供视频搜索服务，不直接提供、存储或上传任何视频内容。所有搜索结果均来自第三方公开接口。
                 </p>
                 <p>
                     <strong class="text-blue-400">用户责任：</strong> 用户在使用本站服务时，须遵守相关法律法规，不得利用搜索结果从事侵权行为，如下载、传播未经授权的作品等。
