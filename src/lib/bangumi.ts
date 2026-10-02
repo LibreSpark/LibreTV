@@ -10,7 +10,7 @@ import { fetchUpstream, getCache, setCache } from './fetch-utils';
 const BANGUMI_API = 'https://api.bgm.tv/calendar';
 const CACHE_TTL = 30 * 60 * 1000;
 // Bangumi 要求自带可识别的 UA，默认 UA（如 axios/undici）会被拒绝
-const UA = 'LibreTV-Next (+https://github.com/bestZwei/LibreTV-Next)';
+const UA = 'LibreTV-Next (+https://github.com/LibreSpark/LibreTV)';
 
 /** 星期 id：1=周一 … 7=周日；calendar 偶发返回 8 等非法值，直接丢弃 */
 export function normalizeWeekday(id: number): number | undefined {
