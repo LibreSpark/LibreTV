@@ -746,7 +746,12 @@ function SourceSubscriptions() {
       const { vodCount, liveCount, stats } = await syncSourceSubscription(url);
       // 如实说明跳过/截断情况，避免用户疑惑「配置里站点很多，为何只导入了个位数」
       const detail = describeParseStats(stats, { includeSamples: false });
-      const formatLabel = stats?.format === 'tvbox' ? '（TVBOX 配置）' : '';
+      const formatLabel =
+        stats?.format === 'tvbox'
+          ? '（TVBOX 配置）'
+          : stats?.format === 'source-catalog'
+            ? '（接口源列表）'
+            : '';
       toast(`已同步 ${vodCount} 个点播源、${liveCount} 个直播源${formatLabel}${detail ? `；${detail}` : ''}`, 'success');
       setSubUrl('');
     } catch (err) {

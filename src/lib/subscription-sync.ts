@@ -56,25 +56,28 @@ export async function syncSourceSubscription(rawUrl: string): Promise<Subscripti
   }
 }
 
-/** 预置订阅超过该间隔未同步时，启动阶段静默刷新一次 */
-const ENV_SUB_RESYNC_MS = 24 * 60 * 60 * 1000;
+/** 预置订阅未单独指定周期时，启动阶段按此间隔静默刷新一次 */
+const DEFAULT_ENV_SUB_RESYNC_MS = 24 * 60 * 60 * 1000;
 
 /**
- * 部署者通过 DEFAULT_SUBSCRIPTIONS 预置的订阅：启动时自动导入与静默刷新。
+ * 部署者通过 DEFAULT_SUBSCRIPTIONS 预置的订阅：启动/登录时自动导入与静默刷新。
  *
  * seen 标记（envSubsSeen）仅在同步成功后写入：
  * - 同步成功 → 标记 seen，用户此后删除该订阅不会被自动加回；
  * - 同步失败 → 不标记，下次启动自动重试，已导入的旧数据保持不动。
- * 已存在的订阅超过 24h 未同步时静默刷新（成功过但 seen 机制上线前的旧数据也会借此补标）。
+ * 已存在的订阅超过其 refreshDays（缺省 1 天）未同步时静默刷新；刷新在下次启动/登录时触发。
  */
-export async function syncEnvSubscriptions(subs: { url: string; name?: string }[]): Promise<void> {
+export async function syncEnvSubscriptions(subs: { url: string; name?: string; refreshDays?: number }[]): Promise<void> {
   for (const sub of subs) {
     const store = useAppStore.getState();
     try {
       const existing = store.subscriptions.find((s) => s.url === sub.url);
       let result: SubscriptionSyncResult | undefined;
       if (existing) {
-        if (existing.lastSync && Date.now() - existing.lastSync < ENV_SUB_RESYNC_MS) {
+        const refreshMs = sub.refreshDays
+          ? sub.refreshDays * 24 * 60 * 60 * 1000
+          : DEFAULT_ENV_SUB_RESYNC_MS;
+        if (existing.lastSync && Date.now() - existing.lastSync < refreshMs) {
           store.markEnvSubsSeen([sub.url]);
           continue;
         }
@@ -104,7 +107,7 @@ export async function syncEnvSubscriptions(subs: { url: string; name?: string }[
  *   首屏那次在登录前会 401 静默失败，不补调则本次会话内不会出现预置订阅。
  *
  * 重复调用是安全的：setEnvSources / setLiveEnvSources 幂等，syncEnvSubscriptions
- * 对已同步（24h 内）的订阅会跳过，对已成功过的订阅也不会重复导入。
+ * 对未达到各自刷新周期的订阅会跳过，对已成功过的订阅也不会重复导入。
  */
 export async function applyEnvPresets(status: AuthStatusResponse): Promise<void> {
   if (Array.isArray(status.defaultSources)) {
