@@ -40,6 +40,10 @@ interface PlayerShellProps {
   onPause?: (position: number, duration: number) => void;
   /** 恢复策略判源不可用（重试耗尽/格式硬失败）时回调：父级弹出换源面板 */
   onRequestSwitchSource?: (reason: string) => void;
+  onPrevEpisode?: () => void;
+  onNextEpisode?: () => void;
+  hasPrevEpisode?: boolean;
+  hasNextEpisode?: boolean;
 }
 
 export function PlayerShell({
@@ -55,6 +59,10 @@ export function PlayerShell({
   onEnded,
   onPause,
   onRequestSwitchSource,
+  onPrevEpisode,
+  onNextEpisode,
+  hasPrevEpisode,
+  hasNextEpisode,
 }: PlayerShellProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,10 +78,12 @@ export function PlayerShell({
   const propsRef = useRef({
     url, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
+    onPrevEpisode, onNextEpisode, hasPrevEpisode, hasNextEpisode,
   });
   propsRef.current = {
     url, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
+    onPrevEpisode, onNextEpisode, hasPrevEpisode, hasNextEpisode,
   };
 
   // 跨集共享、每次换集重置的播放链路状态
@@ -294,6 +304,32 @@ export function PlayerShell({
       theme: '#2563eb',
       lang: navigator.language.toLowerCase().startsWith('zh') ? 'zh-cn' : 'en',
       moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
+      controls: [
+        {
+          name: 'prev-episode',
+          index: 11,
+          position: 'left',
+          html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><path fill="currentColor" d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/></svg>',
+          tooltip: '上一集 (Alt+←)',
+          click: () => {
+            if (propsRef.current.hasPrevEpisode) {
+              propsRef.current.onPrevEpisode?.();
+            }
+          },
+        },
+        {
+          name: 'next-episode',
+          index: 12,
+          position: 'left',
+          html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>',
+          tooltip: '下一集 (Alt+→)',
+          click: () => {
+            if (propsRef.current.hasNextEpisode) {
+              propsRef.current.onNextEpisode?.();
+            }
+          },
+        },
+      ],
       customType: {
         m3u8: (video: HTMLVideoElement, mediaUrl: string) => {
           setupHls(video, mediaUrl, true);
@@ -470,6 +506,21 @@ export function PlayerShell({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // —— 上一集 / 下一集控件禁用态 ——
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const update = (cls: string, enabled: boolean) => {
+      const el = container.querySelector(`.art-control-${cls}`) as HTMLElement | null;
+      if (el) {
+        el.style.opacity = enabled ? '' : '0.35';
+        el.style.pointerEvents = enabled ? '' : 'none';
+      }
+    };
+    update('prev-episode', !!hasPrevEpisode);
+    update('next-episode', !!hasNextEpisode);
+  }, [hasPrevEpisode, hasNextEpisode]);
 
   // —— 换集：仅切换 HLS 源，不重建播放器（保留网页全屏等状态） ——
   const firstUrlRef = useRef(true);

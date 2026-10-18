@@ -248,6 +248,10 @@ function WatchContent() {
                   onTimeUpdate={handleProgress}
                   onPause={handleProgress}
                   onEnded={handleEnded}
+                  hasPrevEpisode={currentIndex > 0}
+                  hasNextEpisode={episodes.length > 0 && currentIndex < episodes.length - 1}
+                  onPrevEpisode={() => goEpisode(currentIndex - 1)}
+                  onNextEpisode={() => goEpisode(currentIndex + 1)}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
@@ -264,20 +268,6 @@ function WatchContent() {
 
             {/* 操作栏 */}
             <div className="flex flex-wrap items-center gap-2 mt-3">
-              <button
-                className="btn-ghost btn-sm"
-                disabled={currentIndex <= 0}
-                onClick={() => goEpisode(currentIndex - 1)}
-              >
-                上一集
-              </button>
-              <button
-                className="btn-ghost btn-sm"
-                disabled={episodes.length === 0 || currentIndex >= episodes.length - 1}
-                onClick={() => goEpisode(currentIndex + 1)}
-              >
-                下一集
-              </button>
               <label className="flex items-center gap-1.5 text-xs text-muted ml-auto cursor-pointer">
                 <input
                   type="checkbox"
