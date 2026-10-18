@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
@@ -9,11 +9,12 @@ import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import { api } from '@/lib/client-api';
-import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
+import type { SearchResultItem, SourceSearchOutcome, VideoDetail } from '@/lib/types';
 import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
-import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
+import { buildWatchUrl, cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
+import { addSearchHistory } from '@/lib/db';
 import { useToast } from '@/components/toast';
-import { EmptyState } from '@/components/states';
+import { EmptyState, LoadingState } from '@/components/states';
 import { Icon } from '@/components/icon';
 import { SiteFooter } from '@/components/site-footer';
 
@@ -47,9 +48,12 @@ function HomeContent() {
   const subscriptions = useAppStore((s) => s.subscriptions);
   const [input, setInput] = useState(urlQuery);
   const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
+  const [firstDetail, setFirstDetail] = useState<VideoDetail | null>(null);
+  const [firstDetailLoading, setFirstDetailLoading] = useState(false);
   /** 流式搜索中已结算的源（data 就绪前用于增量渲染） */
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const firstItemRef = useRef<SearchResultItem | null>(null);
 
   // URL 驱动搜索：?s= 变化时回填输入框
   useEffect(() => {
@@ -157,6 +161,45 @@ function HomeContent() {
       .map((o) => ({ sourceKey: o.sourceKey, error: o.error || '请求失败', timedOut: o.timedOut }));
   // 跨源同名聚合：同名影片合并为一张卡片，展开后可选择具体来源
   const groups = useMemo(() => aggregateResults(list), [list]);
+
+  // 第一个搜索结果：自动获取详情并内联展示
+  const firstItem = groups.length > 0 ? groups[0].items[0] : null;
+  const firstItemKey = firstItem ? `${firstItem.sourceKey}_${firstItem.vodId}` : '';
+  firstItemRef.current = firstItem;
+
+  useEffect(() => {
+    setFirstDetail(null);
+    setFirstDetailLoading(false);
+    if (!firstItemKey) return;
+    const item = firstItemRef.current!;
+    const source = resolveSource({ customAPIs, envSources }, item.sourceKey, {
+      url: item.sourceUrl,
+      name: item.sourceName,
+    });
+    if (!source) return;
+    const controller = new AbortController();
+    setFirstDetailLoading(true);
+    api.detail(item.vodId, source, controller.signal)
+      .then(d => { if (!controller.signal.aborted) setFirstDetail(d); })
+      .catch(() => {})
+      .finally(() => { if (!controller.signal.aborted) setFirstDetailLoading(false); });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstItemKey]);
+
+  const playFirstResult = (index: number) => {
+    if (!firstDetail || !firstItem) return;
+    addSearchHistory(firstItem.name).catch(() => {});
+    router.push(
+      buildWatchUrl({
+        sourceKey: firstItem.sourceKey,
+        vodId: firstItem.vodId,
+        index,
+        title: firstItem.name,
+        sourceUrl: firstItem.sourceUrl,
+      })
+    );
+  };
 
   // 分批渲染：新一次搜索（groups 变化）时重置回首批
   const [visibleCount, setVisibleCount] = useState(RESULT_PAGE_SIZE);
@@ -331,12 +374,56 @@ function HomeContent() {
             ) : list.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
-                  {visibleGroups.map((group) => (
-                    <AggregatedCard
-                      key={group.key}
-                      group={group}
-                      onOpen={(item) => setDetailItem(item)}
-                    />
+                  {visibleGroups.map((group, i) => (
+                    <Fragment key={group.key}>
+                      <AggregatedCard
+                        group={group}
+                        onOpen={(item) => setDetailItem(item)}
+                      />
+                      {i === 0 && (firstDetailLoading || firstDetail) && (
+                        <div className="col-span-full card p-4 animate-fade-in">
+                          {firstDetailLoading ? (
+                            <LoadingState label="正在获取剧集信息..." />
+                          ) : firstDetail && (
+                            <>
+                              {firstDetail.videoInfo && (
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted mb-3">
+                                  {firstDetail.videoInfo.typeName && <span>类型：{firstDetail.videoInfo.typeName}</span>}
+                                  {firstDetail.videoInfo.year && <span>年份：{firstDetail.videoInfo.year}</span>}
+                                  {firstDetail.videoInfo.area && <span>地区：{firstDetail.videoInfo.area}</span>}
+                                  {firstDetail.videoInfo.director && (
+                                    <span className="truncate max-w-[200px]">导演：{firstDetail.videoInfo.director}</span>
+                                  )}
+                                </div>
+                              )}
+                              {firstDetail.videoInfo?.desc && (
+                                <p className="text-xs text-muted mb-3 line-clamp-2">{firstDetail.videoInfo.desc}</p>
+                              )}
+                              {firstDetail.episodes.length > 0 ? (
+                                <>
+                                  <div className="flex items-center mb-2">
+                                    <span className="text-xs text-faint">共 {firstDetail.episodes.length} 集</span>
+                                  </div>
+                                  <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1.5 max-h-[30vh] overflow-y-auto scrollbar-thin pr-1">
+                                    {firstDetail.episodes.map((_, idx) => (
+                                      <button
+                                        key={idx}
+                                        className="btn-ghost btn-sm !px-1 text-center"
+                                        onClick={() => playFirstResult(idx)}
+                                      >
+                                        {idx + 1}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              ) : (
+                                <p className="text-xs text-faint">无可用播放资源</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </Fragment>
                   ))}
                 </div>
                 {groups.length > visibleCount && (
