@@ -45,7 +45,9 @@ export function SwitchSourceModal({
   const [phase, setPhase] = useState<'searching' | 'testing' | 'done'>('searching');
   /** 封面加载失败记录（按卡片 key）；失败后降级为占位图标，避免破图 */
   const [imgFailed, setImgFailed] = useState<Record<string, boolean>>({});
+  const [selectedTab, setSelectedTab] = useState(-1);
   const panelRef = useRef<HTMLDivElement>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
 
   // 打开时把焦点移入弹窗、Tab 圈闭在弹窗内、关闭后归还焦点
   useFocusTrap(true, panelRef);
@@ -135,14 +137,28 @@ export function SwitchSourceModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTitle, store.yellowFilter]);
 
-  const sorted = [...candidates].sort((a, b) => {
+  const sorted = useMemo(() => [...candidates].sort((a, b) => {
     const aCurrent = a.source.key === currentSourceKey && String(a.result.vodId) === String(currentVodId);
     const bCurrent = b.source.key === currentSourceKey && String(b.result.vodId) === String(currentVodId);
     if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
     const msA = a.ok ? a.ms ?? 99_999 : 99_999;
     const msB = b.ok ? b.ms ?? 99_999 : 99_999;
     return msA - msB;
-  });
+  }), [candidates, currentSourceKey, currentVodId]);
+
+  // 默认展开第一个可用的非当前源
+  useEffect(() => {
+    if (phase !== 'done' || sorted.length === 0 || selectedTab >= 0) return;
+    const idx = sorted.findIndex(c =>
+      c.ok && !(c.source.key === currentSourceKey && String(c.result.vodId) === String(currentVodId))
+    );
+    const target = idx >= 0 ? idx : 0;
+    setSelectedTab(target);
+    requestAnimationFrame(() => {
+      const el = tabBarRef.current?.children[target] as HTMLElement | undefined;
+      el?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    });
+  }, [phase, sorted, selectedTab, currentSourceKey, currentVodId]);
 
   const switchTo = (c: Candidate) => {
     if (!c.episodes) {
@@ -203,21 +219,52 @@ export function SwitchSourceModal({
         ) : sorted.length === 0 ? (
           <EmptyState variant="plain" title="其他点播源未找到同名资源" />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {sorted.map((c) => {
+          <>
+            {/* 横向可滑动 Tab 标签栏 */}
+            <div ref={tabBarRef} className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+              {sorted.map((c, i) => {
+                const isCurrent = c.source.key === currentSourceKey && String(c.result.vodId) === String(currentVodId);
+                return (
+                  <button
+                    key={`${c.source.key}_${c.result.vodId}`}
+                    className={cn(
+                      'shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg text-xs transition-colors border-2',
+                      selectedTab === i
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-transparent bg-chip text-muted hover:bg-hover',
+                    )}
+                    onClick={() => setSelectedTab(i)}
+                  >
+                    <span className="font-medium whitespace-nowrap">{c.source.name}</span>
+                    <span
+                      className={cn(
+                        'tag text-[10px]',
+                        isCurrent
+                          ? 'bg-accent/90 text-on-accent'
+                          : !c.ok
+                            ? 'bg-danger-solid/85 text-white'
+                            : c.ms! > 2000
+                              ? 'bg-warning-solid/85 text-white'
+                              : 'bg-success-solid/85 text-white',
+                      )}
+                    >
+                      {isCurrent ? '当前' : !c.ok ? '失败' : `${c.ms}ms`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 选中源的详情面板 */}
+            {selectedTab >= 0 && selectedTab < sorted.length && (() => {
+              const c = sorted[selectedTab];
               const isCurrent = c.source.key === currentSourceKey && String(c.result.vodId) === String(currentVodId);
               const cardKey = `${c.source.key}_${c.result.vodId}`;
-              const img = c.result.pic;
               const coverFailed = imgFailed[cardKey] ?? false;
               return (
-                <button
-                  key={`${c.source.key}_${c.result.vodId}`}
-                  className={cn('text-left group relative rounded-lg overflow-hidden bg-card transition-transform', !isCurrent && 'hover:scale-[1.03] cursor-pointer', isCurrent && 'cursor-default')}
-                  onClick={() => !isCurrent && switchTo(c)}
-                  disabled={isCurrent}
-                >
-                  <div className="relative aspect-[2/3] bg-chip">
-                    {img && !coverFailed ? (
+                <div className="mt-3 flex items-start gap-4 p-4 bg-card rounded-lg">
+                  <div className="shrink-0 w-28 aspect-[2/3] rounded-lg overflow-hidden bg-chip">
+                    {c.result.pic && !coverFailed ? (
                       <SmartImage
                         url={c.result.pic}
                         mode={store.imageProxyMode}
@@ -231,28 +278,31 @@ export function SwitchSourceModal({
                         <Icon name="link" className="w-6 h-6" />
                       </div>
                     )}
-                    <span
-                      className={cn(
-                        'absolute top-1.5 right-1.5 tag',
-                        !c.ok ? 'bg-danger-solid/85 text-white' : c.ms! > 2000 ? 'bg-warning-solid/85 text-white' : 'bg-success-solid/85 text-white'
-                      )}
-                    >
-                      {!c.ok ? '失败' : `${c.ms}ms`}
-                    </span>
-                    {isCurrent && (
-                      <span className="absolute inset-x-0 bottom-0 bg-accent/90 text-on-accent text-xs text-center py-1">当前播放</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-semibold text-content">{c.source.name}</h3>
+                    <p className="text-sm text-muted mt-0.5 truncate" title={c.result.name}>{c.result.name}</p>
+                    <div className="mt-2 text-xs text-faint space-y-1">
+                      <p>
+                        响应速度：
+                        <span className={cn(!c.ok ? 'text-danger' : c.ms! > 2000 ? 'text-warning' : 'text-success')}>
+                          {c.ok ? `${c.ms}ms` : '不可用'}
+                        </span>
+                      </p>
+                      <p>集数：{c.episodes ? `${c.episodes} 集` : '无资源'}</p>
+                    </div>
+                    {isCurrent ? (
+                      <span className="inline-block mt-3 px-3 py-1.5 text-xs rounded-md bg-accent/10 text-accent font-medium">当前播放中</span>
+                    ) : (
+                      <button className="mt-3 btn-primary btn-sm" disabled={!c.ok || !c.episodes} onClick={() => switchTo(c)}>
+                        切换到此源
+                      </button>
                     )}
                   </div>
-                  <div className="p-2">
-                    <div className="text-xs font-medium text-content truncate" title={c.source.name}>
-                      {c.source.name}
-                    </div>
-                    <div className="text-xs text-faint mt-0.5">{c.episodes ? `${c.episodes} 集` : '无资源'}</div>
-                  </div>
-                </button>
+                </div>
               );
-            })}
-          </div>
+            })()}
+          </>
         )}
       </div>
     </div>
