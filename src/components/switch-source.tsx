@@ -146,19 +146,11 @@ export function SwitchSourceModal({
     return msA - msB;
   }), [candidates, currentSourceKey, currentVodId]);
 
-  // 默认展开第一个可用的非当前源
+  // 默认选中第一个源进行展示
   useEffect(() => {
     if (phase !== 'done' || sorted.length === 0 || selectedTab >= 0) return;
-    const idx = sorted.findIndex(c =>
-      c.ok && !(c.source.key === currentSourceKey && String(c.result.vodId) === String(currentVodId))
-    );
-    const target = idx >= 0 ? idx : 0;
-    setSelectedTab(target);
-    requestAnimationFrame(() => {
-      const el = tabBarRef.current?.children[target] as HTMLElement | undefined;
-      el?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-    });
-  }, [phase, sorted, selectedTab, currentSourceKey, currentVodId]);
+    setSelectedTab(0);
+  }, [phase, sorted, selectedTab]);
 
   const switchTo = (c: Candidate) => {
     if (!c.episodes) {
