@@ -1,3 +1,5 @@
+import { tr } from '@/lib/i18n-core';
+
 /**
  * 下载文件的保存目标：
  * - Chromium（Edge/Chrome）：showSaveFilePicker 边下边写盘（FS Access API），
@@ -53,7 +55,7 @@ function memoryTarget(filename: string, confirmOverBytes = 500 * 1024 * 1024): S
       if (done) return;
       bytes += data.byteLength;
       if (bytes > confirmOverBytes && bytes - data.byteLength <= confirmOverBytes) {
-        if (!window.confirm(`下载体积已超过 ${Math.round(confirmOverBytes / 1024 / 1024)}MB，继续将暂存在内存中，可能导致页面卡顿。是否继续？`)) {
+        if (!window.confirm(tr('下载体积已超过 {mb}MB，继续将暂存在内存中，可能导致页面卡顿。是否继续？', { mb: Math.round(confirmOverBytes / 1024 / 1024) }))) {
           throw new Error('用户取消了下载（内存超限）');
         }
       }
@@ -110,7 +112,7 @@ export async function pickSaveTarget(filename: string, estimatedBytes?: number):
     }
   }
   if (estimatedBytes && estimatedBytes > 500 * 1024 * 1024) {
-    if (!window.confirm('该视频体积较大（未提供磁盘直写能力的环境），将暂存在内存中，可能导致页面卡顿。是否继续？')) {
+    if (!window.confirm(tr('该视频体积较大（未提供磁盘直写能力的环境），将暂存在内存中，可能导致页面卡顿。是否继续？'))) {
       throw new UserCancelledError();
     }
   }

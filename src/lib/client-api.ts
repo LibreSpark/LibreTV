@@ -1,6 +1,7 @@
 'use client';
 
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload, QualityProbeItem, QualityProbeResult } from './types';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * 客户端 API 封装。401 时触发全局事件打开登录框，
@@ -48,17 +49,17 @@ export function onUnauthorized(handler: (event: CustomEvent) => void): () => voi
 function throwForAuthStatus(res: Response): void {
   if (res.status === 401) {
     window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
-    throw new ApiError('需要登录', 401);
+    throw new ApiError(tr('需要登录'), 401);
   }
   if (res.status === 503) {
     window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT, { detail: 'setup' }));
-    throw new ApiError('服务器未配置密码', 503);
+    throw new ApiError(tr('服务器未配置密码'), 503);
   }
 }
 
 /** NDJSON 流读取：按行解析 JSON 并回调，坏行跳过不影响其余结果 */
 async function consumeNdjson<T>(res: Response, onEvent: (event: T) => void): Promise<void> {
-  if (!res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
+  if (!res.body) throw new ApiError(tr('请求失败 ({status})', { status: res.status }), res.status);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -91,14 +92,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     res = await fetch(url, init);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    throw new ApiError('网络请求失败，请检查网络连接', 0);
+    throw new ApiError(tr('网络请求失败，请检查网络连接'), 0);
   }
   throwForAuthStatus(res);
   if (!res.ok) {
-    let msg = `请求失败 (${res.status})`;
+    let msg = tr('请求失败 ({status})', { status: res.status });
     try {
       const data = (await res.json()) as { error?: string };
-      if (data?.error) msg = data.error;
+      if (data?.error) msg = tr(data.error);
     } catch { /* 忽略解析失败 */ }
     throw new ApiError(msg, res.status);
   }
@@ -169,10 +170,10 @@ export const api = {
       });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') throw err;
-      throw new ApiError('探测请求没能送达服务器（网络或反向代理中断）', 0);
+      throw new ApiError(tr('探测请求没能送达服务器（网络或反向代理中断）'), 0);
     }
     throwForAuthStatus(res);
-    if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
+    if (!res.ok || !res.body) throw new ApiError(tr('请求失败 ({status})', { status: res.status }), res.status);
 
     let firstByte = false;
     try {
@@ -189,8 +190,8 @@ export const api = {
       if (err instanceof DOMException && err.name === 'AbortError') throw err;
       throw new ApiError(
         firstByte
-          ? '探测连接中途被断开（已收到部分结果，多为网关超时）'
-          : '探测请求被网关拦截（未收到任何响应）',
+          ? tr('探测连接中途被断开（已收到部分结果，多为网关超时）')
+          : tr('探测请求被网关拦截（未收到任何响应）'),
         0
       );
     }
@@ -217,7 +218,7 @@ export const api = {
       const detail = await api.detail(id, source, signal);
       return { ok: true, ms: Math.round(performance.now() - start), detail };
     } catch (err) {
-      return { ok: false, ms: Math.round(performance.now() - start), detail: undefined as VideoDetail | undefined, error: err instanceof Error ? err.message : '失败' };
+      return { ok: false, ms: Math.round(performance.now() - start), detail: undefined as VideoDetail | undefined, error: err instanceof Error ? err.message : tr('失败') };
     }
   },
 
@@ -270,7 +271,7 @@ export const api = {
       const playlist = await api.livePlaylist(url, true);
       return { ok: true, ms: Math.round(performance.now() - start), count: playlist.channels.length, error: undefined as string | undefined };
     } catch (err) {
-      return { ok: false, ms: Math.round(performance.now() - start), count: 0, error: err instanceof Error ? err.message : '失败' };
+      return { ok: false, ms: Math.round(performance.now() - start), count: 0, error: err instanceof Error ? err.message : tr('失败') };
     }
   },
 
@@ -308,7 +309,7 @@ export const api = {
       signal,
     });
     throwForAuthStatus(res);
-    if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
+    if (!res.ok || !res.body) throw new ApiError(tr('请求失败 ({status})', { status: res.status }), res.status);
 
     await consumeNdjson<LiveProbeResult>(res, onResult);
   },
@@ -335,7 +336,7 @@ async function searchStream(
     signal,
   });
     throwForAuthStatus(res);
-    if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
+    if (!res.ok || !res.body) throw new ApiError(tr('请求失败 ({status})', { status: res.status }), res.status);
 
     // done 事件缺失（流被截断）时退化为空结果，不让整次搜索报错
     let final: SearchResponse = { list: [], failures: [] };

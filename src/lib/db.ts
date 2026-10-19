@@ -3,6 +3,7 @@ import type { SourceConfig } from './types';
 // 仅类型引入：store.ts 运行时会引用本模块，反向只取类型不会形成运行时循环
 import type { LiveProbeEntry } from './store';
 import { PERSIST_KEY, flushPendingPersist } from './persist-storage';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * IndexedDB 持久化（替代旧版 localStorage 数据库）：
@@ -232,7 +233,7 @@ export async function importConfig(content: string): Promise<void> {
     name?: string;
     data?: Record<string, string>;
   };
-  if (config.name !== 'LibreTV-Settings') throw new Error('配置文件格式不正确');
+  if (config.name !== 'LibreTV-Settings') throw new Error(tr('配置文件格式不正确'));
   const data = config.data || {};
 
   if (typeof data[PERSIST_KEY] === 'string') {
@@ -248,7 +249,7 @@ export async function importConfig(content: string): Promise<void> {
     for (const item of legacy.slice(0, MAX_HISTORY)) {
       const sourceKey = String(item.sourceCode || item.sourceName || '');
       const vodId = String(item.vod_id || '');
-      const title = String(item.title || '未知视频');
+      const title = String(item.title || tr('未知视频'));
       if (!sourceKey || !vodId) continue;
       const totalEpisodes = Array.isArray(item.episodes) ? item.episodes.length : 0;
       await upsertHistory({

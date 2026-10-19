@@ -6,6 +6,7 @@ import { QUALITY_FAIL_TTL_MS, isRetryableTimeout, qualityKey, summarizeQuality }
 import { createProbeQueue, type ProbeQueue } from '@/lib/quality-probe-queue';
 import { readQualities, useAppStore } from '@/lib/store';
 import type { QualityEntry, QualityProbeItem, QualityProbeResult, SourceConfig } from '@/lib/types';
+import { tr } from '@/lib/i18n-core';
 
 /** 探测目标：搜索结果条目里与画质相关的最小字段集 */
 export interface QualityProbeTarget {
@@ -248,7 +249,7 @@ export function useQualityProbe(sources?: SourceConfig[]) {
           if (err instanceof ApiError && (err.status === 401 || err.status === 503)) return;
           // 传输层失败（网关拦截 / 容器重启 / 断网）：逐条落成失败结论，徽章上能看出原因。
           // 原先这里静默吞掉，界面只剩一片「未测到」，线上无从判断是哪一环挂了。
-          const message = err instanceof Error && err.message ? err.message : '探测请求失败';
+          const message = err instanceof Error && err.message ? err.message : tr('探测请求失败');
           const at = Date.now();
           for (const key of keys) {
             if (collected[key]) continue;

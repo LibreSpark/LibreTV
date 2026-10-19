@@ -6,6 +6,7 @@ import { addSearchHistory, clearSearchHistory, db, removeSearchHistory, restoreS
 import { cn } from '@/lib/utils';
 import { useToast } from './toast';
 import { Icon } from './icon';
+import { useT } from '@/lib/i18n';
 
 /** 下拉最多展示条数，与 db 层 MAX_SEARCH_HISTORY 保持一致 */
 const HISTORY_LIMIT = 10;
@@ -15,6 +16,7 @@ const HISTORY_LIMIT = 10;
  * 首页搜索框与顶栏搜索框共用本 hook 与下方 SearchHistoryDropdown，避免两处实现分叉。
  */
 export function useSearchHistory(input: string) {
+  const t = useT();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   /** 键盘高亮项下标，-1 表示未选中 */
@@ -69,9 +71,9 @@ export function useSearchHistory(input: string) {
     await clearSearchHistory();
     await history.refetch();
     // 轻量破坏性操作：给一次撤销机会，不打断式弹确认
-    toast('已清空搜索记录', 'info', {
+    toast(t('已清空搜索记录'), 'info', {
       action: {
-        label: '撤销',
+        label: t('撤销'),
         onClick: () => {
           restoreSearchHistory(snapshot).then(() => history.refetch());
         },
@@ -143,6 +145,7 @@ export function SearchHistoryDropdown({
   onRemove: (text: string) => void;
   onClearAll: () => void;
 }) {
+  const t = useT();
   return (
     <div
       className={cn(
@@ -153,20 +156,20 @@ export function SearchHistoryDropdown({
       <div className="flex items-center justify-between pl-4 pr-2 py-2 border-b border-line">
         <span className="flex items-center gap-1.5 text-xs text-faint">
           <Icon name="clock" className="w-3.5 h-3.5" />
-          最近搜索
+          {t('最近搜索')}
         </span>
         <button
           type="button"
           className="px-2 py-1 rounded-md text-xs text-faint hover:text-danger hover:bg-hover transition-colors"
           onClick={onClearAll}
         >
-          清空
+          {t('清空')}
         </button>
       </div>
       <ul
         id={id}
         role="listbox"
-        aria-label="最近搜索"
+        aria-label={t('最近搜索')}
         className="max-h-[min(70vh,400px)] overflow-y-auto scrollbar-thin py-1"
       >
         {matches.map((h, i) => (
@@ -187,7 +190,7 @@ export function SearchHistoryDropdown({
             <button
               type="button"
               className="shrink-0 p-1.5 mr-2 rounded-md text-faint hover:text-danger hover:bg-chip transition-colors"
-              aria-label={`删除搜索记录 ${h.text}`}
+              aria-label={t('删除搜索记录 {text}', { text: h.text })}
               onClick={() => onRemove(h.text)}
             >
               <Icon name="close" className="w-3.5 h-3.5" />

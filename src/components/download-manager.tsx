@@ -15,6 +15,7 @@ import {
 import { loadDownloadSettings, saveDownloadSettings } from '@/lib/download-settings';
 import { detectSavingCapability, pickSaveTarget } from '@/lib/download-saver';
 import { Switch } from './settings-shared';
+import { tr, useT } from '@/lib/i18n';
 
 /**
  * 全局下载管理器（UI 采用本站 Drawer 模式）：
@@ -47,6 +48,7 @@ interface RunningHandle {
 
 export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { toast } = useToast();
+  const t = useT();
   const [tasks, setTasks] = useState<DownloadTaskEntry[]>([]);
   const [capability, setCapability] = useState<'fs-access' | 'memory'>('memory');
   const [chunkCache, setChunkCache] = useState(true);
@@ -110,7 +112,7 @@ export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose:
               // 绝不能静默空写——否则任务会显示完成却产出空文件
               kind: 'memory',
               write: async () => {
-                throw new Error('保存位置已失效，请点击「继续」重新选择');
+                throw new Error(tr('保存位置已失效，请点击「继续」重新选择'));
               },
               close: async () => {},
               abort: async () => {},
@@ -121,12 +123,12 @@ export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose:
         .then(async () => {
           await updateEntry(entry.id, { status: 'completed' });
           void clearDownloadChunks(entry.id);
-          toast(`《${entry.title}》下载完成`, 'success');
+          toast(tr('《{title}》下载完成', { title: entry.title }), 'success');
         })
         .catch(async (err: Error) => {
           if (abort.signal.aborted) return; // 用户取消：状态已在取消处理里写好
           await updateEntry(entry.id, { status: 'error' });
-          toast(`《${entry.title}》下载失败：${err.message}`, 'error');
+          toast(tr('《{title}》下载失败：{message}', { title: entry.title, message: tr(err.message) }), 'error');
         })
         .finally(() => {
           running.current.delete(entry.id);
@@ -166,7 +168,7 @@ export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose:
       // 无 Cache Storage（HTTP 访问 / 老浏览器）时下载必然失败——分片无处暂存。
       // 在入队这一步就讲清楚，别让用户等到任务跑到一半才看到报错
       if (!supportsChunkCache()) {
-        toast('当前环境不支持下载缓存（需通过 HTTPS 访问），无法下载', 'error');
+        toast(tr('当前环境不支持下载缓存（需通过 HTTPS 访问），无法下载'), 'error');
         return;
       }
       void (async () => {
@@ -193,14 +195,14 @@ export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose:
           };
         } catch (err) {
           if (err instanceof Error && err.message.includes('取消')) {
-            toast('已取消下载', 'info');
+            toast(tr('已取消下载'), 'info');
             return;
           }
         }
         await db.downloads.put(entry);
         refresh();
         scheduleNext();
-        toast(`《${detail.title}》已加入下载队列`, 'success');
+        toast(tr('《{title}》已加入下载队列', { title: detail.title }), 'success');
       })();
     };
 
@@ -225,7 +227,7 @@ export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose:
     // 以落库结果为准回写 state：存储不可用（隐私模式）时 UI 不能假装已保存
     setProxy(saveDownloadSettings({ proxy: next }).proxy);
     toast(
-      next ? '已开启下载中转，新任务经服务器转发' : '已关闭下载中转，新任务直连源站',
+      next ? t('已开启下载中转，新任务经服务器转发') : t('已关闭下载中转，新任务直连源站'),
       'info'
     );
   };
@@ -249,7 +251,7 @@ export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose:
         await updateEntry(entry.id, { status: 'waiting' });
         scheduleNext();
       } catch (err) {
-        if (err instanceof Error && err.message.includes('取消')) toast('已取消', 'info');
+        if (err instanceof Error && err.message.includes('取消')) toast(tr('已取消'), 'info');
       }
       return;
     }
@@ -265,87 +267,86 @@ export function DownloadManager({ isOpen, onClose }: { isOpen: boolean; onClose:
     // 终态（已完成/失败）删的是记录而非终止任务；文件已保存在用户选择的位置，不受影响
     toast(
       entry.status === 'completed' || entry.status === 'error'
-        ? `《${entry.title}》已删除下载记录`
-        : `《${entry.title}》已取消下载`,
+        ? t('《{title}》已删除下载记录', { title: entry.title })
+        : t('《{title}》已取消下载', { title: entry.title }),
       'info'
     );
   };
 
   const statusLabel: Record<DownloadTaskEntry['status'], string> = {
-    waiting: '排队中',
-    downloading: '下载中',
-    paused: '已暂停',
-    completed: '已完成',
-    error: '失败',
+    waiting: t('排队中'),
+    downloading: t('下载中'),
+    paused: t('已暂停'),
+    completed: t('已完成'),
+    error: t('失败'),
   };
 
   return (
-    <Drawer open={isOpen} onClose={onClose} title="下载管理" width="max-w-lg">
+    <Drawer open={isOpen} onClose={onClose} title={t('下载管理')} width="max-w-lg">
       <div className="space-y-3">
         <div className="card p-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm text-content">经服务器中转下载</p>
+            <p className="text-sm text-content">{t('经服务器中转下载')}</p>
             <p className="text-xs text-faint">
-              直连被跨域 / 防盗链 / 混合内容拦下时开启：整集流量（含分片与密钥）经服务器转发，
-              带宽由部署者承担。仅对之后开始的任务生效。
+              {t('直连被跨域 / 防盗链 / 混合内容拦下时开启：整集流量（含分片与密钥）经服务器转发，带宽由部署者承担。仅对之后开始的任务生效。')}
             </p>
           </div>
-          <Switch checked={proxy} onChange={onToggleProxy} label="经服务器中转下载" />
+          <Switch checked={proxy} onChange={onToggleProxy} label={t('经服务器中转下载')} />
         </div>
         <p className="text-xs text-faint">
-          保存能力：{capability === 'fs-access' ? '磁盘直写（边下边存）' : '内存聚合（完成后浏览器下载）'}
-          {chunkCache ? ' · 支持断点续传' : ' · 当前环境无断点缓存（需 HTTPS 访问）'} ·
-          同时进行 {Math.min(running.current.size, MAX_CONCURRENT_DOWNLOADS)}/{MAX_CONCURRENT_DOWNLOADS} 个任务
+          {t('保存能力：')}{capability === 'fs-access' ? t('磁盘直写（边下边存）') : t('内存聚合（完成后浏览器下载）')}
+          {chunkCache ? ` · ${t('支持断点续传')}` : ` · ${t('当前环境无断点缓存（需 HTTPS 访问）')}`} ·{' '}
+          {t('同时进行 {n}/{max} 个任务', { n: Math.min(running.current.size, MAX_CONCURRENT_DOWNLOADS), max: MAX_CONCURRENT_DOWNLOADS })}
         </p>
         {tasks.length === 0 && (
           <div className="py-10 text-center text-sm text-faint">
-            暂无下载任务。在播放页点击「下载本集」开始。
+            {t('暂无下载任务。在播放页点击「下载本集」开始。')}
           </div>
         )}
-        {tasks.map((t) => (
-          <div key={t.id} className="card p-3 space-y-2">
+        {tasks.map((task) => (
+          <div key={task.id} className="card p-3 space-y-2">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm text-content truncate">{t.title}</p>
+                <p className="text-sm text-content truncate">{task.title}</p>
                 <p className="text-xs text-faint">
-                  {t.format.toUpperCase()} · {statusLabel[t.status]}
-                  {t.status === 'downloading' && t.total > 0 ? ` · ${t.finished}/${t.total} 分片` : ''}
+                  {task.format.toUpperCase()} · {statusLabel[task.status]}
+                  {task.status === 'downloading' && task.total > 0 ? ` · ${t('{done}/{total} 分片', { done: task.finished, total: task.total })}` : ''}
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {t.status === 'downloading' && (
+                {task.status === 'downloading' && (
                   <button
                     type="button"
                     className="px-2 py-1 rounded bg-chip hover:bg-hover text-xs text-content transition-colors"
-                    onClick={() => void onPauseResume(t)}
+                    onClick={() => void onPauseResume(task)}
                   >
-                    暂停
+                    {t('暂停')}
                   </button>
                 )}
-                {(t.status === 'paused' || t.status === 'waiting' || t.status === 'error') && (
+                {(task.status === 'paused' || task.status === 'waiting' || task.status === 'error') && (
                   <button
                     type="button"
                     className="px-2 py-1 rounded bg-chip hover:bg-hover text-xs text-content transition-colors"
-                    onClick={() => void onPauseResume(t)}
+                    onClick={() => void onPauseResume(task)}
                   >
-                    继续
+                    {t('继续')}
                   </button>
                 )}
                 <button
                   type="button"
-                  aria-label="删除下载任务"
+                  aria-label={t('删除下载任务')}
                   className="p-1.5 rounded bg-chip hover:bg-hover text-content transition-colors"
-                  onClick={() => void onCancel(t)}
+                  onClick={() => void onCancel(task)}
                 >
                   <Icon name="close" className="w-4 h-4" />
                 </button>
               </div>
             </div>
-            {(t.status === 'downloading' || t.status === 'paused' || t.status === 'completed') && t.total > 0 && (
+            {(task.status === 'downloading' || task.status === 'paused' || task.status === 'completed') && task.total > 0 && (
               <div className="h-1.5 rounded-full bg-chip overflow-hidden">
                 <div
                   className="h-full bg-accent transition-all"
-                  style={{ width: `${t.total > 0 ? Math.min(100, Math.round((t.finished / t.total) * 100)) : 0}%` }}
+                  style={{ width: `${task.total > 0 ? Math.min(100, Math.round((task.finished / task.total) * 100)) : 0}%` }}
                 />
               </div>
             )}

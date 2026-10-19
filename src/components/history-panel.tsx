@@ -19,6 +19,7 @@ import {
 import { buildWatchUrl, cn, formatRelativeTime, formatTime } from '@/lib/utils';
 import { useToast } from './toast';
 import { resolveSource, useAppStore } from '@/lib/store';
+import { useT } from '@/lib/i18n';
 
 /**
  * 观看历史面板（IndexedDB 实时查询）。
@@ -36,6 +37,7 @@ export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => 
     [open]
   );
   const { toast } = useToast();
+  const t = useT();
   const [confirmClear, setConfirmClear] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -57,7 +59,7 @@ export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => 
     <Drawer
       open={open}
       onClose={onClose}
-      title="观看历史"
+      title={t('观看历史')}
       width="max-w-lg"
       // 搜索框放在固定副标题栏：历史较长时滚动列表仍可随时改关键字
       subheader={
@@ -71,17 +73,17 @@ export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => 
               <input
                 type="text"
                 className="w-full h-9 pl-8 pr-8 rounded-lg border border-line bg-chip text-sm text-content placeholder:text-faint focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/40"
-                placeholder="搜索观看历史..."
+                placeholder={t('搜索观看历史...')}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                aria-label="搜索观看历史"
+                aria-label={t('搜索观看历史')}
               />
               {query && (
                 <button
                   type="button"
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-faint hover:text-content hover:bg-hover transition-colors"
                   onClick={() => setQuery('')}
-                  aria-label="清空搜索"
+                  aria-label={t('清空搜索')}
                 >
                   <Icon name="close" className="w-3.5 h-3.5" />
                 </button>
@@ -91,7 +93,7 @@ export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => 
               className="shrink-0 px-2 py-1.5 rounded-md text-xs text-faint hover:text-danger hover:bg-hover transition-colors"
               onClick={() => setConfirmClear(true)}
             >
-              清空历史
+              {t('清空历史')}
             </button>
           </div>
         ) : undefined
@@ -100,14 +102,14 @@ export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => 
       {!history ? (
         <LoadingState />
       ) : total === 0 ? (
-        <EmptyState variant="plain" title="暂无观看记录" />
+        <EmptyState variant="plain" title={t('暂无观看记录')} />
       ) : visible.length === 0 ? (
-        <EmptyState variant="plain" title={`没有匹配「${query.trim()}」的观看记录`} />
+        <EmptyState variant="plain" title={t('没有匹配「{q}」的观看记录', { q: query.trim() })} />
       ) : (
         <>
           {!keyword && total > VISIBLE_LIMIT && (
             <p className="text-xs text-faint mb-2">
-              共 {total} 条记录，仅显示最近 {VISIBLE_LIMIT} 条，可用上方搜索查找更早的记录
+              {t('共 {total} 条记录，仅显示最近 {limit} 条，可用上方搜索查找更早的记录', { total, limit: VISIBLE_LIMIT })}
             </p>
           )}
           <ul className="space-y-2">
@@ -122,12 +124,12 @@ export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => 
       <ConfirmDialog
         open={confirmClear}
         danger
-        title="清空全部观看历史？"
-        message={history ? `将删除 ${history.length} 条观看记录，此操作不可撤销。` : undefined}
-        confirmLabel="清空"
+        title={t('清空全部观看历史？')}
+        message={history ? t('将删除 {n} 条观看记录，此操作不可撤销。', { n: history.length }) : undefined}
+        confirmLabel={t('清空')}
         onCancel={() => setConfirmClear(false)}
         onConfirm={() => {
-          void clearAllHistory().then(() => toast('观看历史已清空', 'success'));
+          void clearAllHistory().then(() => toast(t('观看历史已清空'), 'success'));
           setConfirmClear(false);
         }}
       />
@@ -142,6 +144,7 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
   const customAPIs = useAppStore((s) => s.customAPIs);
   const envSources = useAppStore((s) => s.envSources);
   const { toast } = useToast();
+  const t = useT();
   const [imgFailed, setImgFailed] = useState(false);
   const source = resolveSource({ customAPIs, envSources }, item.sourceKey);
 
@@ -161,9 +164,9 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
   const remove = () => {
     void removeHistory(item.sourceKey, item.vodId).then(() => {
       // 轻操作：给撤销窗口，恢复时写回原记录
-      toast('已删除该记录', 'info', {
+      toast(t('已删除该记录'), 'info', {
         action: {
-          label: '撤销',
+          label: t('撤销'),
           onClick: () => {
             void upsertHistory({
               sourceKey: item.sourceKey,
@@ -176,7 +179,7 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
               playbackPosition: item.playbackPosition,
               duration: item.duration,
               timestamp: item.timestamp,
-            }).then(() => toast('已恢复', 'success'));
+            }).then(() => toast(t('已恢复'), 'success'));
           },
         },
       });
@@ -213,7 +216,7 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-content truncate">{item.title}</div>
             <div className="text-xs text-faint mt-0.5 flex items-center gap-1.5 flex-wrap">
-              {item.totalEpisodes > 0 && <span>第 {item.episodeIndex + 1}/{item.totalEpisodes} 集</span>}
+              {item.totalEpisodes > 0 && <span>{t('第 {cur}/{total} 集', { cur: item.episodeIndex + 1, total: item.totalEpisodes })}</span>}
               {hasPercent && <span>· {formatTime(item.playbackPosition)}</span>}
               <span>· {formatRelativeTime(item.timestamp)}</span>
             </div>
@@ -230,8 +233,8 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
           'absolute right-2 top-2 p-2 rounded-full text-faint hover:text-danger',
           'opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity'
         )}
-        aria-label="删除记录"
-        title="删除记录（可在提示中撤销）"
+        aria-label={t('删除记录')}
+        title={t('删除记录（可在提示中撤销）')}
         onClick={remove}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

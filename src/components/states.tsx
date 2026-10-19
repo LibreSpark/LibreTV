@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Icon, type IconName } from './icon';
+import { useT } from '@/lib/i18n';
 
 /**
  * 全站统一的状态呈现：加载中 / 空态 / 错误态。
@@ -81,7 +82,7 @@ export function EmptyState({
 export function ErrorState({
   message,
   onRetry,
-  retryLabel = '重试',
+  retryLabel,
   tone = 'default',
   className,
 }: {
@@ -91,6 +92,7 @@ export function ErrorState({
   tone?: 'default' | 'onDark';
   className?: string;
 }) {
+  const t = useT();
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3 py-8 text-center', className)}>
       <Icon name="alert" className={cn('w-6 h-6', tone === 'onDark' ? 'text-white/80' : 'text-danger')} />
@@ -102,7 +104,7 @@ export function ErrorState({
           className={cn('btn-ghost btn-sm', tone === 'onDark' && '!bg-white/10 !text-white !border-white/20')}
           onClick={onRetry}
         >
-          {retryLabel}
+          {retryLabel ?? t('重试')}
         </button>
       )}
     </div>

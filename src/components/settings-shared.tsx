@@ -7,6 +7,7 @@ import { useToast } from './toast';
 import { Icon } from './icon';
 import { Dropdown, type DropdownOption } from './dropdown';
 import { Spinner } from './states';
+import { tr, useT } from '@/lib/i18n';
 
 /**
  * 设置面板共享件：把此前点播源 / 直播源各自「抄一遍」的标题、开关、
@@ -38,7 +39,7 @@ export function useSourceTests() {
       } catch (err) {
         setTests((prev) => ({
           ...prev,
-          [key]: { status: 'done', ok: false, error: err instanceof Error ? err.message : '测试失败' },
+          [key]: { status: 'done', ok: false, error: err instanceof Error ? err.message : tr('测试失败') },
         }));
       }
     },
@@ -161,6 +162,7 @@ export function SearchInput({
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
+  const t = useT();
   return (
     <div className="relative">
       <Icon
@@ -169,7 +171,7 @@ export function SearchInput({
       />
       <input
         className="input w-full !pl-8 !py-1.5 text-xs"
-        aria-label={placeholder ?? '搜索'}
+        aria-label={placeholder ?? t('搜索')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -190,6 +192,7 @@ export function TestBadge({
   title: string;
   badgeWhenOk: (t: { ms?: number; count?: number }) => string;
 }) {
+  const t = useT();
   return (
     <span className="flex items-center gap-1 shrink-0">
       {state?.status === 'done' && (
@@ -200,7 +203,7 @@ export function TestBadge({
           )}
           title={state.ok ? `${state.ms}ms` : state.error}
         >
-          {state.ok ? badgeWhenOk({ ms: state.ms, count: state.count }) : `✗ ${state.error?.slice(0, 12) || '失败'}`}
+          {state.ok ? badgeWhenOk({ ms: state.ms, count: state.count }) : `✗ ${state.error?.slice(0, 12) || t('失败')}`}
         </span>
       )}
       <button
@@ -224,15 +227,16 @@ export function HealthBadge({ sourceKey }: { sourceKey: string }) {
   const entry = useAppStore((s) => s.sourceHealth[sourceKey]);
   const inDisabledSub = useAppStore((s) => isInDisabledSubscription(s, sourceKey));
   const { toast } = useToast();
+  const t = useT();
 
   // 订阅被整体关闭时优先说明原因：否则源看起来「勾选正常却搜不到」，用户会以为是源坏了
   if (inDisabledSub) {
     return (
       <span
         className="text-[10px] px-1.5 py-0.5 rounded bg-warning/15 text-warning shrink-0"
-        title="所属订阅已被停用，该源暂不参与搜索；到「数据源订阅」重新启用即可"
+        title={t('所属订阅已被停用，该源暂不参与搜索；到「数据源订阅」重新启用即可')}
       >
-        订阅已停用
+        {t('订阅已停用')}
       </span>
     );
   }
@@ -253,23 +257,23 @@ export function HealthBadge({ sourceKey }: { sourceKey: string }) {
           )}
           title={
             permanent
-              ? `已第 ${entry.disableCount} 次被自动停用，暂停参与搜索；点「恢复」重新启用`
-              : `连续 ${entry.failStreak} 次超时/失败，${remainText}后自动恢复`
+              ? t('已第 {n} 次被自动停用，暂停参与搜索；点「恢复」重新启用', { n: entry.disableCount })
+              : t('连续 {n} 次超时/失败，{time}后自动恢复', { n: entry.failStreak, time: remainText })
           }
         >
           <Icon name="clock" className="w-3 h-3" />
-          {permanent ? '已停用' : remainText}
+          {permanent ? t('已停用') : remainText}
         </span>
         <button
           className="text-[10px] px-1.5 py-0.5 rounded text-muted hover:text-accent hover:bg-hover transition-colors"
-          aria-label="恢复此源"
-          title="清除健康度记录，立即恢复参与搜索"
+          aria-label={t('恢复此源')}
+          title={t('清除健康度记录，立即恢复参与搜索')}
           onClick={() => {
             useAppStore.getState().clearSourceHealth(sourceKey);
-            toast('已恢复，下次搜索重新参与', 'success');
+            toast(t('已恢复，下次搜索重新参与'), 'success');
           }}
         >
-          恢复
+          {t('恢复')}
         </button>
       </span>
     );
@@ -277,7 +281,7 @@ export function HealthBadge({ sourceKey }: { sourceKey: string }) {
 
   if (entry.ok) {
     return (
-      <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success shrink-0" title={`上次搜索 ${entry.ms}ms`}>
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success shrink-0" title={t('上次搜索 {ms}ms', { ms: entry.ms })}>
         ✓ {entry.ms}ms
       </span>
     );
@@ -290,7 +294,7 @@ export function HealthBadge({ sourceKey }: { sourceKey: string }) {
       )}
       title={entry.error}
     >
-      连续 {entry.failStreak} 次失败
+      {t('连续 {n} 次失败', { n: entry.failStreak })}
     </span>
   );
 }

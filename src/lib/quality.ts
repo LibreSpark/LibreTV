@@ -7,6 +7,7 @@
  */
 
 import type { QualityEntry } from './types';
+import { tr } from '@/lib/i18n-core';
 
 /** 画质缓存有效期：源站换片源的概率低，30 天内直接复用 */
 export const QUALITY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -169,7 +170,7 @@ export function describeQualityBadge(
   entry: QualityEntry | undefined,
   loading = false
 ): QualityBadgeView | undefined {
-  if (loading) return { kind: 'loading', title: '正在探测画质…', retryable: false };
+  if (loading) return { kind: 'loading', title: tr('正在探测画质…'), retryable: false };
   if (!entry) return undefined;
   const label = qualityLabel(entry.height);
   if (label) {
@@ -178,8 +179,8 @@ export function describeQualityBadge(
       label,
       title:
         entry.from === 'play'
-          ? `播放实测的真实分辨率（${entry.height}P）`
-          : `解析播放列表得到的档位（${entry.height}P）`,
+          ? tr('播放实测的真实分辨率（{h}P）', { h: entry.height })
+          : tr('解析播放列表得到的档位（{h}P）', { h: entry.height }),
       retryable: false,
     };
   }
@@ -191,15 +192,19 @@ export function describeQualityBadge(
       kind: 'failed',
       label: '未测到',
       reason,
-      title: `本次没测到画质：${entry.error}。${
-        reason === '超时' ? '多半是网络抖动或源站响应慢，点击重试' : '点击可重试，也可以直接播放，播放后会自动记录实测分辨率'
-      }`,
+      title: tr('本次没测到画质：{error}。{hint}', {
+        error: entry.error,
+        hint:
+          reason === '超时'
+            ? tr('多半是网络抖动或源站响应慢，点击重试')
+            : tr('点击可重试，也可以直接播放，播放后会自动记录实测分辨率'),
+      }),
       retryable: true,
     };
   }
   return {
     kind: 'unknown',
-    title: '单码率或直链，播放列表里没有画质信息；播放一次后会记录实测分辨率',
+    title: tr('单码率或直链，播放列表里没有画质信息；播放一次后会记录实测分辨率'),
     retryable: false,
   };
 }

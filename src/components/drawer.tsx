@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Icon } from './icon';
+import { useT } from '@/lib/i18n';
 
 /**
  * 通用右侧抽屉骨架：
@@ -42,6 +43,7 @@ export function Drawer({
   /** 该值变化时内容区滚回顶部（如切换设置分组 / 面板） */
   resetScrollKey?: string;
 }) {
+  const t = useT();
   const [mounted, setMounted] = useState(open);
   const [entered, setEntered] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -159,7 +161,7 @@ export function Drawer({
           <button
             className="p-1.5 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t('关闭')}
           >
             <Icon name="close" />
           </button>

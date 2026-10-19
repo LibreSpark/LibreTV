@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SearchResultItem, SourceConfig } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import { qualityKey } from '@/lib/quality';
-import { compactRemarks, formatRemarks, inferGroupRemarks } from '@/lib/remarks';
+import { compactRemarks, formatRemarks, inferGroupRemarks, localizeRemarks } from '@/lib/remarks';
 import { cn } from '@/lib/utils';
 import { SmartImage } from './smart-image';
 import { QualityBadge } from './quality-badge';
 import { useQualityProbe } from './use-quality-probe';
 import { useInView } from './use-in-view';
+import { useT } from '@/lib/i18n';
 
 // —— 跨源同名聚合 ——
 
@@ -81,6 +82,7 @@ export function AggregatedCard({
   /** 完整源配置：探测画质需要 source.url / source.detail，搜索结果里只带 sourceUrl */
   sources?: SourceConfig[];
 }) {
+  const t = useT();
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
@@ -174,7 +176,7 @@ export function AggregatedCard({
             <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
             {multi && (
               <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-accent font-medium">
-                {group.items.length} 源
+                {t('{n} 源', { n: group.items.length })}
               </span>
             )}
           </div>
@@ -185,7 +187,7 @@ export function AggregatedCard({
             </svg>
             {multi && (
               <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-accent font-medium">
-                {group.items.length} 源
+                {t('{n} 源', { n: group.items.length })}
               </span>
             )}
           </div>
@@ -209,11 +211,11 @@ export function AggregatedCard({
                 />
               )}
             </div>
-            <p className="text-xs text-muted line-clamp-2 mb-2">{group.remarks || '暂无介绍'}</p>
+            <p className="text-xs text-muted line-clamp-2 mb-2">{localizeRemarks(group.remarks) || t('暂无介绍')}</p>
           </div>
           <div className="flex items-center justify-between gap-1.5 mt-auto pt-1.5 border-t border-line">
             <span className="tag bg-chip text-muted truncate max-w-[80%]">
-              {multi ? `${group.items.length} 个来源` : group.items[0].sourceName}
+              {multi ? t('{n} 个来源', { n: group.items.length }) : group.items[0].sourceName}
             </span>
             {multi && (
               <span className="flex items-center gap-1 shrink-0">
@@ -223,8 +225,11 @@ export function AggregatedCard({
                     className="tag bg-accent/15 text-accent font-medium"
                     title={
                       progress.known < progress.total
-                        ? `已探到 / 实测的最高画质（${progress.known}/${progress.total} 个来源已有结论）`
-                        : '已探到 / 实测的最高画质'
+                        ? t('已探到 / 实测的最高画质（{known}/{total} 个来源已有结论）', {
+                            known: progress.known,
+                            total: progress.total,
+                          })
+                        : t('已探到 / 实测的最高画质')
                     }
                   >
                     {progress.best}
@@ -249,19 +254,19 @@ export function AggregatedCard({
         <div className="border-t border-line p-2.5 animate-fade-in">
           <div className="flex items-baseline justify-between gap-2 mb-1.5">
             <p className="text-[10px] text-faint">
-              选择来源
-              {sharedRemarks ? ` · 均 ${sharedRemarks}` : ''}
+              {t('选择来源')}
+              {sharedRemarks ? ` · ${t('均')} ${localizeRemarks(sharedRemarks)}` : ''}
             </p>
             {progress.total > 0 &&
               (progress.done < progress.total ? (
                 <p className="text-[10px] text-faint tabular-nums">
-                  探测中 {progress.done}/{progress.total}
+                  {t('探测中')} {progress.done}/{progress.total}
                 </p>
               ) : (
                 // 探完后「3/3」已经没有信息量，换成用户真正要的结论
                 <p className="text-[10px] text-accent tabular-nums">
-                  {progress.best ? `最高 ${progress.best}` : '未能探到画质'}
-                  {progress.failed > 0 ? ` · ${progress.failed} 源未探到` : ''}
+                  {progress.best ? t('最高 {best}', { best: progress.best }) : t('未能探到画质')}
+                  {progress.failed > 0 ? ` · ${t('{n} 源未探到', { n: progress.failed })}` : ''}
                 </p>
               ))}
           </div>
@@ -299,7 +304,7 @@ export function AggregatedCard({
                     e.stopPropagation();
                     onOpen(item);
                   }}
-                  aria-label={`使用 ${item.sourceName} 播放${label && !sharedRemarks ? `，${label}` : ''}`}
+                  aria-label={`${t('使用 {name} 播放', { name: item.sourceName })}${label && !sharedRemarks ? `, ${localizeRemarks(label)}` : ''}`}
                 >
                   <span className="font-medium text-content truncate flex-1 min-w-0">{item.sourceName}</span>
                   <QualityBadge
@@ -311,7 +316,7 @@ export function AggregatedCard({
                   />
                   {/* 集数一致时已提到表头，逐行不再重复 */}
                   {!sharedRemarks && label && (
-                    <span className="text-faint shrink-0 tabular-nums">{label}</span>
+                    <span className="text-faint shrink-0 tabular-nums">{localizeRemarks(label)}</span>
                   )}
                   <svg
                     className="w-3.5 h-3.5 text-accent shrink-0 transition-transform group-hover:translate-x-0.5"
@@ -333,6 +338,7 @@ export function AggregatedCard({
 
 /** 影片卡片：封面加载失败时逐级降级到占位图（未聚合的单一结果使用） */
 export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: () => void }) {
+  const t = useT();
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
@@ -382,7 +388,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
               {item.typeName && <span className="tag bg-accent/15 text-accent">{item.typeName}</span>}
               {item.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{item.year}</span>}
             </div>
-            <p className="text-xs text-muted line-clamp-2 mb-2">{formatRemarks(item.remarks) || '暂无介绍'}</p>
+            <p className="text-xs text-muted line-clamp-2 mb-2">{localizeRemarks(formatRemarks(item.remarks)) || t('暂无介绍')}</p>
           </div>
           <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-line">
             <span className="tag bg-chip text-muted truncate max-w-[80%]">{item.sourceName}</span>
