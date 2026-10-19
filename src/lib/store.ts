@@ -6,6 +6,7 @@ import type { QualityEntry, SourceConfig, LiveSourceConfig, SourceSearchOutcome 
 import { isQualityEntryFresh, mergeQualityEntries, qualityKey } from './quality';
 import { clearLiveProbeResultsDb, loadLiveProbeResults, saveLiveProbeResults } from './db';
 import { PERSIST_KEY, createThrottledStorage } from './persist-storage';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * 全局设置（zustand + localStorage 持久化）。
@@ -850,7 +851,7 @@ export function resolveSource(
   if (fallback?.url) {
     return {
       key,
-      name: fallback.name || '自定义源',
+      name: fallback.name || tr('自定义源'),
       url: fallback.url,
       detail: fallback.detail,
     };

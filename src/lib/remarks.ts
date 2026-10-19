@@ -1,3 +1,5 @@
+import { tr } from '@/lib/i18n-core';
+
 /**
  * 播放备注（CMS 的 vod_remarks）归一化。
  *
@@ -24,6 +26,21 @@ function isFinished(text: string): boolean {
 
 function episodeCount(text: string): number {
   return Number(EPISODE_COUNT.exec(text)?.[1] ?? 0);
+}
+
+/**
+ * 展示用本地化：归一化后的文案仍以中文为内部表示（便于幂等与解析），仅在渲染时翻译。
+ * 非集数备注（HD国语 / 正片 等）命中词典则翻译，否则原样返回。
+ */
+export function localizeRemarks(text?: string): string | undefined {
+  if (!text) return text;
+  const total = /^全(\d+)集$/.exec(text);
+  if (total) return tr('全{n}集', { n: total[1] });
+  const progress = /^更新至(\d+)集$/.exec(text);
+  if (progress) return tr('更新至{n}集', { n: progress[1] });
+  const compact = /^(\d+) 集$/.exec(text);
+  if (compact) return tr('{n} 集', { n: compact[1] });
+  return tr(text);
 }
 
 /**

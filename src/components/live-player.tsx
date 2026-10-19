@@ -6,6 +6,7 @@ import Hls, { type HlsConfig } from 'hls.js';
 import { Spinner } from './states';
 import { prefersTouchPointer } from '@/lib/touch-pointer';
 import { ART_DEFAULT_CONTROL_HIDE_MS, TOUCH_CONTROL_HIDE_MS } from '@/lib/control-hide';
+import { tr, useT } from '@/lib/i18n';
 
 /**
  * 直播播放器：与点播 player-shell 完全独立。
@@ -51,6 +52,7 @@ interface LivePlayerProps {
 }
 
 export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePlayerProps) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
@@ -129,11 +131,11 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
         nativeCleanup = null;
         if (disposed || destroyed) return;
         if (allowProxyFallback && !mediaUrl.startsWith(STREAM_PROXY_PREFIX)) {
-          showHint('直连失败，改用代理重试...');
+          showHint(tr('直连失败，改用代理重试...'));
           setupNative(video, proxyUrl(url), false, failMessage);
           return;
         }
-        setError(failMessage || '该地址不是可播放的直播流（内容可能是文件或错误提示）');
+        setError(failMessage || tr('该地址不是可播放的直播流（内容可能是文件或错误提示）'));
       };
       video.addEventListener('error', onError);
       nativeCleanup = () => video.removeEventListener('error', onError);
@@ -170,7 +172,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
         if (/hvc1|hev1|hevc/i.test(videoCodecs)) {
           const support = video.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"');
           if (!support) {
-            showHint('该频道为 H.265 编码，当前浏览器可能无法解码，建议用 Edge/Safari');
+            showHint(tr('该频道为 H.265 编码，当前浏览器可能无法解码，建议用 Edge/Safari'));
           }
         }
         video.play().catch(() => {});
@@ -187,7 +189,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
             hls.recoverMediaError();
             return;
           }
-          setError('直播流解码失败，可能该频道编码不受当前浏览器支持，请尝试其他频道');
+          setError(tr('直播流解码失败，可能该频道编码不受当前浏览器支持，请尝试其他频道'));
           return;
         }
         if (!playbackStarted) {
@@ -196,21 +198,21 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
             !mediaUrl.startsWith(STREAM_PROXY_PREFIX) &&
             (data.details === 'manifestLoadError' || data.type === Hls.ErrorTypes.NETWORK_ERROR)
           ) {
-            showHint('直连失败，改用代理重试...');
+            showHint(tr('直连失败，改用代理重试...'));
             // 直播 manifest 重写需要本站前缀，交给代理通道
             setupHls(video, proxyUrl(url), 'proxy');
             return;
           }
           // HLS 直连与代理均失败：可能是"无 .m3u8 后缀但内容是 MP4"的源，回退原生播放
-          showHint('HLS 解析失败，尝试原生播放...');
-          setupNative(video, url, true, `直播流加载失败${codeHint}，可能该频道已失效，请尝试其他频道`);
+          showHint(tr('HLS 解析失败，尝试原生播放...'));
+          setupNative(video, url, true, tr('直播流加载失败{code}，可能该频道已失效，请尝试其他频道', { code: codeHint }));
           return;
         }
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           // 播放中网络抖动：尝试恢复拉流；连续失败达到阈值则报错退出
           liveNetRetryCount++;
           if (liveNetRetryCount > 5) {
-            setError(`直播流中断${codeHint}，该源可能已失效，请尝试其他频道`);
+            setError(tr('直播流中断{code}，该源可能已失效，请尝试其他频道', { code: codeHint }));
             return;
           }
           hls.startLoad();
@@ -229,12 +231,12 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       try {
         Mpegts = (await import('mpegts.js')).default;
       } catch {
-        setError('FLV 播放模块加载失败，请检查网络后重试');
+        setError(tr('FLV 播放模块加载失败，请检查网络后重试'));
         return;
       }
       if (disposed || destroyed) return;
       if (!Mpegts.getFeatureList().mseLivePlayback) {
-        setError('当前浏览器不支持 FLV 直播播放');
+        setError(tr('当前浏览器不支持 FLV 直播播放'));
         return;
       }
       const player = Mpegts.createPlayer(
@@ -257,11 +259,11 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       player.on(Mpegts.Events.ERROR, (errType: string) => {
         if (disposed || destroyed) return;
         if (!playbackStarted && allowProxyFallback && !mediaUrl.startsWith(STREAM_PROXY_PREFIX)) {
-          showHint('直连失败，改用代理重试...');
+          showHint(tr('直连失败，改用代理重试...'));
           void setupFlv(video, proxyUrl(url), false);
           return;
         }
-        setError(`直播流加载失败（${errType}），请尝试其他频道`);
+        setError(tr('直播流加载失败（{type}），请尝试其他频道', { type: errType }));
       });
       player.play().catch(() => {});
     };
@@ -278,7 +280,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
         position: 'left',
         index: 0,
         html: channelBtnSvg('M11 19l-7-7 7-7m8 14l-7-7 7-7'),
-        tooltip: '上一台',
+        tooltip: tr('上一台'),
         click: () => onPrevChannel(),
       });
     }
@@ -288,7 +290,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
         position: 'left',
         index: 1,
         html: channelBtnSvg('M13 5l7 7-7 7M5 5l7 7-7 7'),
-        tooltip: '下一台',
+        tooltip: tr('下一台'),
         click: () => onNextChannel(),
       });
     }
@@ -349,7 +351,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     });
     art.on('video:error', () => {
       // mpegts 走自身 ERROR 事件；这里兜底其它未知错误
-      if (!mpegtsRef.current) setError('视频播放失败，请尝试其他频道');
+      if (!mpegtsRef.current) setError(tr('视频播放失败，请尝试其他频道'));
     });
     art.on('ready', () => {
       // 直播隐藏进度条（ArtPlayer 无原生 isLive 开关）
@@ -362,7 +364,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     // 15s 内未起播则提示
     const startTimer = setTimeout(() => {
       if (!playbackStarted && !disposed && !destroyed) {
-        setError('频道加载超时，可能该源已失效，请尝试其他频道');
+        setError(tr('频道加载超时，可能该源已失效，请尝试其他频道'));
       }
     }, 15000);
 
@@ -425,7 +427,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
               setRetryNonce((n) => n + 1);
             }}
           >
-            重新加载
+            {t('重新加载')}
           </button>
         </div>
       )}

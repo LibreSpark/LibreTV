@@ -18,6 +18,7 @@ import {
   DESKTOP_CONTROL_HIDE_MS,
   TOUCH_CONTROL_HIDE_MS,
 } from '@/lib/control-hide';
+import { tr, useT } from '@/lib/i18n';
 
 /**
  * 播放器外壳：ArtPlayer + hls.js（旧版 player.js 的 React 化）。
@@ -69,6 +70,7 @@ export function PlayerShell({
   onQuality,
   onRequestSwitchSource,
 }: PlayerShellProps) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
@@ -198,7 +200,7 @@ export function PlayerShell({
         if (saved > 10 && Number.isFinite(currentDuration) && saved < currentDuration - 2) {
           if (artRef.current) artRef.current.currentTime = saved;
           prefetchAnchor = saved;
-          showHint(`已从 ${formatTime(saved)} 继续播放`);
+          showHint(tr('已从 {time} 继续播放', { time: formatTime(saved) }));
         }
         restoredRef.current = true;
         restoreCleanupRef.current?.();
@@ -261,16 +263,16 @@ export function PlayerShell({
             !mediaUrl.startsWith('/api/proxy') &&
             (decision.attempt >= 2 || data.details === 'manifestLoadError')
           ) {
-            showHint('直连失败，改用代理重试...');
+            showHint(tr('直连失败，改用代理重试...'));
             setupHls(video, `/api/proxy?url=${encodeURIComponent(mediaUrl)}`, false);
             return;
           }
-          showHint(`${decision.reason}（第 ${decision.attempt} 次）...`);
+          showHint(tr('{reason}（第 {n} 次）...', { reason: decision.reason, n: decision.attempt }));
           recovery.schedule(decision.delayMs, () => hls.startLoad());
           break;
         }
         case 'recover-media': {
-          showHint(`${decision.reason}（第 ${decision.attempt} 次）...`);
+          showHint(tr('{reason}（第 {n} 次）...', { reason: decision.reason, n: decision.attempt }));
           if (decision.swapAudio) hls.swapAudioCodec?.();
           hls.recoverMediaError();
           break;
@@ -278,12 +280,12 @@ export function PlayerShell({
         case 'switch-source': {
           // 覆盖播放开始后的场景：起播失败走 setError 遮罩；
           // 播放中失败走回调弹换源面板（父级未提供回调时同样 setError）
-          const message = `${describeHlsError(data.type, data.details)}：${decision.reason}`;
+          const message = `${describeHlsError(data.type, data.details)}${tr('：')}${decision.reason}`;
           if (playbackStartedRef.current) {
             showHint(message);
             propsRef.current.onRequestSwitchSource?.(decision.reason);
           } else {
-            setError(`视频加载失败，${message}，请尝试其他视频源`);
+            setError(tr('视频加载失败，{message}，请尝试其他视频源', { message }));
           }
           break;
         }
@@ -398,11 +400,11 @@ export function PlayerShell({
       // 而不是直接钉死错误遮罩——重建后视频轨重新 append，黑屏有声即可解除
       if (!playbackStartedRef.current && !videoErrorRetryUsedRef.current) {
         videoErrorRetryUsedRef.current = true;
-        showHint('播放异常，正在重试...');
+        showHint(tr('播放异常，正在重试...'));
         setupHls(art.video, currentMediaUrlRef.current, true);
         return;
       }
-      setError('视频播放失败，请尝试其他视频源');
+      setError(tr('视频播放失败，请尝试其他视频源'));
     });
     art.on('video:timeupdate', () => {
       const now = Date.now();
@@ -451,19 +453,19 @@ export function PlayerShell({
       if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); return; }
       switch (e.key) {
         case 'ArrowLeft':
-          if (current.currentTime > 5) { current.currentTime -= 5; showHint('快退 5s'); e.preventDefault(); }
+          if (current.currentTime > 5) { current.currentTime -= 5; showHint(tr('快退 5s')); e.preventDefault(); }
           break;
         case 'ArrowRight':
-          if (current.duration - current.currentTime > 5) { current.currentTime += 5; showHint('快进 5s'); e.preventDefault(); }
+          if (current.duration - current.currentTime > 5) { current.currentTime += 5; showHint(tr('快进 5s')); e.preventDefault(); }
           break;
         case 'ArrowUp':
-          if (current.volume < 1) { current.volume = Math.min(1, current.volume + 0.1); showHint(`音量 ${Math.round(current.volume * 100)}%`); e.preventDefault(); }
+          if (current.volume < 1) { current.volume = Math.min(1, current.volume + 0.1); showHint(tr('音量 {v}%', { v: Math.round(current.volume * 100) })); e.preventDefault(); }
           break;
         case 'ArrowDown':
-          if (current.volume > 0) { current.volume = Math.max(0, current.volume - 0.1); showHint(`音量 ${Math.round(current.volume * 100)}%`); e.preventDefault(); }
+          if (current.volume > 0) { current.volume = Math.max(0, current.volume - 0.1); showHint(tr('音量 {v}%', { v: Math.round(current.volume * 100) })); e.preventDefault(); }
           break;
         case ' ':
-          current.toggle(); showHint('播放/暂停'); e.preventDefault();
+          current.toggle(); showHint(tr('播放/暂停')); e.preventDefault();
           break;
         case 'f': case 'F':
           current.fullscreen = !current.fullscreen; e.preventDefault();
@@ -514,7 +516,7 @@ export function PlayerShell({
         if (art.video?.paused) return;
         art.video.playbackRate = 3.0;
         isLongPress = true;
-        showHint('3 倍速');
+        showHint(tr('3 倍速'));
       }, 500);
     };
     const onTouchEnd = () => {
@@ -522,7 +524,7 @@ export function PlayerShell({
       if (isLongPress) {
         art.video.playbackRate = originalRate;
         isLongPress = false;
-        showHint(`${originalRate} 倍速`);
+        showHint(tr('{rate} 倍速', { rate: originalRate }));
       }
     };
     const onTouchMove = (e: TouchEvent) => {
@@ -616,7 +618,7 @@ export function PlayerShell({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80">
           <p className="text-danger text-sm">{error}</p>
           <button className="btn-ghost text-xs" onClick={() => location.reload()}>
-            重新加载
+            {t('重新加载')}
           </button>
         </div>
       )}
@@ -627,7 +629,7 @@ export function PlayerShell({
       )}
       {autoplayNext && !error && (
         <div className="absolute bottom-16 right-3 text-[10px] text-muted bg-black/50 px-2 py-0.5 rounded pointer-events-none">
-          自动连播已开启
+          {t('自动连播已开启')}
         </div>
       )}
     </div>

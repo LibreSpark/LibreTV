@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useT } from '@/lib/i18n';
 
 /**
  * 主题上下文：light / dark / system，持久化到 localStorage，默认 dark。
@@ -68,15 +69,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 /** 亮暗切换按钮：在 light → dark → system 三态间循环 */
 export function ThemeToggle() {
   const { theme, resolved, setTheme } = useTheme();
+  const t = useT();
   const next: ThemeChoice = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
-  const label = theme === 'system' ? '跟随系统（当前深色）' : theme === 'dark' ? '深色' : '浅色';
-  const nextLabel = next === 'light' ? '浅色' : next === 'dark' ? '深色' : '跟随系统';
+  const label =
+    theme === 'system' ? t('跟随系统（当前深色）') : theme === 'dark' ? t('深色') : t('浅色');
+  const nextLabel = next === 'light' ? t('浅色') : next === 'dark' ? t('深色') : t('跟随系统');
 
   return (
     <button
       className="p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
-      title={`主题：${label}，点击切换为${nextLabel}`}
-      aria-label={`切换主题，当前 ${label}`}
+      title={t('主题：{label}，点击切换为{next}', { label, next: nextLabel })}
+      aria-label={t('切换主题，当前 {label}', { label })}
       onClick={() => setTheme(next)}
     >
       {theme === 'system' ? (

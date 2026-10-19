@@ -5,6 +5,7 @@ import { normalizeSubscriptionUrl } from './source-list';
 import { useAppStore } from './store';
 import { describeParseStats } from './tvbox-parser';
 import type { AuthStatusResponse, SubscriptionParseStats } from './types';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * 数据源订阅同步核心逻辑，供两处复用：
@@ -30,7 +31,7 @@ export async function syncSourceSubscription(rawUrl: string): Promise<Subscripti
   try {
     const { name, sources, liveSources, stats } = await api.fetchSourceList(url);
     if (sources.length === 0 && liveSources.length === 0) {
-      throw new Error('订阅内容为空');
+      throw new Error(tr('订阅内容为空'));
     }
     const store = useAppStore.getState();
     const vodCount = store.applySubscriptionSources(url, sources);
@@ -50,7 +51,7 @@ export async function syncSourceSubscription(rawUrl: string): Promise<Subscripti
     return { name, vodCount, liveCount, stats };
   } catch (err) {
     // 记录失败状态供订阅列表展示（首次添加未成功时不产生条目）；已导入的旧数据保持不动
-    const message = err instanceof Error ? err.message : '订阅同步失败';
+    const message = err instanceof Error ? err.message : tr('订阅同步失败');
     useAppStore.getState().markSubscriptionFailed(url, message);
     throw err instanceof Error ? err : new Error(message);
   }

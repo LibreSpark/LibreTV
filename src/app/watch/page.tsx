@@ -31,6 +31,7 @@ import {
   db,
 } from '@/lib/db';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 /**
  * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
@@ -46,6 +47,7 @@ export default function WatchPage() {
 }
 
 function WatchContent() {
+  const t = useT();
   const searchParams = useSearchParams();
   const router = useRouter();
   const store = useAppStore();
@@ -74,7 +76,7 @@ function WatchContent() {
   });
 
   const episodes = useMemo(() => detailQuery.data?.episodes ?? [], [detailQuery.data]);
-  const videoTitle = titleParam || detailQuery.data?.videoInfo?.title || '未知视频';
+  const videoTitle = titleParam || detailQuery.data?.videoInfo?.title || t('未知视频');
 
   // 当前播放地址：优先取剧集列表中的当前集，其次直连 URL 参数
   const currentUrl = useMemo(() => {
@@ -176,7 +178,7 @@ function WatchContent() {
   if (!verified) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-faint text-sm">等待访问验证...</p>
+        <p className="text-faint text-sm">{t('等待访问验证...')}</p>
       </div>
     );
   }
@@ -185,11 +187,11 @@ function WatchContent() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-md">
-          <h1 className="text-content font-medium mb-2">点播源不存在</h1>
+          <h1 className="text-content font-medium mb-2">{t('点播源不存在')}</h1>
           <p className="text-sm text-muted mb-4">
-            该视频来自点播源「{sourceKey}」，但它可能已被删除。请在设置中重新添加后重试。
+            {t('该视频来自点播源「{key}」，但它可能已被删除。请在设置中重新添加后重试。', { key: sourceKey })}
           </p>
-          <Link href="/" className="btn-primary">返回首页</Link>
+          <Link href="/" className="btn-primary">{t('返回首页')}</Link>
         </div>
       </div>
     );
@@ -205,7 +207,7 @@ function WatchContent() {
             <h1 className="text-sm font-medium text-content truncate">{videoTitle}</h1>
             <p className="text-xs text-faint">
               {source.name}
-              {episodes.length > 0 && ` · 第 ${currentIndex + 1}/${episodes.length} 集`}
+              {episodes.length > 0 && ` · ${t('第 {cur}/{total} 集', { cur: currentIndex + 1, total: episodes.length })}`}
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -216,17 +218,17 @@ function WatchContent() {
                 enqueueDownload({
                   url: currentUrl,
                   // 多集才带集数后缀；单集影片（含电影）文件名就是纯标题
-                  title: `${videoTitle}${episodes.length > 1 ? ` 第${currentIndex + 1}集` : ''}`,
+                  title: `${videoTitle}${episodes.length > 1 ? ` ${t('第{n}集', { n: currentIndex + 1 })}` : ''}`,
                   format: 'MP4',
                 });
                 // 「已加入下载队列」由 DownloadManager 在真正入队后提示：
                 // 这里先提示的话，用户随后取消保存位置会出现「已加入→已取消」的矛盾
               }}
             >
-              下载本集
+              {t('下载本集')}
             </button>
             <button className="btn-ghost btn-sm" onClick={() => setSwitchOpen(true)}>
-              切换资源
+              {t('切换资源')}
             </button>
           </div>
         </div>
@@ -263,7 +265,7 @@ function WatchContent() {
                     <Spinner size="lg" />
                   ) : (
                     <p className="text-faint text-sm">
-                      {detailQuery.isError ? '视频加载失败，请尝试其他资源' : '无可用播放地址'}
+                      {detailQuery.isError ? t('视频加载失败，请尝试其他资源') : t('无可用播放地址')}
                     </p>
                   )}
                 </div>
@@ -277,14 +279,14 @@ function WatchContent() {
                 disabled={currentIndex <= 0}
                 onClick={() => goEpisode(currentIndex - 1)}
               >
-                上一集
+                {t('上一集')}
               </button>
               <button
                 className="btn-ghost btn-sm"
                 disabled={episodes.length === 0 || currentIndex >= episodes.length - 1}
                 onClick={() => goEpisode(currentIndex + 1)}
               >
-                下一集
+                {t('下一集')}
               </button>
               <label className="flex items-center gap-1.5 text-xs text-muted ml-auto cursor-pointer">
                 <input
@@ -293,7 +295,7 @@ function WatchContent() {
                   checked={store.autoplayNext}
                   onChange={(e) => store.updateSettings({ autoplayNext: e.target.checked })}
                 />
-                自动连播
+                {t('自动连播')}
               </label>
             </div>
           </div>
@@ -302,21 +304,22 @@ function WatchContent() {
           <aside className="bg-surface-raised rounded-lg p-3 h-fit">
             <div className="flex items-center justify-between gap-2 mb-2.5">
               <h2 className="text-sm font-semibold text-content">
-                剧集列表{episodes.length > 0 && `（${episodes.length}）`}
+                {t('剧集列表')}
+                {episodes.length > 0 && ` (${episodes.length})`}
               </h2>
               {/* 排列开关紧贴它所作用的列表：放在这里才看得出它管的是这一栏的顺序 */}
               {episodes.length > 1 && (
                 <button
                   className="btn-ghost btn-sm shrink-0"
                   onClick={() => setReversed((v) => !v)}
-                  aria-label={reversed ? '切换为正序排列' : '切换为倒序排列'}
-                  title="调整剧集列表的排列顺序"
+                  aria-label={reversed ? t('切换为正序排列') : t('切换为倒序排列')}
+                  title={t('调整剧集列表的排列顺序')}
                 >
                   <Icon
                     name="arrowDown"
                     className={cn('w-3.5 h-3.5 transition-transform', reversed && 'rotate-180')}
                   />
-                  {reversed ? '正序排列' : '倒序排列'}
+                  {reversed ? t('正序排列') : t('倒序排列')}
                 </button>
               )}
             </div>
@@ -324,7 +327,7 @@ function WatchContent() {
               detailQuery.isLoading ? (
                 <LoadingState />
               ) : (
-                <EmptyState variant="plain" title={detailQuery.isError ? '获取剧集失败' : '暂无剧集信息'} />
+                <EmptyState variant="plain" title={detailQuery.isError ? t('获取剧集失败') : t('暂无剧集信息')} />
               )
             ) : (
               <div className="grid grid-cols-5 lg:grid-cols-4 gap-1.5 max-h-[65vh] overflow-y-auto scrollbar-thin pr-1">
@@ -339,7 +342,7 @@ function WatchContent() {
               </div>
             )}
             <p className="hidden md:block text-[10px] text-faint mt-3 leading-relaxed">
-              快捷键：空格 播放/暂停 · ←/→ 快退/快进 5s · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切换集数
+              {t('快捷键：空格 播放/暂停 · ←/→ 快退/快进 5s · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切换集数')}
             </p>
           </aside>
         </div>
@@ -378,6 +381,7 @@ function EpisodeButton({ index, active, onClick }: { index: number; active: bool
 }
 
 function BackButton() {
+  const t = useT();
   const router = useRouter();
   return (
     <button
@@ -386,7 +390,7 @@ function BackButton() {
         if (window.history.length > 1) router.back();
         else router.push('/');
       }}
-      aria-label="返回"
+      aria-label={t('返回')}
     >
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -397,12 +401,13 @@ function BackButton() {
 
 /** 首页按钮：直达首页，避免从外链进入时逐级 back */
 function HomeButton() {
+  const t = useT();
   return (
     <Link
       href="/"
       className="p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
-      aria-label="回首页"
-      title="回首页"
+      aria-label={t('回首页')}
+      title={t('回首页')}
     >
       <Icon name="home" className="w-5 h-5" />
     </Link>

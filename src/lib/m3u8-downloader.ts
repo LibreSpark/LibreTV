@@ -1,6 +1,7 @@
 import { isProxiedUri, PROXY_BASE } from './m3u8';
 import { parseM3u8Playlist, type ParsedPlaylist } from './m3u8-parse';
 import { StreamingTransmuxer } from './mp4-transmuxer';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * 整集离线下载：
@@ -127,12 +128,12 @@ async function fetchSegmentWithRetry(
     } catch (err) {
       if (signal.aborted) return undefined;
       if (err instanceof SegmentFetchError && !err.retryable) {
-        throw new Error(`分片 ${index} 源站缺失（${err.message}），该来源无法完整下载，建议更换来源`);
+        throw new Error(tr('分片 {n} 源站缺失（{message}），该来源无法完整下载，建议更换来源', { n: index, message: err.message }));
       }
       await new Promise((r) => setTimeout(r, 1000 * (retry + 1)));
     }
   }
-  throw new Error(`分片 ${index} 下载失败（已重试 ${MAX_SEGMENT_RETRIES} 次）`);
+  throw new Error(tr('分片 {n} 下载失败（已重试 {retries} 次）', { n: index, retries: MAX_SEGMENT_RETRIES }));
 }
 
 /**
@@ -224,13 +225,13 @@ async function runStreamingJob(ctx: {
  * 所以「能播不能下」多半卡在这里，必须把下一步该做什么讲清楚。
  */
 function describeParseFailure(url: string, err: unknown): string {
-  const reason = err instanceof Error ? err.message : '未知错误';
-  const base = `播放列表解析失败：${reason}`;
+  const reason = err instanceof Error ? err.message : tr('未知错误');
+  const base = tr('播放列表解析失败：{reason}', { reason });
   if (!/failed to fetch|networkerror|load failed/i.test(reason)) return base;
   if (isMixedContentBlocked(url)) {
-    return `${base}——该来源是 HTTP 地址，HTTPS 页面无法直连下载（混合内容被拦截），建议更换来源`;
+    return `${base}${tr('——该来源是 HTTP 地址，HTTPS 页面无法直连下载（混合内容被拦截），建议更换来源')}`;
   }
-  return `${base}——无法直连该来源（跨域限制或域名不可达），建议更换来源`;
+  return `${base}${tr('——无法直连该来源（跨域限制或域名不可达），建议更换来源')}`;
 }
 
 /** 页面是 HTTPS 而目标是 http:// 时，浏览器按混合内容策略直接拦截 */
@@ -283,7 +284,7 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
   if (lastErr || !parsed!) {
     throw new Error(describeParseFailure(url, lastErr));
   }
-  if (parsed.byterange) throw new Error('该集使用 BYTERANGE 分片，暂不支持下载');
+  if (parsed.byterange) throw new Error(tr('该集使用 BYTERANGE 分片，暂不支持下载'));
 
   const total = parsed.segments.length;
   report(0, total, 'downloading');
@@ -292,7 +293,7 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
   let aesKey: ArrayBuffer | undefined;
   if (parsed.aesConf) {
     const res = await fetch(parsed.aesConf.uri, { signal: jobSignal });
-    if (!res.ok) throw new Error(`解密密钥加载失败：HTTP ${res.status}`);
+    if (!res.ok) throw new Error(tr('解密密钥加载失败：HTTP {status}', { status: res.status }));
     aesKey = await res.arrayBuffer();
   }
 
@@ -337,7 +338,7 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
       } catch (err) {
         // 配额不足等存储层错误：浏览器原文（QuotaExceededError）用户看不懂
         throw new Error(
-          `分片缓存写入失败（浏览器存储空间可能不足）：${err instanceof Error ? err.message : String(err)}`
+          tr('分片缓存写入失败（浏览器存储空间可能不足）：{message}', { message: err instanceof Error ? err.message : String(err) })
         );
       }
       current += 1;
@@ -363,7 +364,7 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
       if (jobSignal.aborted) return;
       await pause.waitIfPaused();
       const resp = await cache.match(new Request(chunkKey(i)));
-      if (!resp) throw new Error(`分片 ${i} 缓存丢失，请重试`);
+      if (!resp) throw new Error(tr('分片 {n} 缓存丢失，请重试', { n: i }));
       let data = await resp.arrayBuffer();
       if (aesKey && parsed.aesConf) {
         data = await decryptSegment(data, aesKey, parsed.aesConf.iv, parsed.mediaSequence, i - 1);
@@ -376,7 +377,7 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
       if (jobSignal.aborted) return;
       await pause.waitIfPaused();
       const resp = await cache.match(new Request(chunkKey(i)));
-      if (!resp) throw new Error(`分片 ${i} 缓存丢失，请重试`);
+      if (!resp) throw new Error(tr('分片 {n} 缓存丢失，请重试', { n: i }));
       let data = await resp.arrayBuffer();
       if (aesKey && parsed.aesConf) {
         data = await decryptSegment(data, aesKey, parsed.aesConf.iv, parsed.mediaSequence, i - 1);

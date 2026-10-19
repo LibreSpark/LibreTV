@@ -7,6 +7,7 @@ import {
   optionalString,
   parseSourceListPayload,
 } from './source-list';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * TVBOX 配置 JSON 的解析层：把 `sites` / `lives` 归一化为本站的 SourceListPayload，
@@ -273,15 +274,15 @@ export function describeParseStats(
   if (!stats) return '';
   const parts: string[] = [];
   if (stats.skipped > 0) {
-    parts.push(`跳过 ${stats.skipped} 个不可用条目（${describeReasons(stats.skippedByReason)}）`);
+    parts.push(tr('跳过 {n} 个不可用条目（{reasons}）', { n: stats.skipped, reasons: describeReasons(stats.skippedByReason) }));
   }
   if (options?.includeSamples !== false && stats.skippedSamples && stats.skippedSamples.length > 0) {
-    parts.push(`如「${stats.skippedSamples.join('」「')}」`);
+    parts.push(tr('如「{names}」', { names: stats.skippedSamples.join(tr('」「')) }));
   }
   if (stats.truncated > 0) {
-    parts.push(`超出上限截断 ${stats.truncated} 条`);
+    parts.push(tr('超出上限截断 {n} 条', { n: stats.truncated }));
   }
-  return parts.join('，');
+  return parts.join(tr('，'));
 }
 
 /** 收集点播源：只接受 Apple CMS 直连接口 */
@@ -392,6 +393,6 @@ function markSkipped(counter: SkipCounter, reason: SubscriptionSkipReason, name?
 /** 按固定顺序拼装原因明细，如「Spider 引擎 20、XML 接口 5」 */
 function describeReasons(byReason: Partial<Record<SubscriptionSkipReason, number>>): string {
   return SKIP_REASON_ORDER.filter((reason) => (byReason[reason] ?? 0) > 0)
-    .map((reason) => `${SKIP_REASON_LABELS[reason]} ${byReason[reason]}`)
-    .join('、');
+    .map((reason) => `${tr(SKIP_REASON_LABELS[reason])} ${byReason[reason]}`)
+    .join(tr('、'));
 }

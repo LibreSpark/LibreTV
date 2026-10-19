@@ -14,6 +14,7 @@ import { EmptyState, LoadingState } from './states';
 import { useFocusTrap } from './use-focus-trap';
 import { QualityBadge } from './quality-badge';
 import { useQualityProbe } from './use-quality-probe';
+import { useT } from '@/lib/i18n';
 
 /**
  * 换源面板：跨源按标题搜索 → 匹配同名/同前缀资源 → 并发测速（详情接口耗时）→ 按速度排序展示。
@@ -44,6 +45,7 @@ export function SwitchSourceModal({
   const store = useAppStore();
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [phase, setPhase] = useState<'searching' | 'testing' | 'done'>('searching');
   /** 封面加载失败记录（按卡片 key）；失败后降级为占位图标，避免破图 */
@@ -125,7 +127,7 @@ export function SwitchSourceModal({
         // 主动中止不算失败，不提示
         const aborted = err instanceof DOMException && err.name === 'AbortError';
         if (!cancelled && !aborted) {
-          toast(err instanceof Error ? err.message : '换源搜索失败', 'error');
+          toast(err instanceof Error ? err.message : t('换源搜索失败'), 'error');
           setPhase('done');
         }
       }
@@ -159,7 +161,7 @@ export function SwitchSourceModal({
 
   const switchTo = (c: Candidate) => {
     if (!c.episodes) {
-      toast('该源无可用播放资源', 'warning');
+      toast(t('该源无可用播放资源'), 'warning');
       return;
     }
     const targetIndex = currentIndex < c.episodes ? currentIndex : 0;
@@ -189,7 +191,7 @@ export function SwitchSourceModal({
         className="bg-surface-raised rounded-xl w-full max-w-3xl shadow-2xl p-5 animate-slide-up outline-none"
         role="dialog"
         aria-modal="true"
-        aria-label={`换源：${currentTitle}`}
+        aria-label={t('换源：{title}', { title: currentTitle })}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="min-w-0">
@@ -198,23 +200,23 @@ export function SwitchSourceModal({
             </h2>
             <p className="text-xs text-faint">
               {phase === 'searching'
-                ? '正在搜索各资源...'
+                ? t('正在搜索各资源...')
                 : phase === 'testing'
-                  ? '正在测试各资源速率...'
-                  : `共 ${sorted.length} 个来源 · ${sorted.filter((c) => c.ok).length} 个可用`}
+                  ? t('正在测试各资源速率...')
+                  : t('共 {n} 个来源 · {ok} 个可用', { n: sorted.length, ok: sorted.filter((c) => c.ok).length })}
             </p>
             {phase === 'done' && progress.total > 0 && (
               <p className="text-xs text-faint tabular-nums mt-0.5">
                 {progress.done < progress.total
-                  ? `画质探测中 ${progress.done}/${progress.total}`
+                  ? t('画质探测中 {done}/{total}', { done: progress.done, total: progress.total })
                   : progress.known > 0
-                    ? `画质已探到 ${progress.known}/${progress.total}`
+                    ? t('画质已探到 {known}/{total}', { known: progress.known, total: progress.total })
                     : // 一个都没探到不等于失败：多为单码率/直链，说清楚省得用户以为坏了
-                      '源站未提供画质'}
+                      t('源站未提供画质')}
               </p>
             )}
           </div>
-          <button className="p-1.5 rounded-md text-muted hover:text-content hover:bg-hover" onClick={onClose} aria-label="关闭">
+          <button className="p-1.5 rounded-md text-muted hover:text-content hover:bg-hover" onClick={onClose} aria-label={t('关闭')}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -222,9 +224,9 @@ export function SwitchSourceModal({
         </div>
 
         {phase !== 'done' ? (
-          <LoadingState label={phase === 'searching' ? '搜索各资源中...' : '测速中...'} />
+          <LoadingState label={phase === 'searching' ? t('搜索各资源中...') : t('测速中...')} />
         ) : sorted.length === 0 ? (
-          <EmptyState variant="plain" title="其他点播源未找到同名资源" />
+          <EmptyState variant="plain" title={t('其他点播源未找到同名资源')} />
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {sorted.map((c) => {
@@ -272,10 +274,10 @@ export function SwitchSourceModal({
                         !c.ok ? 'bg-danger-solid/85 text-white' : c.ms! > 2000 ? 'bg-warning-solid/85 text-white' : 'bg-success-solid/85 text-white'
                       )}
                     >
-                      {!c.ok ? '失败' : `${c.ms}ms`}
+                      {!c.ok ? t('失败') : `${c.ms}ms`}
                     </span>
                     {isCurrent && (
-                      <span className="absolute inset-x-0 bottom-0 bg-accent/90 text-on-accent text-xs text-center py-1">当前播放</span>
+                      <span className="absolute inset-x-0 bottom-0 bg-accent/90 text-on-accent text-xs text-center py-1">{t('当前播放')}</span>
                     )}
                   </div>
                   <div className="p-2">
@@ -283,7 +285,7 @@ export function SwitchSourceModal({
                       {c.source.name}
                     </div>
                     <div className="flex items-center justify-between gap-1 mt-0.5">
-                      <span className="text-xs text-faint">{c.episodes ? `${c.episodes} 集` : '无资源'}</span>
+                      <span className="text-xs text-faint">{c.episodes ? t('{n} 集', { n: c.episodes }) : t('无资源')}</span>
                       <QualityBadge
                         entry={qualities[qualityKey(c.source.key, c.result.vodId)]}
                         loading={probing[qualityKey(c.source.key, c.result.vodId)]}

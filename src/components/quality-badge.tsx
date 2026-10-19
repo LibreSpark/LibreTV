@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import { describeQualityBadge } from '@/lib/quality';
 import type { QualityEntry } from '@/lib/types';
+import { useT } from '@/lib/i18n';
 
 /**
  * 画质徽章：四态外观与 tooltip 都来自 describeQualityBadge（纯函数，可单测）。
@@ -26,6 +27,7 @@ export function QualityBadge({
   showReason?: boolean;
   className?: string;
 }) {
+  const t = useT();
   const view = describeQualityBadge(entry, loading);
   if (!view) return null;
 
@@ -34,7 +36,7 @@ export function QualityBadge({
       <span
         className={cn('tag bg-chip text-faint shrink-0 animate-pulse', className)}
         title={view.title}
-        aria-label="正在探测画质"
+        aria-label={t('正在探测画质')}
       >
         …
       </span>
@@ -75,10 +77,10 @@ export function QualityBadge({
           className
         )}
         title={view.title}
-        aria-label={`本次没测到画质${view.reason ? `（${view.reason}）` : ''}，点击重试`}
+        aria-label={`${t('本次没测到画质，点击重试')}${view.reason ? ` (${t(view.reason)})` : ''}`}
       >
-        {view.label ?? '未测到'}
-        {showReason && view.reason && <span className="ml-0.5 opacity-80">·{view.reason}</span>}
+        {t(view.label ?? '未测到')}
+        {showReason && view.reason && <span className="ml-0.5 opacity-80">·{t(view.reason)}</span>}
       </button>
     );
   }
@@ -88,8 +90,8 @@ export function QualityBadge({
       className={cn('tag shrink-0', view.kind === 'failed' ? 'bg-warning/15 text-warning' : 'bg-chip text-faint', className)}
       title={view.title}
     >
-      {view.kind === 'failed' ? view.label ?? '未测到' : '未知'}
-      {showReason && view.reason && <span className="ml-0.5 opacity-80">·{view.reason}</span>}
+      {view.kind === 'failed' ? t(view.label ?? '未测到') : t('未知')}
+      {showReason && view.reason && <span className="ml-0.5 opacity-80">·{t(view.reason)}</span>}
     </span>
   );
 }

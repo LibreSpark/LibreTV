@@ -6,6 +6,7 @@ import { api } from '@/lib/client-api';
 import { cn } from '@/lib/utils';
 import type { EpgProgram } from '@/lib/types';
 import { EmptyState, ErrorState, Spinner } from './states';
+import { useT } from '@/lib/i18n';
 
 /**
  * EPG 节目单面板：当前节目（含播放进度条）+ 接下来节目列表 + 简介展开。
@@ -20,6 +21,7 @@ function fmtTime(ms: number): string {
 }
 
 export function LiveEpgPanel({ epgUrl, tvgId }: { epgUrl?: string; tvgId?: string }) {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   const [expandedDesc, setExpandedDesc] = useState(false);
 
@@ -41,7 +43,7 @@ export function LiveEpgPanel({ epgUrl, tvgId }: { epgUrl?: string; tvgId?: strin
     return (
       <EmptyState
         variant="plain"
-        title="该频道未配置节目单数据（需来源订阅提供 EPG 地址且频道带 tvg-id）"
+        title={t('该频道未配置节目单数据（需来源订阅提供 EPG 地址且频道带 tvg-id）')}
         className="!py-4"
       />
     );
@@ -56,7 +58,7 @@ export function LiveEpgPanel({ epgUrl, tvgId }: { epgUrl?: string; tvgId?: strin
   }
 
   if (epgQuery.isError) {
-    return <ErrorState message="节目单加载失败" onRetry={() => epgQuery.refetch()} className="!py-4" />;
+    return <ErrorState message={t('节目单加载失败')} onRetry={() => epgQuery.refetch()} className="!py-4" />;
   }
 
   const data = epgQuery.data;
@@ -71,7 +73,7 @@ export function LiveEpgPanel({ epgUrl, tvgId }: { epgUrl?: string; tvgId?: strin
         <div className="bg-card border border-line rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[10px] font-semibold text-danger bg-danger/10 px-1.5 py-0.5 rounded-full">
-              正在播出
+              {t('正在播出')}
             </span>
             <span className="text-[10px] text-faint">
               {fmtTime(current.start)} - {fmtTime(current.stop)}
@@ -101,12 +103,12 @@ export function LiveEpgPanel({ epgUrl, tvgId }: { epgUrl?: string; tvgId?: strin
           </div>
         </div>
       ) : (
-        <p className="text-xs text-faint text-center py-2">当前时段暂无节目数据</p>
+        <p className="text-xs text-faint text-center py-2">{t('当前时段暂无节目数据')}</p>
       )}
 
       {upcoming.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-content mb-1.5">接下来</h4>
+          <h4 className="text-xs font-semibold text-content mb-1.5">{t('接下来')}</h4>
           <ul className="space-y-1">
             {upcoming.map((p) => (
               <li

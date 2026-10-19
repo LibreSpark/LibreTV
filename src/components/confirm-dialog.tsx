@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 /**
  * 破坏性操作确认弹窗（分级确认中的「重操作」）：
@@ -13,8 +14,8 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = '确认',
-  cancelLabel = '取消',
+  confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onCancel,
@@ -29,6 +30,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -73,7 +75,7 @@ export function ConfirmDialog({
         {message && <div className="text-sm text-muted leading-relaxed">{message}</div>}
         <div className="flex gap-2 justify-end mt-5">
           <button ref={cancelRef} className="btn-ghost text-sm" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabel ?? t('取消')}
           </button>
           <button
             ref={confirmRef}
@@ -83,7 +85,7 @@ export function ConfirmDialog({
             )}
             onClick={onConfirm}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('确认')}
           </button>
         </div>
       </div>

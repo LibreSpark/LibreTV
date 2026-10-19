@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/client-api';
 import { LIVE_PROBE_TTL_MS, useAppStore, type LiveProbeEntry } from '@/lib/store';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * 直播频道批量测活 hook：
@@ -116,7 +117,7 @@ export function useLiveProbe() {
       const allUrls = [...new Set(targets.map((t) => t.url))];
       if (allUrls.length === 0) return;
       if (allUrls.length > MAX_TARGETS) {
-        showHint(`频道数超过 ${MAX_TARGETS}，仅测前 ${MAX_TARGETS} 个，请精简订阅源`);
+        showHint(tr('频道数超过 {n}，仅测前 {n} 个，请精简订阅源', { n: MAX_TARGETS }));
       }
       const urls = allUrls.slice(0, MAX_TARGETS);
 
@@ -128,7 +129,7 @@ export function useLiveProbe() {
         return !e || now - e.timestamp >= LIVE_PROBE_TTL_MS;
       });
       if (stale.length === 0) {
-        showHint('测活结果 6 小时内有效，无需重测');
+        showHint(tr('测活结果 6 小时内有效，无需重测'));
         return;
       }
 

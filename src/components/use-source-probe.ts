@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import type { SourceSearchOutcome } from '@/lib/types';
+import { tr } from '@/lib/i18n-core';
 
 /**
  * 点播源批量探活 hook：
@@ -77,7 +78,7 @@ export function useSourceProbe() {
           outcome = {
             sourceKey: source.key,
             ok: false,
-            error: err instanceof Error ? err.message : '测试失败',
+            error: err instanceof Error ? err.message : tr('测试失败'),
             list: [],
           };
         }

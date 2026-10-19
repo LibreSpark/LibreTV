@@ -1,3 +1,5 @@
+import { tr } from '@/lib/i18n-core';
+
 /**
  * HLS 播放错误恢复策略。
  *
@@ -77,31 +79,31 @@ export class PlaybackRecovery {
 
   /** 致命错误 → 恢复决策 */
   onFatal(type: string, details: string): RecoveryDecision {
-    if (this.disposed) return { action: 'ignore', reason: '已销毁' };
+    if (this.disposed) return { action: 'ignore', reason: tr('已销毁') };
     this.lastActionAt = Date.now();
 
     if (HARD_FAIL_DETAILS.has(details)) {
-      return { action: 'switch-source', reason: '播放列表格式无法解析，重试无意义' };
+      return { action: 'switch-source', reason: tr('播放列表格式无法解析，重试无意义') };
     }
 
     if (type === HLS_ERROR_MEDIA) {
       this.mediaRecoveries += 1;
       if (this.mediaRecoveries > this.policy.maxMediaRecoveries) {
-        return { action: 'switch-source', reason: '媒体解码错误多次恢复无效' };
+        return { action: 'switch-source', reason: tr('媒体解码错误多次恢复无效') };
       }
       return {
         action: 'recover-media',
         // 第 1 次仅 recoverMediaError；第 2 次追加 swapAudioCodec（hls.js 官方推荐链）
         swapAudio: this.mediaRecoveries >= 2,
         attempt: this.mediaRecoveries,
-        reason: '媒体解码错误，尝试恢复',
+        reason: tr('媒体解码错误，尝试恢复'),
       };
     }
 
     if (type === HLS_ERROR_NETWORK) {
       this.networkRetries += 1;
       if (this.networkRetries > this.policy.maxNetworkRetries) {
-        return { action: 'switch-source', reason: `网络错误已重试 ${this.policy.maxNetworkRetries} 次仍未恢复` };
+        return { action: 'switch-source', reason: tr('网络错误已重试 {n} 次仍未恢复', { n: this.policy.maxNetworkRetries }) };
       }
       return {
         action: 'retry',
@@ -110,11 +112,11 @@ export class PlaybackRecovery {
           this.policy.baseDelayMs * 2 ** (this.networkRetries - 1),
           this.policy.maxDelayMs
         ),
-        reason: '网络错误，退避重试',
+        reason: tr('网络错误，退避重试'),
       };
     }
 
-    return { action: 'switch-source', reason: `未知的致命错误类型：${type}` };
+    return { action: 'switch-source', reason: tr('未知的致命错误类型：{type}', { type }) };
   }
 
   /** 决策为 retry 时由调用方调用：统一管理定时器，dispose 时全部取消 */
@@ -135,21 +137,21 @@ export class PlaybackRecovery {
 
 /** hls 错误 → 中文提示（用于 hint 浮层 / toast） */
 export function describeHlsError(type: string, details: string): string {
-  if (HARD_FAIL_DETAILS.has(details)) return '播放列表格式无法解析';
+  if (HARD_FAIL_DETAILS.has(details)) return tr('播放列表格式无法解析');
   switch (details) {
     case 'manifestLoadError':
     case 'manifestLoadTimeOut':
-      return '播放列表加载失败';
+      return tr('播放列表加载失败');
     case 'manifestParsingError':
-      return '播放列表解析失败';
+      return tr('播放列表解析失败');
     case 'fragLoadError':
     case 'fragLoadTimeOut':
-      return '视频分片加载失败';
+      return tr('视频分片加载失败');
     case 'keyLoadError':
-      return '解密密钥加载失败';
+      return tr('解密密钥加载失败');
     case 'bufferStalledError':
-      return '缓冲不足';
+      return tr('缓冲不足');
     default:
-      return type === HLS_ERROR_MEDIA ? '媒体解码错误' : `播放错误（${details || type}）`;
+      return type === HLS_ERROR_MEDIA ? tr('媒体解码错误') : tr('播放错误（{detail}）', { detail: details || type });
   }
 }

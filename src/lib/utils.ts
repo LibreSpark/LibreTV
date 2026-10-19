@@ -1,3 +1,5 @@
+import { tr } from '@/lib/i18n-core';
+
 export function cn(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
 }
@@ -14,10 +16,10 @@ export function formatTime(seconds: number): string {
 
 export function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}小时前`;
-  if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}天前`;
+  if (diff < 60_000) return tr('刚刚');
+  if (diff < 3_600_000) return tr('{n}分钟前', { n: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return tr('{n}小时前', { n: Math.floor(diff / 3_600_000) });
+  if (diff < 604_800_000) return tr('{n}天前', { n: Math.floor(diff / 86_400_000) });
   const d = new Date(timestamp);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -26,7 +28,7 @@ export function formatRelativeTime(timestamp: number): string {
 /** 停用时长的可读文案：不足 1 小时按分钟，超过按小时（按剩余时间展示时向上取整） */
 export function formatDisableTtl(ms: number): string {
   const minutes = Math.max(1, Math.ceil(ms / 60_000));
-  return minutes >= 60 ? `${Math.round(minutes / 60)} 小时` : `${minutes} 分钟`;
+  return minutes >= 60 ? tr('{n} 小时', { n: Math.round(minutes / 60) }) : tr('{n} 分钟', { n: minutes });
 }
 
 /**
