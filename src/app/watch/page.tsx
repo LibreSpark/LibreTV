@@ -17,6 +17,9 @@ const PlayerShell = dynamic(() => import('@/components/player-shell').then((m) =
 });
 import { EmptyState, LoadingState, Spinner } from '@/components/states';
 import { SwitchSourceModal } from '@/components/switch-source';
+import { SkipMarkPanel } from '@/components/skip-mark-panel';
+import { skipMarkKey } from '@/lib/skip-marks';
+import type { PlayerSkipApi } from '@/components/player-shell';
 import { enqueueDownload } from '@/components/download-manager';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth';
@@ -59,6 +62,9 @@ function WatchContent() {
 
   const [reversed, setReversed] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [skipPanelOpen, setSkipPanelOpen] = useState(false);
+  // 播放器对外暴露的精确时间读取接口（「记录当前」用），随播放器卸载置空
+  const playerApiRef = useRef<PlayerSkipApi | null>(null);
 
   const source = resolveSource(store, sourceKey, {
     url: searchParams.get('sourceUrl') || undefined,
@@ -89,6 +95,15 @@ function WatchContent() {
     if (episodes.length > 0) return Math.min(Math.max(indexParam, 0), episodes.length - 1);
     return indexParam;
   }, [episodes, indexParam]);
+
+  // 片头片尾标记按剧名记忆：换集不变，换源到同名资源也能命中。
+  // 标题缺失（直连链接）时退回 source:vodId，至少保证本源本片可用。
+  const skipMarkFallback = `${sourceKey}:${vodId || currentUrl}`;
+  const markKey = useMemo(
+    () => skipMarkKey(videoTitle, skipMarkFallback),
+    [videoTitle, skipMarkFallback]
+  );
+  const skipMark = store.skipMarks[markKey];
 
   const goEpisode = useCallback(
     (index: number) => {
@@ -242,6 +257,10 @@ function WatchContent() {
                   title={videoTitle}
                   adFilter={store.adFilter}
                   autoplayNext={store.autoplayNext}
+                  skipMark={skipMark}
+                  autoSkipIntro={store.autoSkipIntro}
+                  autoSkipOutro={store.autoSkipOutro}
+                  onPlayerApi={(api) => { playerApiRef.current = api; }}
                   episodeKey={`${sourceKey}:${vodId}:${currentIndex}`}
                   nextUrl={currentIndex + 1 < episodes.length ? episodes[currentIndex + 1] : undefined}
                   nextEpisodeKey={currentIndex + 1 < episodes.length ? `${sourceKey}:${vodId}:${currentIndex + 1}` : undefined}
@@ -290,6 +309,13 @@ function WatchContent() {
               >
                 下一集
               </button>
+              <button
+                className="btn-ghost btn-sm"
+                aria-expanded={skipPanelOpen}
+                onClick={() => setSkipPanelOpen((v) => !v)}
+              >
+                片头片尾
+              </button>
               <label className="flex items-center gap-1.5 text-xs text-muted ml-auto cursor-pointer">
                 <input
                   type="checkbox"
@@ -300,6 +326,17 @@ function WatchContent() {
                 自动连播
               </label>
             </div>
+
+            {skipPanelOpen && (
+              <SkipMarkPanel
+                markKey={markKey}
+                getPlayerClock={() => {
+                  const api = playerApiRef.current;
+                  if (!api) return null;
+                  return { currentTime: api.getCurrentTime(), duration: api.getDuration() };
+                }}
+              />
+            )}
           </div>
 
           {/* 剧集侧栏 */}

@@ -14,6 +14,12 @@ import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
 import { prefersTouchPointer } from '@/lib/touch-pointer';
 import {
+  hasCrossedOutro,
+  isIntroActive,
+  resolveSkipWindow,
+  type SkipMark,
+} from '@/lib/skip-marks';
+import {
   ART_DEFAULT_CONTROL_HIDE_MS,
   DESKTOP_CONTROL_HIDE_MS,
   TOUCH_CONTROL_HIDE_MS,
@@ -29,11 +35,25 @@ import {
  * 重建 <video> 元素，触发「黑屏有声」的渲染竞态。
  */
 
+/** 暴露给播放页的读取接口：「记录当前」需要比 5s 节流进度回调更精确的位置 */
+export interface PlayerSkipApi {
+  getCurrentTime(): number;
+  getDuration(): number;
+}
+
 interface PlayerShellProps {
   url: string;
   title: string;
   adFilter: boolean;
   autoplayNext: boolean;
+  /** 当前剧的片头片尾标记（父级按归一化剧名查好后传入，换集/换源不变） */
+  skipMark?: SkipMark;
+  /** 命中片头标记时自动跳到片头结束 */
+  autoSkipIntro: boolean;
+  /** 连续播放越过片尾标记时自动结束本集 */
+  autoSkipOutro: boolean;
+  /** 播放器创建/销毁时回调，供播放页读取精确播放位置 */
+  onPlayerApi?: (api: PlayerSkipApi | null) => void;
   /** 剧集标识 `${source}:${vodId}:${episodeIndex}`（片段缓存按集淘汰的分组键） */
   episodeKey?: string;
   /** 下一集 m3u8 地址：当前集预取完成后预热下一集前 7 分钟 */
@@ -64,6 +84,10 @@ export function PlayerShell({
   title,
   adFilter,
   autoplayNext,
+  skipMark,
+  autoSkipIntro,
+  autoSkipOutro,
+  onPlayerApi,
   episodeKey,
   nextUrl,
   nextEpisodeKey,
@@ -90,12 +114,14 @@ export function PlayerShell({
 
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef({
-    url, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
+    url, title, adFilter, autoplayNext, skipMark, autoSkipIntro, autoSkipOutro, onPlayerApi,
+    episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onQuality, onRequestSwitchSource,
     onPrevEpisode, onNextEpisode, hasPrevEpisode, hasNextEpisode,
   });
   propsRef.current = {
-    url, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
+    url, title, adFilter, autoplayNext, skipMark, autoSkipIntro, autoSkipOutro, onPlayerApi,
+    episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onQuality, onRequestSwitchSource,
     onPrevEpisode, onNextEpisode, hasPrevEpisode, hasNextEpisode,
   };
@@ -124,6 +150,14 @@ export function PlayerShell({
   const recoveryRef = useRef<PlaybackRecovery | null>(null);
   // 自然播完标记，卸载时不回写进度（避免覆盖「已看完」记录）
   const endedRef = useRef(false);
+  // 片头/片尾：每集各只处理一次，换集时重置（见 loadEpisode）
+  const introHandledRef = useRef(false);
+  const outroHandledRef = useRef(false);
+  // 上一次 timeupdate 的位置：用于区分「连续播放越过片尾」与「拖动进度条」
+  const lastSampleRef = useRef(0);
+  // 跳过按钮提示；用 ref 比较，避免 timeupdate 每 250ms 触发重渲染
+  const [skipPrompt, setSkipPrompt] = useState<'intro' | 'outro' | null>(null);
+  const skipPromptRef = useRef<'intro' | 'outro' | null>(null);
 
   const showHint = (text: string) => {
     setHint(text);
@@ -177,6 +211,44 @@ export function PlayerShell({
         }
       },
     });
+  };
+
+  /** 切换提示状态；相同值直接返回，避免 timeupdate 高频 setState */
+  const updateSkipPrompt = (next: 'intro' | 'outro' | null) => {
+    if (skipPromptRef.current === next) return;
+    skipPromptRef.current = next;
+    setSkipPrompt(next);
+  };
+
+  /** 跳到片头结束并续跑预取；同步 lastSampleRef，避免下一拍被误判为「连续越过片尾」 */
+  const skipTo = (seconds: number) => {
+    const art = artRef.current;
+    if (!art || !Number.isFinite(seconds) || seconds < 0) return;
+    try {
+      art.currentTime = seconds;
+    } catch {
+      /* 媒体尚未就绪时忽略，下一次 timeupdate 会再次判定 */
+    }
+    lastSampleRef.current = seconds;
+    ensurePrefetch(currentMediaUrlRef.current, seconds);
+  };
+
+  /**
+   * 跳过片尾：与自然播完共用 onEnded 链路（清进度 + 依 autoplayNext 连播下一集）。
+   * endedRef 置 true 同时阻止 video:ended 重复回调，也避免卸载时把片尾进度回写。
+   */
+  const finishBySkip = () => {
+    const art = artRef.current;
+    outroHandledRef.current = true;
+    endedRef.current = true;
+    updateSkipPrompt(null);
+    try {
+      art?.pause();
+    } catch {
+      /* 忽略 */
+    }
+    showHint('已跳过片尾');
+    propsRef.current.onEnded?.();
   };
 
   /**
@@ -310,6 +382,12 @@ export function PlayerShell({
     videoErrorRetryUsedRef.current = false;
     restoredRef.current = false;
     lastPrefetchEnsureRef.current = 0;
+    // 片头/片尾按集重置：上一集已处理过不意味新一集也处理过
+    introHandledRef.current = false;
+    outroHandledRef.current = false;
+    lastSampleRef.current = 0;
+    endedRef.current = false;
+    updateSkipPrompt(null);
     recoveryRef.current = new PlaybackRecovery();
     // 换集时清掉上一集的预取窗口，避免带宽被旧集占用
     getVideoPrefetcher().stop();
@@ -337,6 +415,9 @@ export function PlayerShell({
     restoredRef.current = false;
     recoveryRef.current = new PlaybackRecovery();
     endedRef.current = false;
+    introHandledRef.current = false;
+    outroHandledRef.current = false;
+    lastSampleRef.current = 0;
 
     let lastSave = 0;
 
@@ -393,6 +474,18 @@ export function PlayerShell({
       },
     });
     artRef.current = art;
+
+    // 播放页「记录当前」需要精确时间：不能依赖 5s 节流的 onTimeUpdate
+    propsRef.current.onPlayerApi?.({
+      getCurrentTime: () => {
+        const current = artRef.current?.currentTime;
+        return typeof current === 'number' && Number.isFinite(current) ? current : 0;
+      },
+      getDuration: () => {
+        const duration = artRef.current?.duration;
+        return typeof duration === 'number' && Number.isFinite(duration) ? duration : 0;
+      },
+    });
 
     /**
      * 读解码后的真实分辨率。
@@ -451,12 +544,70 @@ export function PlayerShell({
         // loader 读取的 key 不一致，缓存永不命中且直连 fetch 白耗流量
         ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
       }
+
+      // —— 片头 / 片尾跳过 ——
+      const p = propsRef.current;
+      const current = art.currentTime;
+      const duration = art.duration;
+      const previous = lastSampleRef.current;
+      lastSampleRef.current = current;
+      const window = resolveSkipWindow(p.skipMark, duration);
+
+      // 片头：一旦自然越过或已自动跳转，本集不再处理；用户之后拖回片头也不会被反复拉扯。
+      // 必须等进度恢复完成（restoredRef）且已真正开始播放，否则会先跳到片头结束、
+      // 再被 restoreAndStart 拉回断点处。
+      if (window.introEnd !== undefined && !introHandledRef.current) {
+        if (current >= window.introEnd) {
+          introHandledRef.current = true;
+        } else if (
+          p.autoSkipIntro &&
+          restoredRef.current &&
+          playbackStartedRef.current &&
+          isIntroActive(current, window)
+        ) {
+          introHandledRef.current = true;
+          skipTo(window.introEnd);
+          showHint('已跳过片头');
+        }
+      }
+
+      // 片尾：只认连续播放越过边界；拖动进度条、刚写入标记、进度恢复造成的大跳变
+      // 都不自动结束，只显示按钮由用户决定。
+      if (window.outroStart !== undefined && !outroHandledRef.current) {
+        if (current >= duration - 0.5) {
+          outroHandledRef.current = true;
+        } else if (
+          p.autoSkipOutro &&
+          playbackStartedRef.current &&
+          hasCrossedOutro(previous, current, window)
+        ) {
+          finishBySkip();
+          return;
+        }
+      }
+
+      const introActive =
+        window.introEnd !== undefined && !introHandledRef.current && isIntroActive(current, window);
+      const outroActive =
+        window.outroStart !== undefined && !outroHandledRef.current && current >= window.outroStart;
+      updateSkipPrompt(introActive ? 'intro' : outroActive ? 'outro' : null);
     });
     art.on('video:seeked', () => {
       ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
+      // seek 是用户主动行为：拉平采样基准，避免下一拍被误判为「连续越过片尾」。
+      // 暂停中 seek 不会触发 timeupdate，这里也同步刷新按钮的显隐。
+      const current = art.currentTime;
+      lastSampleRef.current = current;
+      const window = resolveSkipWindow(propsRef.current.skipMark, art.duration);
+      const introActive =
+        window.introEnd !== undefined && !introHandledRef.current && isIntroActive(current, window);
+      const outroActive =
+        window.outroStart !== undefined && !outroHandledRef.current && current >= window.outroStart;
+      updateSkipPrompt(introActive ? 'intro' : outroActive ? 'outro' : null);
     });
     art.on('video:pause', () => {
-      propsRef.current.onPause?.(art.currentTime, art.duration);
+      // 跳过片尾会主动 pause：此时已按「看完」处理，不能再把片尾位置写回进度
+      if (!endedRef.current) propsRef.current.onPause?.(art.currentTime, art.duration);
       // 暂停 = 预取黄金窗口：解除限速并无限铺满整集（用户主动行为，带宽占用可接受）
       // waiting 触发的限速在此解除，否则黄金窗口会被 500ms 轮询冻结
       getVideoPrefetcher().setThrottled(false);
@@ -470,7 +621,10 @@ export function PlayerShell({
       getVideoPrefetcher().setThrottled(false);
     });
     art.on('video:ended', () => {
+      // finishBySkip 已经手动走过结束链路：这里不能重复触发 onEnded
+      if (endedRef.current) return;
       endedRef.current = true;
+      updateSkipPrompt(null);
       propsRef.current.onEnded?.();
     });
 
@@ -573,7 +727,7 @@ export function PlayerShell({
 
     // 卸载与页面隐藏时保存进度
     const saveOnHide = () => {
-      if (document.visibilityState === 'hidden') {
+      if (document.visibilityState === 'hidden' && !endedRef.current) {
         propsRef.current.onPause?.(art.currentTime, art.duration);
       }
     };
@@ -606,6 +760,8 @@ export function PlayerShell({
       hlsRef.current = null;
       recoveryRef.current?.dispose();
       getVideoPrefetcher().stop();
+      // 播放页可能仍持有读取接口：销毁前显式置空，避免「记录当前」读到已销毁实例
+      propsRef.current.onPlayerApi?.(null);
       art.destroy();
       artRef.current = null;
     };
@@ -626,6 +782,23 @@ export function PlayerShell({
       style: { opacity: hasNextEpisode ? '1' : '0.4', pointerEvents: hasNextEpisode ? 'auto' : 'none' },
     });
   }, [hasPrevEpisode, hasNextEpisode, url]);
+
+  // —— 标记变化：重置片尾采样基准并立即刷新提示 ——
+  // 刚记录「片尾开始」时当前时间恰好等于新边界，若沿用上一拍采样会被判成
+  // 「连续越过」而当场结束本集；把基准拉平后本集只保留手动按钮，下一集才自动跳。
+  // 顺带覆盖暂停中修改标记的场景（没有 timeupdate 也要让按钮即时出现/消失）。
+  useEffect(() => {
+    const art = artRef.current;
+    if (!art) return;
+    const current = art.currentTime;
+    lastSampleRef.current = Number.isFinite(current) ? current : 0;
+    const window = resolveSkipWindow(skipMark, art.duration);
+    const introActive =
+      window.introEnd !== undefined && !introHandledRef.current && isIntroActive(current, window);
+    const outroActive =
+      window.outroStart !== undefined && !outroHandledRef.current && current >= window.outroStart;
+    updateSkipPrompt(introActive ? 'intro' : outroActive ? 'outro' : null);
+  }, [skipMark]);
 
   // —— 换集：仅切换 HLS 源，不重建播放器（保留网页全屏等状态） ——
   const firstUrlRef = useRef(true);
@@ -660,6 +833,30 @@ export function PlayerShell({
             backgroundRepeat: 'no-repeat',
           }}
         />
+      )}
+      {!error && skipPrompt && (
+        <button
+          type="button"
+          className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 rounded-full bg-black/70 px-4 py-2 text-sm text-white transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          onClick={() => {
+            if (skipPrompt === 'intro') {
+              // 用当前这集的有效窗口取目标位置：持久化标记可能已越界/损坏
+              const window = resolveSkipWindow(propsRef.current.skipMark, artRef.current?.duration ?? 0);
+              if (window.introEnd === undefined) {
+                updateSkipPrompt(null);
+                return;
+              }
+              introHandledRef.current = true;
+              skipTo(window.introEnd);
+              updateSkipPrompt(null);
+              showHint('已跳过片头');
+              return;
+            }
+            finishBySkip();
+          }}
+        >
+          {skipPrompt === 'intro' ? '跳过片头' : '跳过片尾'}
+        </button>
       )}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80">

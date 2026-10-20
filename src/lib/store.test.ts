@@ -25,6 +25,7 @@ beforeEach(() => {
     liveFavorites: [],
     liveRecent: [],
     yellowFilter: false,
+    skipMarks: {},
   });
 });
 
@@ -388,5 +389,50 @@ describe('订阅整体开关', () => {
     expect(isInDisabledSubscription(store(), `${subKeyPrefix(subUrl)}_1`)).toBe(true);
     expect(isInDisabledSubscription(store(), `${subKeyPrefix(otherUrl)}_1`)).toBe(false);
     expect(isInDisabledSubscription(store(), 'manual_0')).toBe(false);
+  });
+});
+
+describe('片头片尾标记', () => {
+  beforeEach(() => {
+    useAppStore.setState({ skipMarks: {} });
+  });
+
+  it('写入、合并字段并刷新 updatedAt', () => {
+    store().setSkipMark('t:abc', { introEnd: 45 });
+    expect(store().skipMarks['t:abc']?.introEnd).toBe(45);
+    const firstUpdatedAt = store().skipMarks['t:abc']?.updatedAt ?? 0;
+    expect(firstUpdatedAt).toBeGreaterThan(0);
+
+    store().setSkipMark('t:abc', { outroStart: 1200 });
+    expect(store().skipMarks['t:abc']).toMatchObject({ introEnd: 45, outroStart: 1200 });
+    expect(store().skipMarks['t:abc']?.updatedAt).toBeGreaterThanOrEqual(firstUpdatedAt);
+  });
+
+  it('字段传 null 只清该字段，两个字段都清后删除整条', () => {
+    store().setSkipMark('t:abc', { introEnd: 45, outroStart: 1200 });
+
+    store().setSkipMark('t:abc', { introEnd: null });
+    expect(store().skipMarks['t:abc']?.introEnd).toBeUndefined();
+    expect(store().skipMarks['t:abc']?.outroStart).toBe(1200);
+
+    store().setSkipMark('t:abc', { outroStart: null });
+    expect(store().skipMarks['t:abc']).toBeUndefined();
+  });
+
+  it('对不存在的键写入空 patch 不会创建空壳条目', () => {
+    store().setSkipMark('t:missing', { introEnd: null });
+    expect(store().skipMarks).toEqual({});
+  });
+
+  it('clearSkipMark 只删指定条目，clearAllSkipMarks 清空全部', () => {
+    store().setSkipMark('t:a', { introEnd: 20 });
+    store().setSkipMark('t:b', { outroStart: 200 });
+
+    store().clearSkipMark('t:a');
+    expect(store().skipMarks).not.toHaveProperty('t:a');
+    expect(store().skipMarks).toHaveProperty('t:b');
+
+    store().clearAllSkipMarks();
+    expect(store().skipMarks).toEqual({});
   });
 });
