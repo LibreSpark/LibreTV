@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { QualityEntry, SourceConfig, LiveSourceConfig, SourceSearchOutcome } from './types';
+import type { SkipMark } from './skip-marks';
 import { isQualityEntryFresh, mergeQualityEntries, qualityKey } from './quality';
 import { clearLiveProbeResultsDb, loadLiveProbeResults, saveLiveProbeResults } from './db';
 import { PERSIST_KEY, createThrottledStorage } from './persist-storage';
@@ -23,6 +24,12 @@ export interface AppSettings {
   /** 用户是否在设置中主动选择过推荐数据源；为 false 时部署者的 DEFAULT_RECOMMEND_SOURCE 默认值可生效 */
   recommendSourceTouched: boolean;
   autoplayNext: boolean;
+  /** 片头/片尾标记：按归一化剧名持久化，详见 lib/skip-marks.ts */
+  skipMarks: Record<string, SkipMark>;
+  /** 命中片头标记时自动跳到片头结束位置 */
+  autoSkipIntro: boolean;
+  /** 到达片尾标记时自动结束本集；是否连播下一集仍由 autoplayNext 决定 */
+  autoSkipOutro: boolean;
   imageProxyMode: 'direct' | 'proxy' | 'custom';
   /** 用户是否在设置中主动选择过封面图加载方式；为 false 时部署者的 DEFAULT_IMAGE_MODE 默认值可生效 */
   imageProxyModeTouched: boolean;
@@ -260,6 +267,12 @@ interface AppState extends AppSettings {
    * 播放时的 videoHeight 才是真实分辨率，实测一旦拿到就覆盖探测结果。
    */
   setQuality: (entries: Record<string, QualityEntry>) => void;
+  /** 写入/更新一部剧的片头片尾标记；字段传 null 表示清除该字段 */
+  setSkipMark: (key: string, patch: { introEnd?: number | null; outroStart?: number | null }) => void;
+  /** 清除单部剧的片头片尾标记 */
+  clearSkipMark: (key: string) => void;
+  /** 清除全部片头片尾标记（设置面板的「清除全部」入口） */
+  clearAllSkipMarks: () => void;
   markEnvSubsSeen: (urls: string[]) => void;
   updateSettings: (patch: Partial<Omit<AppSettings, 'customAPIs' | 'selectedKeys'>>) => void;
 }
@@ -305,6 +318,10 @@ export const useAppStore = create<AppState>()(
       recommendSource: 'hot-list',
       recommendSourceTouched: false,
       autoplayNext: true,
+      skipMarks: {},
+      // 自动跳过默认开启，但只有用户真正标记过片头/片尾才生效
+      autoSkipIntro: true,
+      autoSkipOutro: true,
       // 直连优先：豆瓣封面有公共镜像 + 内置代理两级兜底（见 buildImageCandidates），
       // 默认省服务器流量；老用户保持已持久化的选择不受影响。
       // 部署者可用 DEFAULT_IMAGE_MODE=proxy 下发内置代理优先（最稳定，吃服务器流量）
@@ -723,6 +740,38 @@ export const useAppStore = create<AppState>()(
         set({ qualityMap: mergeQualityEntries(get().qualityMap, entries) });
       },
 
+      setSkipMark: (key, patch) => {
+        const marks = get().skipMarks;
+        const prev = marks[key];
+        const next: SkipMark = { ...prev, updatedAt: Date.now() };
+        if ('introEnd' in patch) {
+          if (patch.introEnd == null) delete next.introEnd;
+          else next.introEnd = patch.introEnd;
+        }
+        if ('outroStart' in patch) {
+          if (patch.outroStart == null) delete next.outroStart;
+          else next.outroStart = patch.outroStart;
+        }
+        // 两个字段都清空后整条删除，持久化快照里不留空壳条目
+        if (next.introEnd === undefined && next.outroStart === undefined) {
+          if (!prev) return;
+          const rest = { ...marks };
+          delete rest[key];
+          set({ skipMarks: rest });
+          return;
+        }
+        set({ skipMarks: { ...marks, [key]: next } });
+      },
+
+      clearSkipMark: (key) => {
+        if (!get().skipMarks[key]) return;
+        const rest = { ...get().skipMarks };
+        delete rest[key];
+        set({ skipMarks: rest });
+      },
+
+      clearAllSkipMarks: () => set({ skipMarks: {} }),
+
       updateSettings: (patch) => {
         // 用户主动修改推荐数据源 / 封面图加载方式时打上「已选择」标记：此后部署者的
         // DEFAULT_RECOMMEND_SOURCE / DEFAULT_IMAGE_MODE 默认值不再覆盖该用户的选择
@@ -756,12 +805,19 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(createThrottledStorage),
       // v1：直播源新增归属字段、最近观看新增 sourceUrl。
       // v2：直播源归属改为多引用（fromSubscription 单值 → fromSubscriptions 数组）。
+      // v3：新增片头片尾标记与自动跳过开关（旧快照缺字段时补默认值）。
       // 此前未声明 version 的存量数据会被视为 v0 并走 migrate 补齐。
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const state = { ...((persisted ?? {}) as Partial<AppState>) };
         if (!Array.isArray(state.liveRecent)) state.liveRecent = [];
         if (!Array.isArray(state.liveSubscriptions)) state.liveSubscriptions = [];
+        // 片头片尾标记必须是非数组对象；损坏的数据不能带进内存，否则读取时会抛错
+        if (!state.skipMarks || typeof state.skipMarks !== 'object' || Array.isArray(state.skipMarks)) {
+          state.skipMarks = {};
+        }
+        if (typeof state.autoSkipIntro !== 'boolean') state.autoSkipIntro = true;
+        if (typeof state.autoSkipOutro !== 'boolean') state.autoSkipOutro = true;
         if (version < 2) {
           state.liveSubscriptions = state.liveSubscriptions.map((s) => {
             const legacy = s as LiveSubscription & { fromSubscription?: unknown };
@@ -803,6 +859,9 @@ export const useAppStore = create<AppState>()(
         recommendSource: s.recommendSource,
         recommendSourceTouched: s.recommendSourceTouched,
         autoplayNext: s.autoplayNext,
+        skipMarks: s.skipMarks,
+        autoSkipIntro: s.autoSkipIntro,
+        autoSkipOutro: s.autoSkipOutro,
         imageProxyMode: s.imageProxyMode,
         imageProxyModeTouched: s.imageProxyModeTouched,
         customImageProxy: s.customImageProxy,
