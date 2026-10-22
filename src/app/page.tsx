@@ -9,6 +9,7 @@ import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import { api } from '@/lib/client-api';
+import { dedupeAndSortResults } from '@/lib/cms-parser';
 import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
 import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
 import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
@@ -141,10 +142,11 @@ function HomeContent() {
   };
 
   const isSearching = Boolean(urlQuery) && searchQuery.isFetching && !searchQuery.data;
-  // 聚合数据未就绪时，用已结算源的结果增量渲染（健康源不再等坏源超时）
+  // 聚合数据未就绪时，用已结算源的结果增量渲染（健康源不再等坏源超时）；
+  // 与服务端同一排序规则，搜索结束换成最终结果时卡片不会整体重排
   const streamedList = useMemo(
-    () => streamedOutcomes.flatMap((o) => o.list),
-    [streamedOutcomes]
+    () => dedupeAndSortResults(streamedOutcomes.flatMap((o) => o.list), urlQuery),
+    [streamedOutcomes, urlQuery]
   );
   const list = useMemo(
     () => searchQuery.data?.list ?? (isSearching ? streamedList : []),

@@ -89,15 +89,18 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
   const range = req.headers.get('range');
   if (range) headers.Range = range;
 
+  // 超时只限制「等响应头」：对整个 body 限时会把慢上游的大分片 / mp4 直链在传输中途切断。
+  // body 不限时，改由客户端断开（切集/关页）经 req.signal 终止上游连接，防止连接泄漏
   let response: Response | undefined;
   let finalUrl = targetUrl;
   let lastError: unknown = null;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const result = await fetchWithSafeRedirects(targetUrl, {
-        headers,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
+      const result = await fetchWithSafeRedirects(
+        targetUrl,
+        { headers, signal: req.signal },
+        { headerTimeoutMs: TIMEOUT_MS }
+      );
       response = result.res;
       finalUrl = result.finalUrl;
       lastError = null;
@@ -138,10 +141,13 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
     if (v) outHeaders.set(name, v);
   }
   // fetch 会自动解压，转发时必须去掉长度相关头避免浏览器二次解压
-  // 图片基本不变：长缓存交给浏览器与边缘 CDN（分片 / key 仍保守 1 小时）
+  // 图片基本不变：长缓存交给浏览器与边缘 CDN（分片 / key 仍保守 1 小时）；
+  // 上游错误（403/404/5xx 多为瞬断或 token 过期）一律不缓存，否则一次失败会被记住 1 小时
   outHeaders.set(
     'Cache-Control',
-    contentType.startsWith('image/') ? 'public, max-age=2592000' : 'public, max-age=3600'
+    !response.ok
+      ? 'no-store'
+      : contentType.startsWith('image/') ? 'public, max-age=2592000' : 'public, max-age=3600'
   );
   outHeaders.set('Access-Control-Allow-Origin', '*');
 
@@ -154,13 +160,11 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
 /**
  * 直播流专用长连接代理（不复用 /api/proxy）：
  *
- * /api/proxy 的 AbortSignal.timeout(TIMEOUT_MS) 作用于整个响应流，
- * 8 秒后即切断长连接——对 HTTP-FLV（单一无限长连接）是致命的。
- * 本路由改为「仅对响应头等待设超时」（fetchWithSafeRedirects 的
+ * 与 /api/proxy 一样「仅对响应头等待设超时」（fetchWithSafeRedirects 的
  * headerTimeoutMs）：fetch 拿到响应头后立即清除计时器，
- * 之后 body 无限时长流式透传，直到客户端断开。
+ * 之后 body 无限时长流式透传，直到客户端断开——HTTP-FLV 是单一无限长连接。
  *
- * - 不重试（重试对直播无意义）；
+ * - 不重试（重试对直播无意义），响应头等待放宽到 HEADER_TIMEOUT_MS；
  * - m3u8 manifest 仍需重写（变体/分片地址改指本路由），FLV 等纯透传；
  * - 每一跳都强制 SSRF 校验（不信任解析阶段的校验结果）；
  * - 部署者可设 LIVE_ALLOW_PRIVATE=1 显式放行内网自建源（默认拒绝）。

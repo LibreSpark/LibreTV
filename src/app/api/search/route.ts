@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
-import { cmsRequestHeaders, filterAdultResults, filterRelevantResults, normalizeTitle, parseSearchList } from '@/lib/cms-parser';
+import { cmsRequestHeaders, dedupeAndSortResults, filterAdultResults, filterRelevantResults, parseSearchList } from '@/lib/cms-parser';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
 import type { SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
@@ -21,6 +21,12 @@ function searchCacheKey(wd: string, sources: SourceConfig[], filterAdult: boolea
   const urls = sources.map((s) => s.url.replace(/\/+$/, '')).sort().join('|');
   return `search:${wd}\n${filterAdult ? 1 : 0}\n${urls}`;
 }
+
+/**
+ * 在途搜索（同缓存键）：短缓存只在搜索完成后写入，并发的相同搜索（刷新、多标签页、
+ * 换源与首页同时搜）会各自把所有源打一遍。后到的请求直接等待先到者的聚合结果。
+ */
+const inflightSearches = new Map<string, Promise<SearchResponse>>();
 
 /**
  * 每个源最多抓取的页数。
@@ -150,30 +156,14 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   }
 }
 
-/** 合并 + 去重 + 过滤 + 排序，stream 与非 stream 两种模式共用 */
+/** 合并 + 过滤 + 去重 + 排序，stream 与非 stream 两种模式共用 */
 function aggregateOutcomes(outcomes: SourceSearchOutcome[], wd: string, filterAdult: boolean): SearchResponse {
-  const seen = new Set<string>();
-  let list = outcomes.flatMap((o) => o.list).filter((item) => {
-    const key = `${item.sourceKey}_${item.vodId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  list = filterAdultResults(list, filterAdult);
+  let list = filterAdultResults(outcomes.flatMap((o) => o.list), filterAdult);
   // 部分源站做分词/OR 模糊搜索（搜「摔跤吧！爸爸」返回一堆「爸爸XXX」），按关键词过滤
   list = filterRelevantResults(list, wd);
-
-  // 精确命中（忽略标点差异）排在最前，其余按名称（与旧版一致），名称相同按源名
-  const exact = normalizeTitle(wd);
-  list.sort((a, b) => {
-    const aExact = normalizeTitle(a.name || '') === exact ? 0 : 1;
-    const bExact = normalizeTitle(b.name || '') === exact ? 0 : 1;
-    if (aExact !== bExact) return aExact - bExact;
-    const nameCompare = (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN');
-    if (nameCompare !== 0) return nameCompare;
-    return (a.sourceName || '').localeCompare(b.sourceName || '', 'zh-Hans-CN');
-  });
+  // 过滤是逐条判定的，先过滤后去重与先去重后过滤结果相同；
+  // 客户端对逐源推送的结果调用同一函数即可还原最终列表（done 事件因此不必重发全量）
+  list = dedupeAndSortResults(list, wd);
 
   const failures = outcomes
     .filter((o) => !o.ok)
@@ -209,25 +199,52 @@ export async function POST(req: Request) {
   const sources = body.sources.slice(0, 50);
   const filterAdult = body.filterAdult !== false;
 
+  const isStream = new URL(req.url).searchParams.get('stream') === '1';
   const cacheKey = searchCacheKey(wd, sources, filterAdult);
-  const cached = getCache<SearchResponse>(cacheKey);
-  if (cached) {
-    // 流式模式下缓存命中也要走 done 事件，客户端解析逻辑保持单一
-    if (new URL(req.url).searchParams.get('stream') === '1') {
-      const event: SearchStreamEvent = { type: 'done', list: cached.list, failures: cached.failures };
+  // 缓存命中或搭上在途搜索：都已拿不到逐源事件，流式模式只推一条带全量 list 的 done，
+  // 客户端解析逻辑保持单一
+  const respondWith = (payload: SearchResponse) => {
+    if (isStream) {
+      const event: SearchStreamEvent = { type: 'done', list: payload.list, failures: payload.failures };
       return new Response(JSON.stringify(event) + '\n', {
         headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' },
       });
     }
-    return NextResponse.json(cached);
-  }
-
-  const isStream = new URL(req.url).searchParams.get('stream') === '1';
-  if (!isStream) {
-    const outcomes = await Promise.all(sources.map((source) => searchSource(source, wd)));
-    const payload = aggregateOutcomes(outcomes, wd, filterAdult);
-    setCache(cacheKey, payload, SEARCH_CACHE_TTL);
     return NextResponse.json(payload);
+  };
+
+  const cached = getCache<SearchResponse>(cacheKey);
+  if (cached) return respondWith(cached);
+  const inflight = inflightSearches.get(cacheKey);
+  if (inflight) return respondWith(await inflight);
+
+  // 登记在途搜索：完成（写入短缓存）后立即注销，后续同键请求改由缓存服务
+  let settle!: (payload: SearchResponse) => void;
+  let fail!: (err: unknown) => void;
+  const pending = new Promise<SearchResponse>((resolve, reject) => { settle = resolve; fail = reject; });
+  pending.catch(() => { /* 没有等待者时避免未处理 rejection；等待者自行接收错误 */ });
+  inflightSearches.set(cacheKey, pending);
+  const complete = (payload: SearchResponse) => {
+    setCache(cacheKey, payload, SEARCH_CACHE_TTL);
+    inflightSearches.delete(cacheKey);
+    settle(payload);
+  };
+  // 意外异常也必须注销，否则同键请求会永远等下去
+  const abandon = (err: unknown) => {
+    inflightSearches.delete(cacheKey);
+    fail(err);
+  };
+
+  if (!isStream) {
+    try {
+      const outcomes = await Promise.all(sources.map((source) => searchSource(source, wd)));
+      const payload = aggregateOutcomes(outcomes, wd, filterAdult);
+      complete(payload);
+      return NextResponse.json(payload);
+    } catch (err) {
+      abandon(err);
+      throw err;
+    }
   }
 
   const encoder = new TextEncoder();
@@ -243,21 +260,26 @@ export async function POST(req: Request) {
         }
       };
 
-      // 逐源结算即推送；outcomes 按下标回填保证聚合顺序稳定
-      const outcomes: SourceSearchOutcome[] = new Array(sources.length);
-      await Promise.all(
-        sources.map(async (source, i) => {
-          const outcome = await searchSource(source, wd);
-          outcomes[i] = outcome;
-          // 中间结果与最终结果共用去重和过滤规则，避免无关/成人条目短暂出现在页面上。
-          const { list } = aggregateOutcomes([outcome], wd, filterAdult);
-          send({ type: 'source', ...outcome, list });
-        })
-      );
+      try {
+        // 逐源结算即推送；outcomes 按下标回填保证聚合顺序稳定
+        const outcomes: SourceSearchOutcome[] = new Array(sources.length);
+        await Promise.all(
+          sources.map(async (source, i) => {
+            const outcome = await searchSource(source, wd);
+            outcomes[i] = outcome;
+            // 中间结果与最终结果共用去重和过滤规则，避免无关/成人条目短暂出现在页面上。
+            const { list } = aggregateOutcomes([outcome], wd, filterAdult);
+            send({ type: 'source', ...outcome, list });
+          })
+        );
 
-      const payload = aggregateOutcomes(outcomes, wd, filterAdult);
-      setCache(cacheKey, payload, SEARCH_CACHE_TTL);
-      send({ type: 'done', list: payload.list, failures: payload.failures });
+        const payload = aggregateOutcomes(outcomes, wd, filterAdult);
+        complete(payload);
+        // 条目已随 source 事件全部推送过，done 只带 failures，不再重发全量 list（传输量减半）
+        send({ type: 'done', failures: payload.failures });
+      } catch (err) {
+        abandon(err);
+      }
       closed = true;
       try {
         controller.close();

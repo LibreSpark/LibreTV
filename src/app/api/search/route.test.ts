@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 import { SESSION_COOKIE, signSession } from '@/lib/auth';
+import { dedupeAndSortResults } from '@/lib/cms-parser';
 import type { SearchResponse, SearchStreamEvent, SourceConfig } from '@/lib/types';
 
 /**
@@ -148,10 +149,12 @@ describe('POST /api/search', () => {
     const failed = events.find((event) => event.type === 'source' && event.sourceKey === 'bad');
     const done = events.find((event) => event.type === 'done');
     const ids = filterAdult ? ['1'] : ['1', '4'];
-    expect(good?.list.map((item) => item.vodId)).toEqual(ids);
+    expect(good?.list?.map((item) => item.vodId)).toEqual(ids);
     expect(good).toMatchObject({ type: 'source', sourceKey: 'good', ok: true, ms: expect.any(Number) });
     expect(failed).toMatchObject({ type: 'source', sourceKey: 'bad', ok: false, list: [], error: 'HTTP 500' });
-    expect(done).toMatchObject({ type: 'done', list: good?.list, failures: [{ sourceKey: 'bad', error: 'HTTP 500' }] });
+    // 条目已随 source 事件推送，done 不再重发 list
+    expect(done).toMatchObject({ type: 'done', failures: [{ sourceKey: 'bad', error: 'HTTP 500' }] });
+    expect(done).not.toHaveProperty('list');
 
     // 同一缓存同时服务 JSON 和流式客户端，不能重新引入原始杂项。
     const calls = fetchSpy.mock.calls.length;
@@ -159,8 +162,11 @@ describe('POST /api/search', () => {
     const cached = await json.json() as SearchResponse;
     expect(cached.list).toEqual(good?.list);
     expect(cached.failures).toEqual(done?.type === 'done' ? done.failures : undefined);
+    // 缓存命中没有 source 事件，done 自带全量 list
     const cachedStream = await POST(makeRequest(body, true));
-    expect((await cachedStream.text()).trim().split('\n').map((line) => JSON.parse(line))).toEqual([done]);
+    expect((await cachedStream.text()).trim().split('\n').map((line) => JSON.parse(line))).toEqual([
+      { ...done, list: good?.list },
+    ]);
     expect(fetchSpy).toHaveBeenCalledTimes(calls);
 
     // 新地址走非缓存 JSON 分支，仍须得到相同的筛选结果。
@@ -182,15 +188,66 @@ describe('POST /api/search', () => {
     const res = await POST(makeRequest(body, true));
     const events = (await res.text()).trim().split('\n').map((line) => JSON.parse(line) as SearchStreamEvent);
     expect(events).toHaveLength(2);
-    for (const event of events) expect(event.list).toEqual([]);
-    expect(events[0]).toMatchObject({ type: 'source', ok: true });
-    expect(events[1]).toMatchObject({ type: 'done', failures: [] });
+    expect(events[0]).toMatchObject({ type: 'source', ok: true, list: [] });
+    expect(events[1]).toEqual({ type: 'done', failures: [] });
     const cached = await POST(makeRequest(body));
     expect(await cached.json()).toEqual({ list: [], failures: [] });
     const cachedStream = await POST(makeRequest(body, true));
     expect(JSON.parse((await cachedStream.text()).trim())).toEqual({ type: 'done', list: [], failures: [] });
     const fresh = await POST(makeRequest({ ...body, sources: [{ ...body.sources[0], url: body.sources[0].url + '/fresh' }] }));
     expect(await fresh.json()).toEqual({ list: [], failures: [] });
+  });
+
+  it('流式逐源条目按 dedupeAndSortResults 还原后与 JSON 最终结果一致（含跨源排序）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const items = url.includes('/order-x')
+        ? [{ vod_id: 1, vod_name: '测试剧之夜' }, { vod_id: 2, vod_name: '测试剧' }]
+        : [{ vod_id: 9, vod_name: '测试剧外传' }, { vod_id: 8, vod_name: '测试剧' }];
+      return new Response(cmsList(items));
+    }));
+    const sources: SourceConfig[] = [
+      { key: 'x', name: '源X', url: 'https://cms.example.com/order-x' },
+      { key: 'y', name: '源Y', url: 'https://cms.example.com/order-y' },
+    ];
+    const stream = await POST(makeRequest({ wd: '测试剧', sources }, true));
+    const events = (await stream.text()).trim().split('\n').map((line) => JSON.parse(line) as SearchStreamEvent);
+    const streamed = events.flatMap((e) => (e.type === 'source' ? e.list : []));
+    const rebuilt = dedupeAndSortResults(streamed, '测试剧');
+
+    const json = (await (await POST(makeRequest({ wd: '测试剧', sources }))).json()) as SearchResponse;
+    expect(rebuilt).toEqual(json.list);
+    // 精确命中跨源置顶，名称相同按源名，其余按拼音（外 wai < 之 zhi）
+    expect(json.list.map((i) => `${i.sourceKey}:${i.name}`)).toEqual([
+      'x:测试剧', 'y:测试剧', 'y:测试剧外传', 'x:测试剧之夜',
+    ]);
+  });
+
+  it('并发的相同搜索共用一次上游请求', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const fetchSpy = vi.fn(async () => {
+      await gate;
+      return new Response(cmsList([{ vod_id: 1, vod_name: '并发剧' }]));
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const body = { wd: '并发剧', sources: [{ key: 'c', name: '源C', url: 'https://cms.example.com/inflight' }] };
+
+    const first = POST(makeRequest(body, true));
+    const second = POST(makeRequest(body));
+    const third = POST(makeRequest(body, true));
+    await new Promise((r) => setTimeout(r, 20));
+    release();
+
+    const firstEvents = (await (await first).text()).trim().split('\n').map((l) => JSON.parse(l) as SearchStreamEvent);
+    const secondData = (await (await second).json()) as SearchResponse;
+    const thirdEvents = (await (await third).text()).trim().split('\n').map((l) => JSON.parse(l) as SearchStreamEvent);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(firstEvents.map((e) => e.type)).toEqual(['source', 'done']);
+    expect(secondData.list.map((i) => i.vodId)).toEqual(['1']);
+    // 搭上在途搜索的流式请求拿不到逐源事件，只收到带全量 list 的 done
+    expect(thirdEvents).toEqual([{ type: 'done', list: secondData.list, failures: [] }]);
   });
 
   it('未登录返回 401，未配置密码返回 503', async () => {

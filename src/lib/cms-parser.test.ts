@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { SearchResultItem } from './types';
 import {
+  dedupeAndSortResults,
   extractEpisodesFromPlayUrl,
   extractM3u8FromText,
   filterAdultResults,
@@ -248,5 +250,44 @@ describe('filterRelevantResults', () => {
     expect(filterRelevantResults([
       { name: '10月17日 足球联赛' }, {}, { name: '' }, relevant,
     ], '赛博朋克：边缘行者 2')).toEqual([relevant]);
+  });
+});
+
+describe('dedupeAndSortResults', () => {
+  const item = (sourceKey: string, vodId: string, name: string, sourceName = sourceKey): SearchResultItem =>
+    ({ sourceKey, sourceName, vodId, name } as SearchResultItem);
+
+  it('按 sourceKey_vodId 去重，保留首次出现的条目', () => {
+    const list = [item('a', '1', '剧'), item('a', '1', '剧（重复）'), item('b', '1', '剧')];
+    expect(dedupeAndSortResults(list, '剧').map((i) => `${i.sourceKey}_${i.vodId}:${i.name}`)).toEqual([
+      'a_1:剧', 'b_1:剧',
+    ]);
+  });
+
+  it('精确命中（忽略标点与大小写）置顶，其余按名称，名称相同按源名', () => {
+    const list = [
+      item('a', '1', '摔跤吧爸爸外传', '乙源'),
+      item('b', '2', '摔跤吧！爸爸', '乙源'),
+      item('c', '3', '摔跤吧!爸爸', '甲源'),
+      item('d', '4', '摔跤吧爸爸 2', '甲源'),
+    ];
+    const sorted = dedupeAndSortResults(list, '摔跤吧！爸爸');
+    // 前两条都是精确命中：比较原始名称，再比较源名
+    expect(sorted.slice(0, 2).map((i) => i.vodId).sort()).toEqual(['2', '3']);
+    expect(sorted.slice(2).map((i) => i.vodId)).toEqual(['4', '1']);
+  });
+
+  it('与 localeCompare(zh-Hans-CN) 排序结果一致', () => {
+    const names = ['长安', '阿凡达', '重庆森林', '白蛇', 'Avatar', '3体', '大话西游', '白夜行'];
+    const list = names.map((n, i) => item('s', String(i), n));
+    const expected = [...names].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+    expect(dedupeAndSortResults(list, '不相关').map((i) => i.name)).toEqual(expected);
+  });
+
+  it('不修改传入数组', () => {
+    const list = [item('a', '2', '乙'), item('a', '1', '甲')];
+    const snapshot = [...list];
+    dedupeAndSortResults(list, 'x');
+    expect(list).toEqual(snapshot);
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload, QualityProbeItem, QualityProbeResult } from './types';
+import { dedupeAndSortResults } from './cms-parser';
 
 /**
  * 客户端 API 封装。401 时触发全局事件打开登录框，
@@ -339,11 +340,14 @@ async function searchStream(
 
     // done 事件缺失（流被截断）时退化为空结果，不让整次搜索报错
     let final: SearchResponse = { list: [], failures: [] };
+    const streamed: SearchResultItem[] = [];
     await consumeNdjson<SearchStreamEvent>(res, (event) => {
       if (event.type === 'source') {
+        streamed.push(...event.list);
         onSource(event);
       } else if (event.type === 'done') {
-        final = { list: event.list, failures: event.failures };
+        // done 不再重发全量 list：用逐源条目按服务端同一规则去重排序还原；缓存命中时才自带 list
+        final = { list: event.list ?? dedupeAndSortResults(streamed, wd), failures: event.failures };
       }
     });
     return final;

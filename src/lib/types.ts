@@ -105,10 +105,14 @@ export interface SearchResponse {
   failures: { sourceKey: string; error: string; timedOut?: boolean }[];
 }
 
-/** /api/search?stream=1 的 NDJSON 事件：逐源推送 + 最终聚合 */
+/**
+ * /api/search?stream=1 的 NDJSON 事件：逐源推送 + 最终聚合。
+ * done 正常只带 failures（条目已随 source 事件推送，客户端用 dedupeAndSortResults 还原最终列表）；
+ * 缓存命中 / 搭上在途搜索时没有 source 事件，done 才携带全量 list。
+ */
 export type SearchStreamEvent =
   | ({ type: 'source' } & SourceSearchOutcome)
-  | { type: 'done'; list: SearchResultItem[]; failures: SearchResponse['failures'] };
+  | { type: 'done'; list?: SearchResultItem[]; failures: SearchResponse['failures'] };
 
 export interface DoubanResponse {
   items: DoubanItem[];

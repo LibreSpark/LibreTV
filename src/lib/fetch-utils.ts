@@ -120,7 +120,12 @@ export async function fetchUpstreamJson<T = unknown>(url: string, options: Fetch
   return data;
 }
 
-/** 内存 TTL 缓存（豆瓣推荐等热点数据） */
+/**
+ * 内存 TTL + LRU 缓存（豆瓣推荐、搜索结果等热点数据）。
+ * Map 保持插入顺序：命中时移到末尾，满额时先清过期条目，仍不够再从头部淘汰最久未用的，
+ * 而不是整表清空（旧做法会让豆瓣 / 榜单等热点缓存随一次搜索高峰全部失效）。
+ */
+export const CACHE_MAX_ENTRIES = 500;
 const cache = new Map<string, { value: unknown; expiresAt: number }>();
 
 export function getCache<T>(key: string): T | undefined {
@@ -130,17 +135,22 @@ export function getCache<T>(key: string): T | undefined {
     cache.delete(key);
     return undefined;
   }
+  cache.delete(key);
+  cache.set(key, entry);
   return entry.value as T;
 }
 
 export function setCache(key: string, value: unknown, ttlMs: number): void {
-  if (cache.size > 500) {
-    // 简单防膨胀：超限时清掉最早过期的条目
+  cache.delete(key);
+  if (cache.size >= CACHE_MAX_ENTRIES) {
     const now = Date.now();
     for (const [k, v] of cache) {
       if (now > v.expiresAt) cache.delete(k);
     }
-    if (cache.size > 500) cache.clear();
+    for (const k of cache.keys()) {
+      if (cache.size < CACHE_MAX_ENTRIES) break;
+      cache.delete(k);
+    }
   }
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
 }

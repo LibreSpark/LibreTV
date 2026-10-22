@@ -52,18 +52,54 @@ export function isValidProxyUrl(urlString: string): boolean {
   }
 }
 
+/**
+ * 主机名 → 是否解析到内网的短缓存。
+ * 一集 HLS 有几百个分片，每个分片代理请求都要校验同一个 CDN 主机（预检 + 逐跳各一次），
+ * 而 dns.lookup 走 libuv 线程池（默认仅 4 线程），大量重复解析会互相排队。
+ * 缓存的是进行中的 Promise，并发的同主机校验也只解析一次；解析失败不缓存。
+ * 不扩大 DNS rebinding 窗口：校验与实际 fetch 本就各自解析，缓存期内命中的仍是同一结论。
+ */
+const DNS_CACHE_TTL_MS = 30_000;
+const DNS_CACHE_MAX = 1000;
+const dnsCache = new Map<string, { blocked: Promise<boolean>; expiresAt: number }>();
+
+/** 测试用：清空 DNS 校验缓存 */
+export function clearDnsCache(): void {
+  dnsCache.clear();
+}
+
+function lookupBlocked(hostname: string): Promise<boolean> {
+  const now = Date.now();
+  const hit = dnsCache.get(hostname);
+  if (hit && hit.expiresAt > now) return hit.blocked;
+
+  const blocked = dns.lookup(hostname, { all: true }).then(
+    (result) => result.some((r) => isPrivateIP(r.address)),
+    () => {
+      dnsCache.delete(hostname);
+      return false; // 解析失败不阻断，交给后续请求处理
+    }
+  );
+  if (dnsCache.size >= DNS_CACHE_MAX) {
+    const oldest = dnsCache.keys().next().value;
+    if (oldest !== undefined) dnsCache.delete(oldest);
+  }
+  dnsCache.set(hostname, { blocked, expiresAt: now + DNS_CACHE_TTL_MS });
+  return blocked;
+}
+
 /** DNS 解析后校验目标主机名是否解析到内网/保留地址 */
 export async function isBlockedByDNS(urlString: string): Promise<boolean> {
+  let hostname: string;
   try {
-    const hostname = stripBrackets(new URL(urlString).hostname);
-    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':')) {
-      return isPrivateIP(hostname);
-    }
-    const result = await dns.lookup(hostname, { all: true });
-    return result.some((r) => isPrivateIP(r.address));
+    hostname = stripBrackets(new URL(urlString).hostname);
   } catch {
-    return false; // 解析失败不阻断，交给后续请求处理
+    return false; // 非法 URL 交给后续请求处理
   }
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':')) {
+    return isPrivateIP(hostname);
+  }
+  return lookupBlocked(hostname.toLowerCase());
 }
 
 export type UpstreamVerdict = { ok: true } | { ok: false; reason: string };

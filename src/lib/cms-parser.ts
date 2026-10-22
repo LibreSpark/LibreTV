@@ -283,3 +283,30 @@ export function filterRelevantResults<T extends { name?: string }>(items: T[], w
   if (!query) return items;
   return items.filter((item) => isRelevantPrepared(item.name || '', query));
 }
+
+/** 复用同一个 Collator：localeCompare 带 locale 参数时每次调用都要重新解析区域设置 */
+const zhCollator = new Intl.Collator('zh-Hans-CN');
+
+/**
+ * 跨源结果去重（sourceKey_vodId）+ 排序：精确命中（忽略标点差异）排在最前，
+ * 其余按名称，名称相同按源名。
+ * 服务端聚合与客户端流式增量渲染共用，保证边搜边显示的顺序与最终结果一致。
+ * 归一化标题先算一遍再排序，避免比较函数里 O(n log n) 次重复归一化。
+ */
+export function dedupeAndSortResults(list: SearchResultItem[], wd: string): SearchResultItem[] {
+  const seen = new Set<string>();
+  const exact = normalizeTitle(wd);
+  const entries: { item: SearchResultItem; rank: number }[] = [];
+  for (const item of list) {
+    const key = `${item.sourceKey}_${item.vodId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push({ item, rank: normalizeTitle(item.name || '') === exact ? 0 : 1 });
+  }
+  entries.sort((a, b) =>
+    a.rank - b.rank ||
+    zhCollator.compare(a.item.name || '', b.item.name || '') ||
+    zhCollator.compare(a.item.sourceName || '', b.item.sourceName || '')
+  );
+  return entries.map((e) => e.item);
+}
