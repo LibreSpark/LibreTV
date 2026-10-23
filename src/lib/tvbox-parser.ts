@@ -211,7 +211,50 @@ export function isTvboxPayload(json: unknown): boolean {
  */
 export function parseSubscriptionPayload(json: unknown): SourceListPayload {
   if (isTvboxPayload(json)) return parseTvboxPayload(json);
+  if (isSourceCatalogPayload(json)) return parseSourceCatalogPayload(json);
   return { ...parseSourceListPayload(json), stats: emptyStats('libretv') };
+}
+
+/** Source catalog JSON: a bare array of { name, baseUrl, enabled } entries. */
+function isSourceCatalogPayload(json: unknown): json is Record<string, unknown>[] {
+  return Array.isArray(json) && json.some((entry) => entry && typeof entry === 'object' && 'baseUrl' in entry);
+}
+
+function parseSourceCatalogPayload(entries: Record<string, unknown>[]): SourceListPayload {
+  const seen = new Set<string>();
+  const sources: SourceListPayload['sources'] = [];
+  let truncated = 0;
+
+  for (const entry of entries) {
+    if (entry.enabled === false) continue;
+    const url = normalizeUrl(entry.baseUrl, true);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    if (sources.length >= MAX_VOD_SOURCES) {
+      truncated += 1;
+      continue;
+    }
+    sources.push({
+      name: optionalString(entry.name) || hostnameOf(url),
+      url,
+    });
+  }
+
+  if (sources.length === 0) {
+    throw new Error('配置中没有可用的接口源');
+  }
+
+  return {
+    name: '影视接口源列表',
+    sources,
+    liveSources: [],
+    stats: {
+      format: 'source-catalog',
+      skipped: 0,
+      skippedByReason: {},
+      truncated,
+    },
+  };
 }
 
 /** 解析 TVBOX 配置：sites / lives → 本站点播源与直播源，附带跳过与截断统计 */

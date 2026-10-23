@@ -206,6 +206,33 @@ describe('parseSubscriptionPayload', () => {
     expect(result.stats?.format).toBe('libretv');
   });
 
+  it('兼容 name/baseUrl 接口源目录，忽略禁用项并去重', () => {
+    const result = parseSubscriptionPayload([
+      { id: 'a', name: '接口A', baseUrl: 'https://a.example.com/api.php/provide/vod', enabled: true },
+      { id: 'off', name: '禁用源', baseUrl: 'https://off.example.com/api.php/provide/vod', enabled: false },
+      { id: 'dup', name: '重复源', baseUrl: 'https://a.example.com/api.php/provide/vod/' },
+    ]);
+
+    expect(result.name).toBe('影视接口源列表');
+    expect(result.sources).toEqual([
+      { name: '接口A', url: 'https://a.example.com/api.php/provide/vod' },
+    ]);
+    expect(result.liveSources).toEqual([]);
+    expect(result.stats?.format).toBe('source-catalog');
+  });
+
+  it('接口源目录遵守点播源上限并统计截断数', () => {
+    const result = parseSubscriptionPayload(
+      Array.from({ length: MAX_VOD_SOURCES + 2 }, (_, i) => ({
+        name: `源${i}`,
+        baseUrl: `https://vod${i}.example.com/api.php/provide/vod`,
+      }))
+    );
+
+    expect(result.sources).toHaveLength(MAX_VOD_SOURCES);
+    expect(result.stats?.truncated).toBe(2);
+  });
+
   it('两种格式都不匹配时抛格式错误', () => {
     expect(() => parseSubscriptionPayload({ name: '空的' })).toThrow(/格式不正确/);
     expect(() => parseSubscriptionPayload(null)).toThrow(/格式不正确/);

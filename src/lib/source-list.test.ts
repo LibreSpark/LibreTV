@@ -105,6 +105,19 @@ describe('parseSourceListPayload', () => {
     expect(result.liveSources).toHaveLength(2);
   });
 
+  it('将无内容的尾随问号/井号规范化，避免重复 API 接口', () => {
+    const result = parseSourceListPayload({
+      sources: [
+        { url: 'https://vod.example.com/api.php/provide/vod?' },
+        { url: 'https://vod.example.com/api.php/provide/vod#' },
+        { url: 'https://vod.example.com/api.php/provide/vod' },
+      ],
+    });
+
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0].url).toBe('https://vod.example.com/api.php/provide/vod');
+  });
+
   it('超出上限时截断', () => {
     const sources = Array.from({ length: MAX_VOD_SOURCES + 10 }, (_, i) => ({
       url: `https://vod${i}.example.com/vod`,

@@ -44,7 +44,8 @@ export function normalizeUrl(raw: unknown, trimTrailingSlash: boolean): string |
   } catch {
     return undefined;
   }
-  return trimTrailingSlash ? trimmed.replace(/\/+$/, '') : trimmed;
+  const withoutEmptyQueryOrHash = trimmed.replace(/[?#]+$/, '');
+  return trimTrailingSlash ? withoutEmptyQueryOrHash.replace(/\/+$/, '') : withoutEmptyQueryOrHash;
 }
 
 export function optionalString(raw: unknown): string | undefined {

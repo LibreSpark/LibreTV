@@ -83,6 +83,8 @@ PASSWORD=your-password npm run build
 PASSWORD=your-password npm start   # 监听 8080
 ```
 
+Windows 用户也可运行 `start-libretv.ps1` 启动开发服务器并打开浏览器；首次运行会自动安装依赖。
+
 ### 环境变量
 
 | 变量 | 必填 | 说明 |
@@ -99,7 +101,7 @@ PASSWORD=your-password npm start   # 监听 8080
 | `COOKIE_SECURE` | 否 | 显式覆盖会话 cookie 的 `Secure` 标记（`true` / `false`）；默认按请求协议自动推导。反向代理未正确传递 `x-forwarded-proto` 导致 HTTPS 下登录失效时，设为 `true` 可解 |
 | `60S_API_BASE` | 否 | 影视榜单推荐源（60s API）实例地址，默认 `https://60s.crystelf.top`；有限流，高频使用可[自部署](https://github.com/vikiboss/60s) |
 | `DEFAULT_LIVE_SOURCES` | 否 | 预置直播源（M3U 订阅），JSON 数组：`[{"name":"源名","url":"https://.../list.m3u","epg":"https://.../epg.xml.gz"}]`，`epg` 为可选的 XMLTV 节目单地址 |
-| `DEFAULT_SUBSCRIPTIONS` | 否 | 预置数据源订阅（LibreTV-SourceList JSON 链接，也接受 TVBOX 配置地址），JSON 数组：`["https://.../sources.json", {"url":"https://.../list.json","name":"名称"}]`。首次访问自动导入点播源与直播源，之后每 24h 静默刷新；用户删除后不再自动加回 |
+| `DEFAULT_SUBSCRIPTIONS` | 否 | 预置数据源订阅（LibreTV-SourceList、TVBOX 配置或接口源列表），JSON 数组：`["https://.../sources.json", {"url":"https://.../list.json","name":"名称","refreshDays":10}]`。首次访问自动导入；启动/登录时检查刷新周期，达到 `refreshDays` 后静默同步（缺省 1 天）；未设置时默认订阅 rapier15sapper/ew 与 [Zoo TvBox 导航](https://zoo.ink/tvbox.html) 中兼容的配置（荐片、金鹰、牛二），重复订阅地址及重复 API 线路会去重，每 10 天刷新；显式设置为 `[]` 可禁用；用户删除后不再自动加回 |
 | `DEFAULT_RECOMMEND_SOURCE` | 否 | 首页推荐数据源的默认值（`douban` / `bangumi` / `hot-list`，出厂默认 `hot-list`）；仅对未在设置中主动选择过的用户生效，用户的选择始终优先 |
 | `LIVE_ALLOW_PRIVATE` | 否 | 设为 `1` 时允许直播流代理访问内网/保留地址（自建 IPTV 场景），默认关闭以维持 SSRF 防护 |
 
@@ -176,7 +178,7 @@ PASSWORD=your-password npm start   # 监听 8080
 
 ### 兼容 TVBOX 配置
 
-订阅地址也可以直接填 **TVBOX 配置**（形如 `{"sites": [...], "lives": [...], "parses": [...]}`）：服务端按内容结构自动识别格式，无需手动选择。
+订阅地址也可以直接填 **TVBOX 配置**（形如 `{"sites": [...], "lives": [...], "parses": [...]}`）或接口目录裸数组（每项含 `name` 与 `baseUrl`）：服务端按内容结构自动识别格式，无需手动选择。接口目录仅导入 `enabled` 不为 `false` 的条目。
 
 - **点播源**：导入 `sites` 中 `type: 1` 的 JSON 接口（即 Apple CMS 采集站）；部分共享配置省略 `type` 或写成 `0`，但地址命中 `api.php/provide/vod` 时同样导入；站点自身标记 `searchable: 0`（不可搜索）时跳过；
 - **直播源**：导入 `lives` 中 `type: 0`（或省略）的 M3U 播放列表，`epg` 字段一并带上；txt 频道列表与单仓 JSON 不支持；

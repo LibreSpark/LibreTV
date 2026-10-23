@@ -67,6 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('applyEnvPresets', () => {
@@ -108,6 +109,22 @@ describe('applyEnvPresets', () => {
 
     expect(fetchSourceList).toHaveBeenCalledTimes(1);
     expect(useAppStore.getState().customAPIs).toHaveLength(payload.sources.length);
+  });
+
+  it('按预置的 refreshDays 周期重同步', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    fetchSourceList.mockResolvedValue(payload);
+
+    const subscription = { url: SUB_URL, refreshDays: 10 };
+    await applyEnvPresets(status({ defaultSubscriptions: [subscription] }));
+    vi.setSystemTime(new Date('2026-01-10T00:00:00Z'));
+    await applyEnvPresets(status({ defaultSubscriptions: [subscription] }));
+    expect(fetchSourceList).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-01-11T00:00:00Z'));
+    await applyEnvPresets(status({ defaultSubscriptions: [subscription] }));
+    expect(fetchSourceList).toHaveBeenCalledTimes(2);
   });
 
   it('登录前那次失败的典型形态（401）不会抛出，也不会留下半截数据', async () => {

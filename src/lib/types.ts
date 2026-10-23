@@ -135,7 +135,7 @@ export interface AuthStatusResponse {
   /** 部署者通过 DEFAULT_LIVE_SOURCES 环境变量预置的直播源（未配置时为空数组） */
   defaultLiveSources: LiveSourceConfig[];
   /** 部署者通过 DEFAULT_SUBSCRIPTIONS 环境变量预置的 SourceList 订阅链接（未配置时为空数组） */
-  defaultSubscriptions: { url: string; name?: string }[];
+  defaultSubscriptions: { url: string; name?: string; refreshDays?: number }[];
   /** 部署者通过 DEFAULT_RECOMMEND_SOURCE 环境变量指定的首页推荐数据源默认值（未配置时为 null） */
   defaultRecommendSource: 'douban' | 'bangumi' | 'hot-list' | null;
   /** 部署者通过 DEFAULT_IMAGE_MODE 环境变量指定的封面图加载方式默认值（未配置时为 null） */
@@ -210,7 +210,7 @@ export type SubscriptionSkipReason =
 /** 订阅解析统计：说明跳过与截断情况，用于导入结果提示 */
 export interface SubscriptionParseStats {
   /** 识别出的订阅格式 */
-  format: 'libretv' | 'tvbox';
+  format: 'libretv' | 'tvbox' | 'source-catalog';
   /** 被跳过的条目总数 */
   skipped: number;
   /** 跳过原因分类计数 */
