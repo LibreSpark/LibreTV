@@ -1,6 +1,6 @@
-/* 主页特定样式 */
+/* 主頁特定樣式 */
 
-/* 历史记录和设置按钮定位样式 */
+/* 歷史記錄和設定按鈕定位樣式 */
 .top-corner-button {
     position: fixed;
     z-index: 10;
@@ -16,7 +16,7 @@
     border-color: white;
 }
 
-/* 搜索区域样式 */
+/* 搜尋區域樣式 */
 .search-box {
     height: 3.5rem;
     box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
@@ -57,7 +57,7 @@
     background: #191919;
 }
 
-/* 最近搜索记录样式 */
+/* 最近搜尋記錄樣式 */
 .recent-search-tag {
     display: inline-block;
     padding: 0.25rem 0.75rem;
@@ -75,7 +75,7 @@
     border-color: rgba(59, 130, 246, 0.4);
 }
 
-/* 豆瓣区域样式 */
+/* 豆瓣區域樣式 */
 .douban-container {
     margin: 2rem auto;
     max-width: 1280px;
@@ -163,7 +163,7 @@
     color: white;
 }
 
-/* 搜索结果样式 */
+/* 搜尋結果樣式 */
 .search-results-container {
     width: 100%;
     max-width: 1280px;
@@ -178,7 +178,7 @@
     margin-bottom: 1rem;
 }
 
-/* 响应式网格布局 */
+/* 響應式網格佈局 */
 .search-results-grid {
     display: grid;
     gap: 1rem;

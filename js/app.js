@@ -656,14 +656,21 @@ async function search() {
             }
         });
 
-        // 對搜尋結果進行排序：按名稱優先，名稱相同時按介面來源排序
+        // 對搜尋結果進行排序：片名與搜尋內容越接近越前面（完全相同 > 開頭相同 > 包含），
+        // 相關度相同時按名稱排序，名稱相同時按介面來源排序。
+        // 輸入英文或台灣譯名時，會用對照到的大陸譯名一起判斷相關度。
+        const searchTerms = await getSearchTerms(query);
+        const relevance = new Map(allResults.map(item => [item, scoreSearchResult(item, searchTerms)]));
         allResults.sort((a, b) => {
+            const scoreDiff = relevance.get(b) - relevance.get(a);
+            if (scoreDiff !== 0) return scoreDiff;
+
             // 首先按照影片名稱排序
-            const nameCompare = (a.vod_name || '').localeCompare(b.vod_name || '');
+            const nameCompare = (a.vod_name || '').localeCompare(b.vod_name || '', 'zh-Hant-TW');
             if (nameCompare !== 0) return nameCompare;
-            
+
             // 如果名稱相同，則按照來源排序
-            return (a.source_name || '').localeCompare(b.source_name || '');
+            return (a.source_name || '').localeCompare(b.source_name || '', 'zh-Hant-TW');
         });
 
         // 更新搜尋結果計數
@@ -722,9 +729,13 @@ async function search() {
         const yellowFilterEnabled = localStorage.getItem('yellowFilterEnabled') === 'true';
         if (yellowFilterEnabled) {
             const banned = ['倫理片', '福利', '里番動漫', '門事件', '蘿莉少女', '制服誘惑', '國產傳媒', 'cosplay', '黑絲誘惑', '無碼', '日本無碼', '有碼', '日本有碼', 'SWAG', '網紅主播', '色情片', '同性片', '福利影片', '福利片'];
+            // 來源回傳的分類名稱是簡體（搜尋結果顯示時才轉成繁體），
+            // 兩邊都先轉成簡體再比對，這樣不管資料是簡體或繁體都能正確過濾
+            const toCN = (s) => (window.ZH ? ZH.toCN(s) : s);
+            const bannedCN = banned.map(toCN);
             allResults = allResults.filter(item => {
-                const typeName = item.type_name || '';
-                return !banned.some(keyword => typeName.includes(keyword));
+                const typeName = toCN(item.type_name || '');
+                return !bannedCN.some(keyword => typeName.includes(keyword));
             });
         }
 

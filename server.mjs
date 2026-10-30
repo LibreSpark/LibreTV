@@ -78,8 +78,8 @@ app.get(['/', '/index.html', '/player.html'], async (req, res) => {
     const content = await renderPage(filePath, config.password);
     res.send(content);
   } catch (error) {
-    console.error('页面渲染错误:', error);
-    res.status(500).send('读取静态页面失败');
+    console.error('頁面渲染錯誤:', error);
+    res.status(500).send('讀取靜態頁面失敗');
   }
 });
 
@@ -89,8 +89,8 @@ app.get('/s=:keyword', async (req, res) => {
     const content = await renderPage(filePath, config.password);
     res.send(content);
   } catch (error) {
-    console.error('搜索页面渲染错误:', error);
-    res.status(500).send('读取静态页面失败');
+    console.error('搜尋頁面渲染錯誤:', error);
+    res.status(500).send('讀取靜態頁面失敗');
   }
 });
 
@@ -99,10 +99,10 @@ function isValidUrl(urlString) {
     const parsed = new URL(urlString);
     const allowedProtocols = ['http:', 'https:'];
     
-    // 从环境变量获取阻止的主机名列表
+    // 從環境變數獲取阻止的主機名列表
     const blockedHostnames = (process.env.BLOCKED_HOSTS || 'localhost,127.0.0.1,0.0.0.0,::1').split(',');
     
-    // 从环境变量获取阻止的 IP 前缀
+    // 從環境變數獲取阻止的 IP 前綴
     const blockedPrefixes = (process.env.BLOCKED_IP_PREFIXES || '192.168.,10.,172.').split(',');
     
     if (!allowedProtocols.includes(parsed.protocol)) return false;
@@ -118,33 +118,33 @@ function isValidUrl(urlString) {
   }
 }
 
-// 验证代理请求的鉴权
+// 驗證代理請求的鑑權
 function validateProxyAuth(req) {
   const authHash = req.query.auth;
   const timestamp = req.query.t;
   
-  // 获取服务器端密码哈希
+  // 獲取伺服器端密碼雜湊
   const serverPassword = config.password;
   if (!serverPassword) {
-    console.error('服务器未设置 PASSWORD 环境变量，代理访问被拒绝');
+    console.error('伺服器未設定 PASSWORD 環境變數，代理訪問被拒絕');
     return false;
   }
   
-  // 使用 crypto 模块计算 SHA-256 哈希
+  // 使用 crypto 模組計算 SHA-256 雜湊
   const serverPasswordHash = crypto.createHash('sha256').update(serverPassword).digest('hex');
   
   if (!authHash || authHash !== serverPasswordHash) {
-    console.warn('代理请求鉴权失败：密码哈希不匹配');
+    console.warn('代理請求鑑權失敗：密碼雜湊不匹配');
     console.warn(`期望: ${serverPasswordHash}, 收到: ${authHash}`);
     return false;
   }
   
-  // 验证时间戳（10分钟有效期）
+  // 驗證時間戳（10分鐘有效期）
   if (timestamp) {
     const now = Date.now();
-    const maxAge = 10 * 60 * 1000; // 10分钟
+    const maxAge = 10 * 60 * 1000; // 10分鐘
     if (now - parseInt(timestamp) > maxAge) {
-      console.warn('代理请求鉴权失败：时间戳过期');
+      console.warn('代理請求鑑權失敗：時間戳過期');
       return false;
     }
   }
@@ -154,25 +154,25 @@ function validateProxyAuth(req) {
 
 app.get('/proxy/:encodedUrl', async (req, res) => {
   try {
-    // 验证鉴权
+    // 驗證鑑權
     if (!validateProxyAuth(req)) {
       return res.status(401).json({
         success: false,
-        error: '代理访问未授权：请检查密码配置或鉴权参数'
+        error: '代理訪問未授權：請檢查密碼配置或鑑權參數'
       });
     }
 
     const encodedUrl = req.params.encodedUrl;
     const targetUrl = decodeURIComponent(encodedUrl);
 
-    // 安全验证
+    // 安全驗證
     if (!isValidUrl(targetUrl)) {
-      return res.status(400).send('无效的 URL');
+      return res.status(400).send('無效的 URL');
     }
 
-    log(`代理请求: ${targetUrl}`);
+    log(`代理請求: ${targetUrl}`);
 
-    // 添加请求超时和重试逻辑
+    // 新增請求超時和重試邏輯
     const maxRetries = config.maxRetries;
     let retries = 0;
     
@@ -190,7 +190,7 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
       } catch (error) {
         if (retries < maxRetries) {
           retries++;
-          log(`重试请求 (${retries}/${maxRetries}): ${targetUrl}`);
+          log(`重試請求 (${retries}/${maxRetries}): ${targetUrl}`);
           return makeRequest();
         }
         throw error;
@@ -199,7 +199,7 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
 
     const response = await makeRequest();
 
-    // 转发响应头（过滤敏感头）
+    // 轉發響應頭（過濾敏感頭）
     const headers = { ...response.headers };
     const sensitiveHeaders = (
       process.env.FILTERED_HEADERS || 
@@ -209,15 +209,15 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
     sensitiveHeaders.forEach(header => delete headers[header]);
     res.set(headers);
 
-    // 管道传输响应流
+    // 管道傳輸響應流
     response.data.pipe(res);
   } catch (error) {
-    console.error('代理请求错误:', error.message);
+    console.error('代理請求錯誤:', error.message);
     if (error.response) {
       res.status(error.response.status || 500);
       error.response.data.pipe(res);
     } else {
-      res.status(500).send(`请求失败: ${error.message}`);
+      res.status(500).send(`請求失敗: ${error.message}`);
     }
   }
 });
@@ -227,24 +227,24 @@ app.use(express.static(path.join(__dirname), {
 }));
 
 app.use((err, req, res, next) => {
-  console.error('服务器错误:', err);
-  res.status(500).send('服务器内部错误');
+  console.error('伺服器錯誤:', err);
+  res.status(500).send('伺服器內部錯誤');
 });
 
 app.use((req, res) => {
-  res.status(404).send('页面未找到');
+  res.status(404).send('頁面未找到');
 });
 
-// 启动服务器
+// 啟動伺服器
 app.listen(config.port, () => {
-  console.log(`服务器运行在 http://localhost:${config.port}`);
+  console.log(`伺服器執行在 http://localhost:${config.port}`);
   if (config.password !== '') {
-    console.log('用户登录密码已设置');
+    console.log('使用者登入密碼已設定');
   } else {
-    console.log('警告: 未设置 PASSWORD 环境变量，用户将被要求设置密码');
+    console.log('警告: 未設定 PASSWORD 環境變數，使用者將被要求設定密碼');
   }
   if (config.debug) {
-    console.log('调试模式已启用');
+    console.log('除錯模式已啟用');
     console.log('配置:', { ...config, password: config.password ? '******' : '' });
   }
 });

@@ -1,4 +1,4 @@
-/* 模态框通用样式 */
+/* 彈出視窗通用樣式 */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -58,7 +58,7 @@
     min-height: 0;
 }
 
-/* 密码验证模态框 */
+/* 密碼驗證彈出視窗 */
 .password-modal {
     z-index: 65;
 }
@@ -101,7 +101,7 @@
     display: none;
 }
 
-/* 声明模态框 */
+/* 聲明彈出視窗 */
 .disclaimer-modal {
     z-index: 60;
 }
@@ -193,7 +193,7 @@
     font-size: 1.125rem;
 }
 
-/* 动画效果 */
+/* 動畫效果 */
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -213,7 +213,7 @@
     animation: fadeOut 0.3s forwards;
 }
 
-/* 资源速率测试相关样式 */
+/* 資源速率測試相關樣式 */
 .speed-indicator {
     display: inline-flex;
     align-items: center;
@@ -239,7 +239,7 @@
     color: #ef4444;
 }
 
-/* 资源卡片悬停效果增强 */
+/* 資源卡片懸停效果增強 */
 .resource-card {
     transition: all 0.2s ease;
 }
@@ -254,7 +254,7 @@
     box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
 }
 
-/* 速率徽章样式 */
+/* 速率徽章樣式 */
 .speed-badge {
     backdrop-filter: blur(4px);
     font-size: 9px;

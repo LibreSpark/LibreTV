@@ -28,4 +28,4 @@ jobs:
           labels: 'bug,enhancement,question'
           analyze-file-changes: 'true'
           max-analysis-depth: 'normal'
-          blacklist: ${{ secrets.BLACKLIST }} # 可选：黑名单用户列表
+          blacklist: ${{ secrets.BLACKLIST }} # 可選：黑名單使用者列表

@@ -1,29 +1,29 @@
 # netlify.toml
 
 [build]
-  # 如果你的项目不需要构建步骤 (纯静态 + functions)，可以省略 publish
-  # publish = "." # 假设你的 HTML/CSS/JS 文件在根目录
-  functions = "netlify/functions" # 指定 Netlify 函数目录
+  # 如果你的專案不需要構建步驟 (純靜態 + functions)，可以省略 publish
+  # publish = "." # 假設你的 HTML/CSS/JS 檔案在根目錄
+  functions = "netlify/functions" # 指定 Netlify 函式目錄
 
 # 配置 Edge Functions
 [[edge_functions]]
   function = "inject-env"
   path = "/*"
 
-# 配置重写规则，将 /proxy/* 的请求路由到 proxy 函数
-# 这样前端的 PROXY_URL 仍然可以是 '/proxy/'
+# 配置重寫規則，將 /proxy/* 的請求路由到 proxy 函式
+# 這樣前端的 PROXY_URL 仍然可以是 '/proxy/'
 [[redirects]]
   from = "/proxy/*"
-  to = "/.netlify/functions/proxy/:splat" # 将路径参数传递给函数
-  status = 200 # 重要：这是代理，不是重定向
+  to = "/.netlify/functions/proxy/:splat" # 將路徑參數傳遞給函式
+  status = 200 # 重要：這是代理，不是重定向
 
-# 处理搜索路径格式 /s=*
+# 處理搜尋路徑格式 /s=*
 [[redirects]]
   from = "/s=*"
   to = "/index.html"
   status = 200
 
-# （可选）为其他静态文件设置缓存头等
+# （可選）為其他靜態檔案設定快取頭等
 # [[headers]]
 #   for = "/*"
 #   [headers.values]

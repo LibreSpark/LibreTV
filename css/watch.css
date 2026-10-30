@@ -1,4 +1,4 @@
-/* 添加重定向页面的基本样式 */
+/* 新增重定向頁面的基本樣式 */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: #0f1622;
@@ -96,7 +96,7 @@ body {
     text-decoration: underline;
 }
 
-/* 移动端优化 */
+/* 移動端最佳化 */
 @media (max-width: 480px) {
     .redirect-container {
         padding: 1.5rem;

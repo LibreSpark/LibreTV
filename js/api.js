@@ -1,3 +1,14 @@
+// 詳情資料中要轉成繁體顯示的欄位（來源回傳的是簡體）
+const VIDEO_INFO_TEXT_FIELDS = ['title', 'type', 'area', 'director', 'actor', 'remarks'];
+
+function localizeVideoInfo(info) {
+    if (!window.ZH || !info) return info;
+    const out = ZH.localizeFields(info, VIDEO_INFO_TEXT_FIELDS);
+    // 劇情簡介是一般文字，連同台灣慣用詞彙一起轉換
+    if (typeof out.desc === 'string') out.desc = ZH.toTWP(out.desc);
+    return out;
+}
+
 // 改善的 API 請求處理函式
 async function handleApiRequest(url) {
     const customApi = url.searchParams.get('customApi') || '';
@@ -176,7 +187,7 @@ async function handleApiRequest(url) {
                     code: 200,
                     episodes: episodes,
                     detailUrl: detailUrl,
-                    videoInfo: {
+                    videoInfo: localizeVideoInfo({
                         title: videoDetail.vod_name,
                         cover: videoDetail.vod_pic,
                         desc: videoDetail.vod_content,
@@ -189,7 +200,7 @@ async function handleApiRequest(url) {
                         // 新增來源資訊
                         source_name: sourceCode === 'custom' ? '自訂來源' : API_SITES[sourceCode].name,
                         source_code: sourceCode
-                    }
+                    })
                 });
             } catch (fetchError) {
                 clearTimeout(timeoutId);
@@ -263,12 +274,12 @@ async function handleCustomApiSpecialDetail(id, customApi) {
             code: 200,
             episodes: matches,
             detailUrl: detailUrl,
-            videoInfo: {
+            videoInfo: localizeVideoInfo({
                 title: titleText,
                 desc: descText,
                 source_name: '自訂來源',
                 source_code: 'custom'
-            }
+            })
         });
     } catch (error) {
         console.error(`自訂 API 詳情取得失敗:`, error);
@@ -342,12 +353,12 @@ async function handleSpecialSourceDetail(id, sourceCode) {
             code: 200,
             episodes: matches,
             detailUrl: detailUrl,
-            videoInfo: {
+            videoInfo: localizeVideoInfo({
                 title: titleText,
                 desc: descText,
                 source_name: API_SITES[sourceCode].name,
                 source_code: sourceCode
-            }
+            })
         });
     } catch (error) {
         console.error(`${API_SITES[sourceCode].name}詳情取得失敗:`, error);

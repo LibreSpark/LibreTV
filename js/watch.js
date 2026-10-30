@@ -1,22 +1,22 @@
-// 获取当前URL的参数，并将它们传递给player.html
+// 獲取當前URL的參數，並將它們傳遞給player.html
 window.onload = function() {
-    // 获取当前URL的查询参数
+    // 獲取當前URL的查詢參數
     const currentParams = new URLSearchParams(window.location.search);
     
-    // 创建player.html的URL对象
+    // 建立player.html的URL物件
     const playerUrlObj = new URL("player.html", window.location.origin);
     
-    // 更新状态文本
+    // 更新狀態文字
     const statusElement = document.getElementById('redirect-status');
     const manualRedirect = document.getElementById('manual-redirect');
     let statusMessages = [
-        "准备视频数据中...",
-        "正在加载视频信息...",
-        "即将开始播放...",
+        "準備影片資料中...",
+        "正在載入影片資訊...",
+        "即將開始播放...",
     ];
     let currentStatus = 0;
     
-    // 状态文本动画
+    // 狀態文字動畫
     let statusInterval = setInterval(() => {
         if (currentStatus >= statusMessages.length) {
             currentStatus = 0;
@@ -31,64 +31,64 @@ window.onload = function() {
         currentStatus++;
     }, 1000);
     
-    // 确保保留所有原始参数
+    // 確保保留所有原始參數
     currentParams.forEach((value, key) => {
         playerUrlObj.searchParams.set(key, value);
     });
     
-    // 获取来源URL (如果存在)
+    // 獲取來源URL (如果存在)
     const referrer = document.referrer;
     
-    // 获取当前URL中的返回URL参数（如果有）
+    // 獲取當前URL中的返回URL參數（如果有）
     const backUrl = currentParams.get('back');
     
-    // 确定返回URL的优先级：1. 指定的back参数 2. referrer 3. 搜索页面
+    // 確定返回URL的優先順序：1. 指定的back參數 2. referrer 3. 搜尋頁面
     let returnUrl = '';
     if (backUrl) {
-        // 有显式指定的返回URL
+        // 有顯式指定的返回URL
         returnUrl = decodeURIComponent(backUrl);
     } else if (referrer && (referrer.includes('/s=') || referrer.includes('?s='))) {
-        // 来源是搜索页面
+        // 來源是搜尋頁面
         returnUrl = referrer;
     } else if (referrer && referrer.trim() !== '') {
-        // 如果有referrer但不是搜索页，也使用它
+        // 如果有referrer但不是搜尋頁，也使用它
         returnUrl = referrer;
     } else {
-        // 默认回到首页
+        // 預設回到首頁
         returnUrl = '/';
     }
     
-    // 将返回URL添加到player.html的参数中
+    // 將返回URL新增到player.html的參數中
     if (!playerUrlObj.searchParams.has('returnUrl')) {
         playerUrlObj.searchParams.set('returnUrl', encodeURIComponent(returnUrl));
     }
     
-    // 同时保存在localStorage中，作为备用
+    // 同時儲存在localStorage中，作為備用
     localStorage.setItem('lastPageUrl', returnUrl);
     
-    // 标记来自搜索页面
+    // 標記來自搜尋頁面
     if (returnUrl.includes('/s=') || returnUrl.includes('?s=')) {
         localStorage.setItem('cameFromSearch', 'true');
         localStorage.setItem('searchPageUrl', returnUrl);
     }
     
-    // 获取最终的URL字符串
+    // 獲取最終的URL字串
     const finalPlayerUrl = playerUrlObj.toString();
     
-    // 更新手动重定向链接
+    // 更新手動重定向連結
     if (manualRedirect) {
         manualRedirect.href = finalPlayerUrl;
     }
 
-    // 更新meta refresh标签
+    // 更新meta refresh標籤
     const metaRefresh = document.querySelector('meta[http-equiv="refresh"]');
     if (metaRefresh) {
         metaRefresh.content = `3; url=${finalPlayerUrl}`;
     }
     
-    // 重定向到播放器页面
+    // 重定向到播放器頁面
     setTimeout(() => {
         clearInterval(statusInterval);
         window.location.href = finalPlayerUrl;
-    }, 2800); // 稍微早于meta refresh的时间，确保我们的JS控制重定向
+    }, 2800); // 稍微早於meta refresh的時間，確保我們的JS控制重定向
 };

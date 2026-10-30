@@ -145,7 +145,7 @@ div.player-loading-text {
 
 #player {
     width: 100%;
-    height: 60vh; /* 视频播放器高度 */
+    height: 60vh; /* 影片播放器高度 */
 }
 
 .loading-container {
@@ -211,7 +211,7 @@ div.player-loading-text {
     overflow-y: auto;
 }
 
-/* 恢复播放位置提示样式 */
+/* 恢復播放位置提示樣式 */
 .position-restore-hint {
     position: fixed;
     bottom: 20px;
@@ -281,7 +281,7 @@ input:checked + .slider:before {
     transform: translateX(22px);
 }
 
-/* 添加快捷键提示样式 */
+/* 新增快捷鍵提示樣式 */
 .shortcut-hint {
     position: fixed;
     top: 50%;
@@ -304,7 +304,7 @@ input:checked + .slider:before {
     opacity: 1;
 }
 
-/* 原生全屏时，播放器容器铺满 */
+/* 原生全屏時，播放器容器鋪滿 */
 .player-container:-webkit-full-screen,
 .player-container:fullscreen {
     position: fixed;
@@ -319,7 +319,7 @@ input:checked + .slider:before {
     width: 100%; height: 100%;
 }
 
-/* 资源信息卡片区 */
+/* 資源資訊卡片區 */
 #resourceInfoBarContainer {
     align-items: center;
     border-radius: 0.5rem;
@@ -372,24 +372,24 @@ input:checked + .slider:before {
     transition: transform 0.3s;
 }
 
-/* 新增：移动端响应式样式 */
+/* 新增：移動端響應式樣式 */
 @media (max-width: 640px) {
     .episode-grid {
-        max-height: 40vh; /* 移动端增加集数列表高度 */
+        max-height: 40vh; /* 移動端增加集數列表高度 */
     }
 
-    /* 改进移动端按钮显示 */
+    /* 改進移動端按鈕顯示 */
     button {
         white-space: nowrap;
     }
 
-    /* 控制栏在小屏幕上可能需要换行 */
+    /* 控制欄在小螢幕上可能需要換行 */
     .player-container .flex-wrap {
         margin-bottom: 4px;
     }
 }
 
-/* 隐藏用户名输入框 */
+/* 隱藏使用者名稱輸入框 */
 #username {
     display: none !important;
 }

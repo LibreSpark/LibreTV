@@ -1,27 +1,27 @@
 /**
- * 代理请求鉴权模块
- * 为代理请求添加基于 PASSWORD 的鉴权机制
+ * 代理請求鑑權模組
+ * 為代理請求新增基於 PASSWORD 的鑑權機制
  */
 
-// 从全局配置获取密码哈希（如果存在）
+// 從全域性配置獲取密碼雜湊（如果存在）
 let cachedPasswordHash = null;
 
 /**
- * 获取当前会话的密码哈希
+ * 獲取當前會話的密碼雜湊
  */
 async function getPasswordHash() {
     if (cachedPasswordHash) {
         return cachedPasswordHash;
     }
     
-    // 1. 优先从已存储的代理鉴权哈希获取
+    // 1. 優先從已儲存的代理鑑權雜湊獲取
     const storedHash = localStorage.getItem('proxyAuthHash');
     if (storedHash) {
         cachedPasswordHash = storedHash;
         return storedHash;
     }
     
-    // 2. 尝试从密码验证状态获取（password.js 验证后存储的哈希）
+    // 2. 嘗試從密碼驗證狀態獲取（password.js 驗證後儲存的雜湊）
     const passwordVerified = localStorage.getItem('passwordVerified');
     const storedPasswordHash = localStorage.getItem('passwordHash');
     if (passwordVerified === 'true' && storedPasswordHash) {
@@ -30,22 +30,22 @@ async function getPasswordHash() {
         return storedPasswordHash;
     }
     
-    // 3. 尝试从用户输入的密码生成哈希
+    // 3. 嘗試從使用者輸入的密碼生成雜湊
     const userPassword = localStorage.getItem('userPassword');
     if (userPassword) {
         try {
-            // 动态导入 sha256 函数
+            // 動態匯入 sha256 函式
             const { sha256 } = await import('./sha256.js');
             const hash = await sha256(userPassword);
             localStorage.setItem('proxyAuthHash', hash);
             cachedPasswordHash = hash;
             return hash;
         } catch (error) {
-            console.error('生成密码哈希失败:', error);
+            console.error('生成密碼雜湊失敗:', error);
         }
     }
     
-    // 4. 如果用户没有设置密码，尝试使用环境变量中的密码哈希
+    // 4. 如果使用者沒有設定密碼，嘗試使用環境變數中的密碼雜湊
     if (window.__ENV__ && window.__ENV__.PASSWORD) {
         cachedPasswordHash = window.__ENV__.PASSWORD;
         return window.__ENV__.PASSWORD;
@@ -55,48 +55,48 @@ async function getPasswordHash() {
 }
 
 /**
- * 为代理请求URL添加鉴权参数
+ * 為代理請求URL新增鑑權參數
  */
 async function addAuthToProxyUrl(url) {
     try {
         const hash = await getPasswordHash();
         if (!hash) {
-            console.warn('无法获取密码哈希，代理请求可能失败');
+            console.warn('無法獲取密碼雜湊，代理請求可能失敗');
             return url;
         }
         
-        // 添加时间戳防止重放攻击
+        // 新增時間戳防止重放攻擊
         const timestamp = Date.now();
         
-        // 检查URL是否已包含查询参数
+        // 檢查URL是否已包含查詢參數
         const separator = url.includes('?') ? '&' : '?';
         
         return `${url}${separator}auth=${encodeURIComponent(hash)}&t=${timestamp}`;
     } catch (error) {
-        console.error('添加代理鉴权失败:', error);
+        console.error('新增代理鑑權失敗:', error);
         return url;
     }
 }
 
 /**
- * 验证代理请求的鉴权
+ * 驗證代理請求的鑑權
  */
 function validateProxyAuth(authHash, serverPasswordHash, timestamp) {
     if (!authHash || !serverPasswordHash) {
         return false;
     }
     
-    // 验证哈希是否匹配
+    // 驗證雜湊是否匹配
     if (authHash !== serverPasswordHash) {
         return false;
     }
     
-    // 验证时间戳（10分钟有效期）
+    // 驗證時間戳（10分鐘有效期）
     const now = Date.now();
-    const maxAge = 10 * 60 * 1000; // 10分钟
+    const maxAge = 10 * 60 * 1000; // 10分鐘
     
     if (timestamp && (now - parseInt(timestamp)) > maxAge) {
-        console.warn('代理请求时间戳过期');
+        console.warn('代理請求時間戳過期');
         return false;
     }
     
@@ -104,21 +104,21 @@ function validateProxyAuth(authHash, serverPasswordHash, timestamp) {
 }
 
 /**
- * 清除缓存的鉴权信息
+ * 清除快取的鑑權資訊
  */
 function clearAuthCache() {
     cachedPasswordHash = null;
     localStorage.removeItem('proxyAuthHash');
 }
 
-// 监听密码变化，清除缓存
+// 監聽密碼變化，清除快取
 window.addEventListener('storage', (e) => {
     if (e.key === 'userPassword' || (window.PASSWORD_CONFIG && e.key === window.PASSWORD_CONFIG.localStorageKey)) {
         clearAuthCache();
     }
 });
 
-// 导出函数
+// 匯出函式
 window.ProxyAuth = {
     addAuthToProxyUrl,
     validateProxyAuth,

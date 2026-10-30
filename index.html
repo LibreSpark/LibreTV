@@ -9,7 +9,7 @@
     <meta name="author" content="LibreTV Team">
 
     <!-- Favicon -->
-    <link class="icon" href="image/logo.png">
+    <link rel="icon" href="image/logo.png">
     <link rel="apple-touch-icon" href="image/logo-black.png">
     <link rel="manifest" href="manifest.json">
     
@@ -406,3 +406,46 @@
         }
     }
     </script>
+
+    <!-- 引入純 JS sha256（HTTP 下依然可用） -->
+    <script src="libs/sha256.min.js"></script>
+    <script>
+        // 保存原始 js-sha256 實作，避免被 password.js 覆蓋
+        window._jsSha256 = window.sha256;
+    </script>
+
+    <!-- 簡繁轉換與片名對照：讓繁體、簡體、英文片名都能搜尋到影片 -->
+    <script src="libs/opencc-lite.min.js"></script>
+    <script src="js/zh-convert.js"></script>
+    <script src="js/title-resolver.js"></script>
+
+    <script src="js/config.js"></script>
+    <script src="js/proxy-auth.js"></script>
+    <script src="js/customer_site.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/douban.js"></script>
+    <script src="js/password.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/app.js"></script>
+
+    <!-- PWA 註冊 -->
+    <script src="js/pwa-register.js"></script>
+
+    <!-- 環境變數注入腳本 -->
+    <script>
+        // 建立全域環境變數物件
+        window.__ENV__ = window.__ENV__ || {};
+        
+        // 注入伺服器端環境變數 (將由伺服器端替換)
+        // PASSWORD 變數將在這裡被伺服器端注入
+        window.__ENV__.PASSWORD = "{{PASSWORD}}";
+    </script>
+
+    <!-- 版本檢測腳本 -->
+    <script src="js/version-check.js"></script>
+
+    <!-- 新增彈窗和 URL 搜尋參數處理腳本 -->
+    <script src="js/index-page.js"></script>
+</body>
+</html>

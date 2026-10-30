@@ -1,11 +1,11 @@
-// UI相关函数
+// UI相關函式
 function toggleSettings(e) {
-    // 强化的密码保护校验 - 防止绕过
+    // 強化的密碼保護校驗 - 防止繞過
     try {
         if (window.ensurePasswordProtection) {
             window.ensurePasswordProtection();
         } else {
-            // 兼容性检查
+            // 相容性檢查
             if (window.isPasswordProtected && window.isPasswordVerified) {
                 if (window.isPasswordProtected() && !window.isPasswordVerified()) {
                     showPasswordModal && showPasswordModal();
@@ -17,22 +17,22 @@ function toggleSettings(e) {
         console.warn('Password protection check failed:', error.message);
         return;
     }
-    // 阻止事件冒泡，防止触发document的点击事件
+    // 阻止事件冒泡，防止觸發document的點擊事件
     e && e.stopPropagation();
     const panel = document.getElementById('settingsPanel');
     panel.classList.toggle('show');
 }
 
-// 改进的Toast显示函数 - 支持队列显示多个Toast
+// 改進的Toast顯示函式 - 支援佇列顯示多個Toast
 const toastQueue = [];
 let isShowingToast = false;
 
 function showToast(message, type = 'error') {
-    // 首先确保toast元素存在
+    // 首先確保toast元素存在
     let toast = document.getElementById('toast');
     let toastMessage = document.getElementById('toastMessage');
 
-    // 如果toast元素不存在，创建它
+    // 如果toast元素不存在，建立它
     if (!toast) {
         toast = document.createElement('div');
         toast.id = 'toast';
@@ -45,10 +45,10 @@ function showToast(message, type = 'error') {
         document.body.appendChild(toast);
     }
 
-    // 将新的toast添加到队列
+    // 將新的toast新增到佇列
     toastQueue.push({ message, type });
 
-    // 如果当前没有显示中的toast，则开始显示
+    // 如果當前沒有顯示中的toast，則開始顯示
     if (!isShowingToast) {
         showNextToast();
     }
@@ -77,27 +77,27 @@ function showNextToast() {
     toast.className = `fixed top-4 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 ${bgColor} text-white z-50`;
     toastMessage.textContent = message;
 
-    // 显示提示
+    // 顯示提示
     toast.style.opacity = '1';
     toast.style.transform = 'translateX(-50%) translateY(0)';
 
-    // 3秒后自动隐藏
+    // 3秒後自動隱藏
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(-50%) translateY(-100%)';
 
-        // 等待动画完成后显示下一个toast
+        // 等待動畫完成後顯示下一個toast
         setTimeout(() => {
             showNextToast();
         }, 300);
     }, 3000);
 }
 
-// 添加显示/隐藏 loading 的函数
+// 新增顯示/隱藏 loading 的函式
 let loadingTimeoutId = null;
 
-function showLoading(message = '加载中...') {
-    // 清除任何现有的超时
+function showLoading(message = '載入中...') {
+    // 清除任何現有的超時
     if (loadingTimeoutId) {
         clearTimeout(loadingTimeoutId);
     }
@@ -107,15 +107,15 @@ function showLoading(message = '加载中...') {
     messageEl.textContent = message;
     loading.style.display = 'flex';
 
-    // 设置30秒后自动关闭loading，防止无限loading
+    // 設定30秒後自動關閉loading，防止無限loading
     loadingTimeoutId = setTimeout(() => {
         hideLoading();
-        showToast('操作超时，请稍后重试', 'warning');
+        showToast('操作超時，請稍後重試', 'warning');
     }, 30000);
 }
 
 function hideLoading() {
-    // 清除超时
+    // 清除超時
     if (loadingTimeoutId) {
         clearTimeout(loadingTimeoutId);
         loadingTimeoutId = null;
@@ -136,11 +136,11 @@ function updateSiteStatus(isAvailable) {
 
 function closeModal() {
     document.getElementById('modal').classList.add('hidden');
-    // 清除 iframe 内容
+    // 清除 iframe 內容
     document.getElementById('modalContent').innerHTML = '';
 }
 
-// 获取搜索历史的增强版本 - 支持新旧格式
+// 獲取搜尋歷史的增強版本 - 支援新舊格式
 function getSearchHistory() {
     try {
         const data = localStorage.getItem(SEARCH_HISTORY_KEY);
@@ -148,10 +148,10 @@ function getSearchHistory() {
 
         const parsed = JSON.parse(data);
 
-        // 检查是否是数组
+        // 檢查是否是陣列
         if (!Array.isArray(parsed)) return [];
 
-        // 支持旧格式（字符串数组）和新格式（对象数组）
+        // 支援舊格式（字串陣列）和新格式（物件陣列）
         return parsed.map(item => {
             if (typeof item === 'string') {
                 return { text: item, timestamp: 0 };
@@ -159,40 +159,40 @@ function getSearchHistory() {
             return item;
         }).filter(item => item && item.text);
     } catch (e) {
-        console.error('获取搜索历史出错:', e);
+        console.error('獲取搜尋歷史出錯:', e);
         return [];
     }
 }
 
-// 保存搜索历史的增强版本 - 添加时间戳和最大数量限制，现在缓存2个月
+// 儲存搜尋歷史的增強版本 - 新增時間戳和最大數量限制，現在快取2個月
 function saveSearchHistory(query) {
     if (!query || !query.trim()) return;
 
-    // 清理输入，防止XSS
+    // 清理輸入，防止XSS
     query = query.trim().substring(0, 50).replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     let history = getSearchHistory();
 
-    // 获取当前时间
+    // 獲取當前時間
     const now = Date.now();
 
-    // 过滤掉超过2个月的记录（约60天，60*24*60*60*1000 = 5184000000毫秒）
+    // 過濾掉超過2個月的記錄（約60天，60*24*60*60*1000 = 5184000000毫秒）
     history = history.filter(item =>
         typeof item === 'object' && item.timestamp && (now - item.timestamp < 5184000000)
     );
 
-    // 删除已存在的相同项
+    // 刪除已存在的相同項
     history = history.filter(item =>
         typeof item === 'object' ? item.text !== query : item !== query
     );
 
-    // 新项添加到开头，包含时间戳
+    // 新項新增到開頭，包含時間戳
     history.unshift({
         text: query,
         timestamp: now
     });
 
-    // 限制历史记录数量
+    // 限制歷史記錄數量
     if (history.length > MAX_HISTORY_ITEMS) {
         history = history.slice(0, MAX_HISTORY_ITEMS);
     }
@@ -200,20 +200,20 @@ function saveSearchHistory(query) {
     try {
         localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
     } catch (e) {
-        console.error('保存搜索历史失败:', e);
-        // 如果存储失败（可能是localStorage已满），尝试清理旧数据
+        console.error('儲存搜尋歷史失敗:', e);
+        // 如果儲存失敗（可能是localStorage已滿），嘗試清理舊資料
         try {
             localStorage.removeItem(SEARCH_HISTORY_KEY);
             localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 3)));
         } catch (e2) {
-            console.error('再次保存搜索历史失败:', e2);
+            console.error('再次儲存搜尋歷史失敗:', e2);
         }
     }
 
     renderSearchHistory();
 }
 
-// 渲染最近搜索历史的增强版本
+// 渲染最近搜尋歷史的增強版本
 function renderSearchHistory() {
     const historyContainer = document.getElementById('recentSearches');
     if (!historyContainer) return;
@@ -225,13 +225,13 @@ function renderSearchHistory() {
         return;
     }
 
-    // 创建一个包含标题和清除按钮的行
+    // 建立一個包含標題和清除按鈕的行
     historyContainer.innerHTML = `
         <div class="flex justify-between items-center w-full mb-2">
-            <div class="text-gray-500">最近搜索:</div>
+            <div class="text-gray-500">最近搜尋:</div>
             <button id="clearHistoryBtn" class="text-gray-500 hover:text-white transition-colors"
-                    onclick="clearSearchHistory()" aria-label="清除搜索历史">
-                清除搜索历史
+                    onclick="clearSearchHistory()" aria-label="清除搜尋歷史">
+                清除搜尋歷史
             </button>
         </div>
     `;
@@ -243,24 +243,24 @@ function renderSearchHistory() {
         textSpan.textContent = item.text;
         tag.appendChild(textSpan);
 
-        // 添加删除按钮
+        // 新增刪除按鈕
         const deleteButton = document.createElement('span');
         deleteButton.className = 'pl-1 text-gray-500 hover:text-red-500 transition-colors';
         deleteButton.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
         deleteButton.onclick = function(e) {
-            // 阻止事件冒泡，避免触发搜索
+            // 阻止事件冒泡，避免觸發搜尋
             e.stopPropagation();
-            // 删除对应历史记录
+            // 刪除對應歷史記錄
             deleteSingleSearchHistory(item.text);
-            // 重新渲染搜索历史
+            // 重新渲染搜尋歷史
             renderSearchHistory();
         };
         tag.appendChild(deleteButton);
 
-        // 添加时间提示（如果有时间戳）
+        // 新增時間提示（如果有時間戳）
         if (item.timestamp) {
             const date = new Date(item.timestamp);
-            tag.title = `搜索于: ${date.toLocaleString()}`;
+            tag.title = `搜尋於: ${date.toLocaleString()}`;
         }
 
         tag.onclick = function() {
@@ -271,24 +271,24 @@ function renderSearchHistory() {
     });
 }
 
-// 删除单条搜索历史记录
+// 刪除單條搜尋歷史記錄
 function deleteSingleSearchHistory(query) {
-    // 当url中包含删除的关键词时，页面刷新后会自动加入历史记录，导致误认为删除功能有bug。此问题无需修复，功能无实际影响。
+    // 當url中包含刪除的關鍵詞時，頁面重新整理後會自動加入歷史記錄，導致誤認為刪除功能有bug。此問題無需修復，功能無實際影響。
     try {
         let history = getSearchHistory();
-        // 过滤掉要删除的记录
+        // 過濾掉要刪除的記錄
         history = history.filter(item => item.text !== query);
-        console.log('更新后的搜索历史:', history);
+        console.log('更新後的搜尋歷史:', history);
         localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
     } catch (e) {
-        console.error('删除单条搜索历史失败:', e);
-        showToast('删除单条搜索历史失败', 'error');
+        console.error('刪除單條搜尋歷史失敗:', e);
+        showToast('刪除單條搜尋歷史失敗', 'error');
     }
 }
 
-// 增加清除搜索历史功能
+// 增加清除搜尋歷史功能
 function clearSearchHistory() {
-    // 密码保护校验
+    // 密碼保護校驗
     if (window.isPasswordProtected && window.isPasswordVerified) {
         if (window.isPasswordProtected() && !window.isPasswordVerified()) {
             showPasswordModal && showPasswordModal();
@@ -298,16 +298,16 @@ function clearSearchHistory() {
     try {
         localStorage.removeItem(SEARCH_HISTORY_KEY);
         renderSearchHistory();
-        showToast('搜索历史已清除', 'success');
+        showToast('搜尋歷史已清除', 'success');
     } catch (e) {
-        console.error('清除搜索历史失败:', e);
-        showToast('清除搜索历史失败:', 'error');
+        console.error('清除搜尋歷史失敗:', e);
+        showToast('清除搜尋歷史失敗:', 'error');
     }
 }
 
-// 历史面板相关函数
+// 歷史面板相關函式
 function toggleHistory(e) {
-    // 密码保护校验
+    // 密碼保護校驗
     if (window.isPasswordProtected && window.isPasswordVerified) {
         if (window.isPasswordProtected() && !window.isPasswordVerified()) {
             showPasswordModal && showPasswordModal();
@@ -320,12 +320,12 @@ function toggleHistory(e) {
     if (panel) {
         panel.classList.toggle('show');
 
-        // 如果打开了历史记录面板，则加载历史数据
+        // 如果開啟了歷史記錄面板，則載入歷史資料
         if (panel.classList.contains('show')) {
             loadViewingHistory();
         }
 
-        // 如果设置面板是打开的，则关闭它
+        // 如果設定面板是開啟的，則關閉它
         const settingsPanel = document.getElementById('settingsPanel');
         if (settingsPanel && settingsPanel.classList.contains('show')) {
             settingsPanel.classList.remove('show');
@@ -333,31 +333,31 @@ function toggleHistory(e) {
     }
 }
 
-// 格式化时间戳为友好的日期时间格式
+// 格式化時間戳為友好的日期時間格式
 function formatTimestamp(timestamp) {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
 
-    // 小于1小时，显示"X分钟前"
+    // 小於1小時，顯示"X分鐘前"
     if (diff < 3600000) {
         const minutes = Math.floor(diff / 60000);
-        return minutes <= 0 ? '刚刚' : `${minutes}分钟前`;
+        return minutes <= 0 ? '剛剛' : `${minutes}分鐘前`;
     }
 
-    // 小于24小时，显示"X小时前"
+    // 小於24小時，顯示"X小時前"
     if (diff < 86400000) {
         const hours = Math.floor(diff / 3600000);
-        return `${hours}小时前`;
+        return `${hours}小時前`;
     }
 
-    // 小于7天，显示"X天前"
+    // 小於7天，顯示"X天前"
     if (diff < 604800000) {
         const days = Math.floor(diff / 86400000);
         return `${days}天前`;
     }
 
-    // 其他情况，显示完整日期
+    // 其他情況，顯示完整日期
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
@@ -367,18 +367,18 @@ function formatTimestamp(timestamp) {
     return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
-// 获取观看历史记录
+// 獲取觀看歷史記錄
 function getViewingHistory() {
     try {
         const data = localStorage.getItem('viewingHistory');
         return data ? JSON.parse(data) : [];
     } catch (e) {
-        console.error('获取观看历史失败:', e);
+        console.error('獲取觀看歷史失敗:', e);
         return [];
     }
 }
 
-// 加载观看历史并渲染
+// 載入觀看歷史並渲染
 function loadViewingHistory() {
     const historyList = document.getElementById('historyList');
     if (!historyList) return;
@@ -386,36 +386,40 @@ function loadViewingHistory() {
     const history = getViewingHistory();
 
     if (history.length === 0) {
-        historyList.innerHTML = `<div class="text-center text-gray-500 py-8">暂无观看记录</div>`;
+        historyList.innerHTML = `<div class="text-center text-gray-500 py-8">暫無觀看記錄</div>`;
         return;
     }
 
-    // 渲染历史记录
+    // 渲染歷史記錄
     historyList.innerHTML = history.map(item => {
         // 防止XSS
-        const safeTitle = item.title
+        const escapeHtml = (text) => text
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+        // safeTitle 會傳給 playFromHistory，必須維持歷史紀錄中的原始片名（觀看歷史靠片名判斷是不是同一部）；
+        // 畫面上顯示的 displayTitle 才轉成繁體（舊紀錄的片名可能是簡體）
+        const safeTitle = escapeHtml(item.title);
+        const displayTitle = escapeHtml(window.ZH ? ZH.toTW(item.title) : item.title);
 
         const safeSource = item.sourceName ?
             item.sourceName.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') :
-            '未知来源';
+            '未知來源';
 
         const episodeText = item.episodeIndex !== undefined ?
             `第${item.episodeIndex + 1}集` : '';
 
-        // 格式化剧集信息
+        // 格式化劇集資訊
         let episodeInfoHtml = '';
         if (item.episodes && Array.isArray(item.episodes) && item.episodes.length > 0) {
             const totalEpisodes = item.episodes.length;
             const syncStatus = item.lastSyncTime ?
-                `<span class="text-green-400 text-xs" title="剧集列表已同步">✓</span>` :
-                `<span class="text-yellow-400 text-xs" title="使用缓存数据">⚠</span>`;
+                `<span class="text-green-400 text-xs" title="劇集列表已同步">✓</span>` :
+                `<span class="text-yellow-400 text-xs" title="使用快取資料">⚠</span>`;
             episodeInfoHtml = `<span class="text-xs text-gray-400">共${totalEpisodes}集 ${syncStatus}</span>`;
         }
 
-        // 格式化进度信息
+        // 格式化進度資訊
         let progressHtml = '';
         if (item.playbackPosition && item.duration && item.playbackPosition > 10 && item.playbackPosition < item.duration * 0.95) {
             const percent = Math.round((item.playbackPosition / item.duration) * 100);
@@ -432,21 +436,21 @@ function loadViewingHistory() {
             `;
         }
 
-        // 为防止XSS，使用encodeURIComponent编码URL
+        // 為防止XSS，使用encodeURIComponent編碼URL
         const safeURL = encodeURIComponent(item.url);
 
-        // 构建历史记录项HTML，添加删除按钮，需要放在position:relative的容器中
+        // 構建歷史記錄項HTML，新增刪除按鈕，需要放在position:relative的容器中
         return `
             <div class="history-item cursor-pointer relative group" onclick="playFromHistory('${item.url}', '${safeTitle}', ${item.episodeIndex || 0}, ${item.playbackPosition || 0})">
                 <button onclick="event.stopPropagation(); deleteHistoryItem('${safeURL}')"
                         class="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-gray-400 hover:text-red-400 p-1 rounded-full hover:bg-gray-800 z-10"
-                        title="删除记录">
+                        title="刪除記錄">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
                 </button>
                 <div class="history-info">
-                    <div class="history-title">${safeTitle}</div>
+                    <div class="history-title">${displayTitle}</div>
                     <div class="history-meta">
                         <span class="history-episode">${episodeText}</span>
                         ${episodeText ? '<span class="history-separator mx-1">·</span>' : ''}
@@ -461,13 +465,13 @@ function loadViewingHistory() {
         `;
     }).join('');
 
-    // 检查是否存在较多历史记录，添加底部边距确保底部按钮不会挡住内容
+    // 檢查是否存在較多歷史記錄，新增底部邊距確保底部按鈕不會擋住內容
     if (history.length > 5) {
         historyList.classList.add('pb-4');
     }
 }
 
-// 格式化播放时间为 mm:ss 格式
+// 格式化播放時間為 mm:ss 格式
 function formatPlaybackTime(seconds) {
     if (!seconds || isNaN(seconds)) return '00:00';
 
@@ -477,33 +481,33 @@ function formatPlaybackTime(seconds) {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
-// 删除单个历史记录项
+// 刪除單個歷史記錄項
 function deleteHistoryItem(encodedUrl) {
     try {
-        // 解码URL
+        // 解碼URL
         const url = decodeURIComponent(encodedUrl);
 
-        // 获取当前历史记录
+        // 獲取當前歷史記錄
         const history = getViewingHistory();
 
-        // 过滤掉要删除的项
+        // 過濾掉要刪除的項
         const newHistory = history.filter(item => item.url !== url);
 
-        // 保存回localStorage
+        // 儲存回localStorage
         localStorage.setItem('viewingHistory', JSON.stringify(newHistory));
 
-        // 重新加载历史记录显示
+        // 重新載入歷史記錄顯示
         loadViewingHistory();
 
-        // 显示成功提示
-        showToast('已删除该记录', 'success');
+        // 顯示成功提示
+        showToast('已刪除該記錄', 'success');
     } catch (e) {
-        console.error('删除历史记录项失败:', e);
-        showToast('删除记录失败', 'error');
+        console.error('刪除歷史記錄項失敗:', e);
+        showToast('刪除記錄失敗', 'error');
     }
 }
 
-// 从历史记录播放
+// 從歷史記錄播放
 async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
     // console.log('[playFromHistory in ui.js] Called with:', { url, title, episodeIndex, playbackPosition }); // Log 1
     try {
@@ -511,7 +515,7 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
         let historyItem = null; // To store the full history item
         let syncSuccessful = false;
 
-        // 检查viewingHistory，查找匹配的项
+        // 檢查viewingHistory，查詢匹配的項
         const historyRaw = localStorage.getItem('viewingHistory');
         if (historyRaw) {
             const history = JSON.parse(historyRaw);
@@ -523,14 +527,14 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
 
             if (historyItem && historyItem.episodes && Array.isArray(historyItem.episodes)) {
                 episodesList = historyItem.episodes; // Default to stored episodes
-                // console.log(`从历史记录找到视频 "${title}" 的集数数据 (默认):`, episodesList.length);
+                // console.log(`從歷史記錄找到影片 "${title}" 的集數資料 (預設):`, episodesList.length);
             }
         }
 
         // Always attempt to fetch fresh episode list if we have the necessary info
         if (historyItem && historyItem.vod_id && historyItem.sourceName) {
             // Show loading toast to indicate syncing
-            showToast('正在同步最新剧集列表...', 'info');
+            showToast('正在同步最新劇集列表...', 'info');
 
             // console.log(`[playFromHistory in ui.js] Attempting to fetch details for vod_id: ${historyItem.vod_id}, sourceName: ${historyItem.sourceName}`); // Log 4
             try {
@@ -562,14 +566,14 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
                     // Show success message with episode count info
                     const newEpisodeCount = episodesList.length;
                     if (newEpisodeCount > oldEpisodeCount) {
-                        showToast(`已同步最新剧集列表 (${newEpisodeCount}集，新增${newEpisodeCount - oldEpisodeCount}集)`, 'success');
+                        showToast(`已同步最新劇集列表 (${newEpisodeCount}集，新增${newEpisodeCount - oldEpisodeCount}集)`, 'success');
                     } else if (newEpisodeCount === oldEpisodeCount) {
-                        showToast(`剧集列表已是最新 (${newEpisodeCount}集)`, 'success');
+                        showToast(`劇集列表已是最新 (${newEpisodeCount}集)`, 'success');
                     } else {
-                        showToast(`已同步最新剧集列表 (${newEpisodeCount}集)`, 'success');
+                        showToast(`已同步最新劇集列表 (${newEpisodeCount}集)`, 'success');
                     }
 
-                    // console.log(`成功获取 "${title}" 最新剧集列表:`, episodesList.length, "集");
+                    // console.log(`成功獲取 "${title}" 最新劇集列表:`, episodesList.length, "集");
                     // Update the history item in localStorage with the fresh episodes
                     if (historyItem) {
                         historyItem.episodes = [...episodesList]; // Deep copy
@@ -579,47 +583,47 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
                         if (idx !== -1) {
                             history[idx] = { ...history[idx], ...historyItem }; // Merge, ensuring other properties are kept
                             localStorage.setItem('viewingHistory', JSON.stringify(history));
-                            // console.log("观看历史中的剧集列表已更新。");
+                            // console.log("觀看歷史中的劇集列表已更新。");
                         }
                     }
                 } else {
-                    // console.log(`未能获取 "${title}" 的最新剧集列表，或列表为空。将使用已存储的剧集。`);
-                    showToast('未获取到最新剧集信息，使用缓存数据', 'warning');
+                    // console.log(`未能獲取 "${title}" 的最新劇集列表，或列表為空。將使用已儲存的劇集。`);
+                    showToast('未獲取到最新劇集資訊，使用快取資料', 'warning');
                 }
             } catch (fetchError) {
-                // console.error(`获取 "${title}" 最新剧集列表失败:`, fetchError, "将使用已存储的剧集。");
+                // console.error(`獲取 "${title}" 最新劇集列表失敗:`, fetchError, "將使用已儲存的劇集。");
                 if (fetchError.name === 'AbortError') {
-                    showToast('同步剧集列表超时，使用缓存数据', 'warning');
+                    showToast('同步劇集列表超時，使用快取資料', 'warning');
                 } else {
-                    showToast('同步剧集列表失败，使用缓存数据', 'warning');
+                    showToast('同步劇集列表失敗，使用快取資料', 'warning');
                 }
             }
         } else if (historyItem) {
-            // console.log(`历史记录项 "${title}" 缺少 vod_id 或 sourceName，无法刷新剧集列表。将使用已存储的剧集。`);
-            showToast('无法同步剧集列表，使用缓存数据', 'info');
+            // console.log(`歷史記錄項 "${title}" 缺少 vod_id 或 sourceName，無法重新整理劇集列表。將使用已儲存的劇集。`);
+            showToast('無法同步劇集列表，使用快取資料', 'info');
         }
 
 
-        // 如果在历史记录中没找到，尝试使用上一个会话的集数数据
+        // 如果在歷史記錄中沒找到，嘗試使用上一個會話的集數資料
         if (episodesList.length === 0) {
             try {
                 const storedEpisodes = JSON.parse(localStorage.getItem('currentEpisodes') || '[]');
                 if (storedEpisodes.length > 0) {
                     episodesList = storedEpisodes;
-                    // console.log(`使用localStorage中的集数数据:`, episodesList.length);
+                    // console.log(`使用localStorage中的集數資料:`, episodesList.length);
                 }
             } catch (e) {
-                // console.error('解析currentEpisodes失败:', e);
+                // console.error('解析currentEpisodes失敗:', e);
             }
         }
 
-        // 将剧集列表保存到localStorage，播放器页面会读取它
+        // 將劇集列表儲存到localStorage，播放器頁面會讀取它
         if (episodesList.length > 0) {
             localStorage.setItem('currentEpisodes', JSON.stringify(episodesList));
-            // console.log(`已将剧集列表保存到localStorage，共 ${episodesList.length} 集`);
+            // console.log(`已將劇集列表儲存到localStorage，共 ${episodesList.length} 集`);
         }
 
-        // 保存当前页面URL作为返回地址
+        // 儲存當前頁面URL作為返回地址
         let currentPath;
         if (window.location.pathname.startsWith('/player.html') || window.location.pathname.startsWith('/watch.html')) {
             currentPath = localStorage.getItem('lastPageUrl') || '/';
@@ -628,7 +632,7 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
         }
         localStorage.setItem('lastPageUrl', currentPath);
 
-        // 构造播放器URL
+        // 構造播放器URL
         let playerUrl;
         const sourceNameForUrl = historyItem ? historyItem.sourceName : (new URLSearchParams(new URL(url, window.location.origin).search)).get('source');
         const sourceCodeForUrl = historyItem ? historyItem.sourceCode || historyItem.sourceName : (new URLSearchParams(new URL(url, window.location.origin).search)).get('source_code');
@@ -636,7 +640,7 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
 
 
         if (url.includes('player.html') || url.includes('watch.html')) {
-            // console.log('检测到嵌套播放链接，解析真实URL');
+            // console.log('檢測到巢狀播放連結，解析真實URL');
             try {
                 const nestedUrl = new URL(url, window.location.origin);
                 const nestedParams = nestedUrl.searchParams;
@@ -649,7 +653,7 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
 
 
             } catch (e) {
-                // console.error('解析嵌套URL出错:', e);
+                // console.error('解析巢狀URL出錯:', e);
                 playerUrl = `player.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&index=${episodeIndex}&position=${Math.floor(playbackPosition || 0)}&returnUrl=${encodeURIComponent(currentPath)}`;
                 if (sourceNameForUrl) playerUrl += `&source=${encodeURIComponent(sourceNameForUrl)}`;
                 if (sourceCodeForUrl) playerUrl += `&source_code=${encodeURIComponent(sourceCodeForUrl)}`;
@@ -672,17 +676,17 @@ async function playFromHistory(url, title, episodeIndex, playbackPosition = 0) {
 
         showVideoPlayer(playerUrl);
     } catch (e) {
-        // console.error('从历史记录播放失败:', e);
+        // console.error('從歷史記錄播放失敗:', e);
         const simpleUrl = `player.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&index=${episodeIndex}`;
         showVideoPlayer(simpleUrl);
     }
 }
 
-// 添加观看历史 - 确保每个视频标题只有一条记录
+// 新增觀看歷史 - 確保每個影片標題只有一條記錄
 // IMPORTANT: videoInfo passed to this function should include a 'showIdentifier' property
 // (ideally `${sourceName}_${vod_id}`), 'sourceName', and 'vod_id'.
 function addToViewingHistory(videoInfo) {
-    // 密码保护校验
+    // 密碼保護校驗
     if (window.isPasswordProtected && window.isPasswordVerified) {
         if (window.isPasswordProtected() && !window.isPasswordVerified()) {
             showPasswordModal && showPasswordModal();
@@ -728,13 +732,13 @@ function addToViewingHistory(videoInfo) {
                     existingItem.episodes.length !== videoInfo.episodes.length ||
                     !videoInfo.episodes.every((ep, i) => ep === existingItem.episodes[i])) {
                     existingItem.episodes = [...videoInfo.episodes];
-                    // console.log(`更新 (addToViewingHistory) "${videoInfo.title}" 的剧集数据: ${videoInfo.episodes.length}集`);
+                    // console.log(`更新 (addToViewingHistory) "${videoInfo.title}" 的劇集資料: ${videoInfo.episodes.length}集`);
                 }
             }
 
             history.splice(existingIndex, 1);
             history.unshift(existingItem);
-            // console.log(`更新历史记录 (addToViewingHistory): "${videoInfo.title}", 第 ${videoInfo.episodeIndex !== undefined ? videoInfo.episodeIndex + 1 : 'N/A'} 集`);
+            // console.log(`更新歷史記錄 (addToViewingHistory): "${videoInfo.title}", 第 ${videoInfo.episodeIndex !== undefined ? videoInfo.episodeIndex + 1 : 'N/A'} 集`);
         } else {
             // No exact match: Add as a new entry
             const newItem = {
@@ -749,50 +753,50 @@ function addToViewingHistory(videoInfo) {
             }
 
             history.unshift(newItem);
-            // console.log(`创建新的历史记录 (addToViewingHistory): "${videoInfo.title}", Episode: ${videoInfo.episodeIndex !== undefined ? videoInfo.episodeIndex + 1 : 'N/A'}`);
+            // console.log(`建立新的歷史記錄 (addToViewingHistory): "${videoInfo.title}", Episode: ${videoInfo.episodeIndex !== undefined ? videoInfo.episodeIndex + 1 : 'N/A'}`);
         }
 
-        // 限制历史记录数量为50条
+        // 限制歷史記錄數量為50條
         const maxHistoryItems = 50;
         if (history.length > maxHistoryItems) {
             history.splice(maxHistoryItems);
         }
 
-        // 保存到本地存储
+        // 儲存到本地儲存
         localStorage.setItem('viewingHistory', JSON.stringify(history));
     } catch (e) {
-        // console.error('保存观看历史失败:', e);
+        // console.error('儲存觀看歷史失敗:', e);
     }
 }
 
-// 清空观看历史
+// 清空觀看歷史
 function clearViewingHistory() {
     try {
         localStorage.removeItem('viewingHistory');
-        loadViewingHistory(); // 重新加载空的历史记录
-        showToast('观看历史已清空', 'success');
+        loadViewingHistory(); // 重新載入空的歷史記錄
+        showToast('觀看歷史已清空', 'success');
     } catch (e) {
-        // console.error('清除观看历史失败:', e);
-        showToast('清除观看历史失败', 'error');
+        // console.error('清除觀看歷史失敗:', e);
+        showToast('清除觀看歷史失敗', 'error');
     }
 }
 
-// 更新toggleSettings函数以处理历史面板互动
+// 更新toggleSettings函式以處理歷史面板互動
 const originalToggleSettings = toggleSettings;
 toggleSettings = function(e) {
     if (e) e.stopPropagation();
 
-    // 原始设置面板切换逻辑
+    // 原始設定面板切換邏輯
     originalToggleSettings(e);
 
-    // 如果历史记录面板是打开的，则关闭它
+    // 如果歷史記錄面板是開啟的，則關閉它
     const historyPanel = document.getElementById('historyPanel');
     if (historyPanel && historyPanel.classList.contains('show')) {
         historyPanel.classList.remove('show');
     }
 };
 
-// 点击外部关闭历史面板
+// 點擊外部關閉歷史面板
 document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(e) {
         const historyPanel = document.getElementById('historyPanel');
@@ -807,15 +811,15 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// 清除本地存储缓存并刷新页面
+// 清除本地儲存快取並重新整理頁面
 function clearLocalStorage() {
-    // 确保模态框在页面上只有一个实例
+    // 確保彈出視窗在頁面上只有一個實例
     let modal = document.getElementById('messageBoxModal');
     if (modal) {
         document.body.removeChild(modal);
     }
 
-    // 创建模态框元素
+    // 建立彈出視窗元素
     modal = document.createElement('div');
     modal.id = 'messageBoxModal';
     modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-40';
@@ -827,26 +831,26 @@ function clearLocalStorage() {
             <h3 class="text-xl font-bold text-red-500 mb-4">警告</h3>
 
             <div class="mb-0">
-                <div class="text-sm font-medium text-gray-300">确定要清除页面缓存吗？</div>
-                <div class="text-sm font-medium text-gray-300 mb-4">此功能会删除你的观看记录、自定义 API 接口和 Cookie，<scan class="text-red-500 font-bold">此操作不可恢复！</scan></div>
+                <div class="text-sm font-medium text-gray-300">確定要清除頁面快取嗎？</div>
+                <div class="text-sm font-medium text-gray-300 mb-4">此功能會刪除你的觀看記錄、自定義 API 介面和 Cookie，<scan class="text-red-500 font-bold">此操作不可恢復！</scan></div>
                 <div class="flex justify-end space-x-2">
-                    <button id="confirmBoxModal" class="ml-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-1 rounded">确定</button>
+                    <button id="confirmBoxModal" class="ml-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-1 rounded">確定</button>
                     <button id="cancelBoxModal" class="ml-2 bg-pink-600 hover:bg-pink-700 text-white px-4 py-1 rounded">取消</button>
                 </div>
             </div>
         </div>`;
 
-    // 添加模态框到页面
+    // 新增彈出視窗到頁面
     document.body.appendChild(modal);
 
-    // 添加事件监听器 - 关闭按钮
+    // 新增事件監聽器 - 關閉按鈕
     document.getElementById('closeBoxModal').addEventListener('click', function () {
         document.body.removeChild(modal);
     });
 
-    // 添加事件监听器 - 确定按钮
+    // 新增事件監聽器 - 確定按鈕
     document.getElementById('confirmBoxModal').addEventListener('click', function () {
-        // 清除所有localStorage数据
+        // 清除所有localStorage資料
         localStorage.clear();
 
         // 清除所有cookie
@@ -865,7 +869,7 @@ function clearLocalStorage() {
                 <h3 class="text-xl font-bold text-white mb-4">提示</h3>
 
                 <div class="mb-4">
-                    <div class="text-sm font-medium text-gray-300 mb-4">页面缓存和Cookie已清除，<span id="countdown">3</span> 秒后自动刷新本页面。</div>
+                    <div class="text-sm font-medium text-gray-300 mb-4">頁面快取和Cookie已清除，<span id="countdown">3</span> 秒後自動重新整理本頁面。</div>
                 </div>
             </div>`;
 
@@ -883,12 +887,12 @@ function clearLocalStorage() {
         }, 1000);
     });
 
-    // 添加事件监听器 - 取消按钮
+    // 新增事件監聽器 - 取消按鈕
     document.getElementById('cancelBoxModal').addEventListener('click', function () {
         document.body.removeChild(modal);
     });
 
-    // 添加事件监听器 - 点击模态框外部关闭
+    // 新增事件監聽器 - 點擊彈出視窗外部關閉
     modal.addEventListener('click', function (e) {
         if (e.target === modal) {
             document.body.removeChild(modal);
@@ -896,15 +900,15 @@ function clearLocalStorage() {
     });
 }
 
-// 显示配置文件导入页面
+// 顯示配置檔案匯入頁面
 function showImportBox(fun) {
-    // 确保模态框在页面上只有一个实例
+    // 確保彈出視窗在頁面上只有一個實例
     let modal = document.getElementById('showImportBoxModal');
     if (modal) {
         document.body.removeChild(modal);
     }
 
-    // 创建模态框元素
+    // 建立彈出視窗元素
     modal = document.createElement('div');
     modal.id = 'showImportBoxModal';
     modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-40';
@@ -923,35 +927,35 @@ function showImportBox(fun) {
                         </svg>
                     </div>
                     <div class="grid gap-2">
-                        <h4 class="text-center text-white-900 text-sm font-medium leading-snug">将配置文件拖到此处，或手动选择文件</h4>
+                        <h4 class="text-center text-white-900 text-sm font-medium leading-snug">將配置檔案拖到此處，或手動選擇檔案</h4>
                     <div class="flex items-center justify-center gap-2">
                         <label>
                             <input type="file" id="ChooseFile" hidden />
-                            <div class="flex w-28 h-9 px-2 flex-col bg-pink-600 rounded-full shadow text-white text-xs font-semibold leading-4 items-center justify-center cursor-pointer focus:outline-none">选择文件</div>
+                            <div class="flex w-28 h-9 px-2 flex-col bg-pink-600 rounded-full shadow text-white text-xs font-semibold leading-4 items-center justify-center cursor-pointer focus:outline-none">選擇檔案</div>
                         </label>
-                        <button onclick="importConfigFromUrl()" class="flex w-28 h-9 px-2 flex-col bg-blue-600 rounded-full shadow text-white text-xs font-semibold leading-4 items-center justify-center cursor-pointer focus:outline-none">从URL导入</button>
+                        <button onclick="importConfigFromUrl()" class="flex w-28 h-9 px-2 flex-col bg-blue-600 rounded-full shadow text-white text-xs font-semibold leading-4 items-center justify-center cursor-pointer focus:outline-none">從URL匯入</button>
                     </div>
                     </div>
                 </div>
             </div>
         </div>`;
 
-    // 添加模态框到页面
+    // 新增彈出視窗到頁面
     document.body.appendChild(modal);
 
-    // 添加事件监听器 - 关闭按钮
+    // 新增事件監聽器 - 關閉按鈕
     document.getElementById('closeBoxModal').addEventListener('click', function () {
         document.body.removeChild(modal);
     });
 
-    // 添加事件监听器 - 点击模态框外部关闭
+    // 新增事件監聽器 - 點擊彈出視窗外部關閉
     modal.addEventListener('click', function (e) {
         if (e.target === modal) {
             document.body.removeChild(modal);
         }
     });
 
-    // 添加事件监听器 - 拖拽文件
+    // 新增事件監聽器 - 拖拽檔案
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('ChooseFile');
 

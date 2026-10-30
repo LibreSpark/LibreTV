@@ -3,7 +3,7 @@
   "type": "module",
   "version": "1.1.0",
   "private": true,
-  "description": "免费在线视频搜索与观看平台",
+  "description": "免費線上影片搜尋與觀看平台",
   "author": "bestZwei",
   "license": "Apache-2.0",
   "scripts": {

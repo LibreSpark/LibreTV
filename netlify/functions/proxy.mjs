@@ -2,7 +2,7 @@
 
 import fetch from 'node-fetch';
 import { URL } from 'url'; // Use Node.js built-in URL
-import crypto from 'crypto'; // 导入 crypto 模块用于密码哈希
+import crypto from 'crypto'; // 匯入 crypto 模組用於密碼雜湊
 
 // --- Configuration (Read from Environment Variables) ---
 const DEBUG_ENABLED = process.env.DEBUG === 'true';
@@ -88,34 +88,34 @@ function rewriteUrlToProxy(targetUrl) {
 function getRandomUserAgent() { return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]; }
 
 /**
- * 验证代理请求的鉴权
+ * 驗證代理請求的鑑權
  */
 function validateAuth(event) {
     const params = new URLSearchParams(event.queryStringParameters || {});
     const authHash = params.get('auth');
     const timestamp = params.get('t');
     
-    // 获取服务器端密码哈希
+    // 獲取伺服器端密碼雜湊
     const serverPassword = process.env.PASSWORD;
     if (!serverPassword) {
-        console.error('服务器未设置 PASSWORD 环境变量，代理访问被拒绝');
+        console.error('伺服器未設定 PASSWORD 環境變數，代理訪問被拒絕');
         return false;
     }
     
-    // 使用 crypto 模块计算 SHA-256 哈希
+    // 使用 crypto 模組計算 SHA-256 雜湊
     const serverPasswordHash = crypto.createHash('sha256').update(serverPassword).digest('hex');
     
     if (!authHash || authHash !== serverPasswordHash) {
-        console.warn('代理请求鉴权失败：密码哈希不匹配');
+        console.warn('代理請求鑑權失敗：密碼雜湊不匹配');
         return false;
     }
     
-    // 验证时间戳（10分钟有效期）
+    // 驗證時間戳（10分鐘有效期）
     if (timestamp) {
         const now = Date.now();
-        const maxAge = 10 * 60 * 1000; // 10分钟
+        const maxAge = 10 * 60 * 1000; // 10分鐘
         if (now - parseInt(timestamp) > maxAge) {
-            console.warn('代理请求鉴权失败：时间戳过期');
+            console.warn('代理請求鑑權失敗：時間戳過期');
             return false;
         }
     }
@@ -215,15 +215,15 @@ export const handler = async (event, context) => {
         };
     }
 
-    // --- 验证鉴权 ---
+    // --- 驗證鑑權 ---
     if (!validateAuth(event)) {
-        console.warn('Netlify 代理请求鉴权失败');
+        console.warn('Netlify 代理請求鑑權失敗');
         return {
             statusCode: 401,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 success: false,
-                error: '代理访问未授权：请检查密码配置或鉴权参数'
+                error: '代理訪問未授權：請檢查密碼配置或鑑權參數'
             }),
         };
     }
@@ -260,7 +260,7 @@ export const handler = async (event, context) => {
     logDebug(`Processing proxy request for target: ${targetUrl}`);
 
     try {
-        // 验证鉴权
+        // 驗證鑑權
         const isValidAuth = validateAuth(event);
         if (!isValidAuth) {
             return {

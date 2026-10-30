@@ -1,11 +1,11 @@
 /* 
-LibreTV 全局样式
-包含多个页面共享的基础样式
-对于特定页面的样式，请参考:
-- index.css: 首页特定样式
-- player.css: 播放器页面特定样式
-- watch.css: 重定向页面特定样式
-- modals.css: 模态框和提示框样式
+LibreTV 全域性樣式
+包含多個頁面共享的基礎樣式
+對於特定頁面的樣式，請參考:
+- index.css: 首頁特定樣式
+- player.css: 播放器頁面特定樣式
+- watch.css: 重定向頁面特定樣式
+- modals.css: 彈出視窗和提示框樣式
 */
 
 .close-btn {
@@ -37,26 +37,26 @@ LibreTV 全局样式
 }
 
 :root {
-    /* 赛博影视主题配色方案 - 柔和版 */
-    --primary-color: #00ccff;       /* 霓虹蓝主色调 */
-    --primary-light: #33d6ff;       /* 浅霓虹蓝变体 */
-    --secondary-color: #0f1622;     /* 深蓝黑背景色 */
-    --accent-color: #ff3c78;        /* 霓虹粉强调色 */
-    --text-color: #e6f2ff;          /* 柔和的蓝白色文本 */
-    --text-muted: #8599b2;          /* 淡蓝灰色次级文本 */
+    /* 賽博影視主題配色方案 - 柔和版 */
+    --primary-color: #00ccff;       /* 霓虹藍主色調 */
+    --primary-light: #33d6ff;       /* 淺霓虹藍變體 */
+    --secondary-color: #0f1622;     /* 深藍黑背景色 */
+    --accent-color: #ff3c78;        /* 霓虹粉強調色 */
+    --text-color: #e6f2ff;          /* 柔和的藍白色文字 */
+    --text-muted: #8599b2;          /* 淡藍灰色次級文字 */
     --border-color: rgba(0, 204, 255, 0.15);
-    --page-gradient-start: #0f1622; /* 深蓝黑起始色 */
-    --page-gradient-end: #192231;   /* 深靛蓝结束色 */
+    --page-gradient-start: #0f1622; /* 深藍黑起始色 */
+    --page-gradient-end: #192231;   /* 深靛藍結束色 */
     --card-gradient-start: #121b29; /* 卡片起始色 */
-    --card-gradient-end: #1c2939;   /* 卡片结束色 */
-    --card-accent: rgba(0, 204, 255, 0.12); /* 霓虹蓝卡片强调色 */
-    --card-hover-border: rgba(0, 204, 255, 0.5); /* 悬停边框颜色 */
+    --card-gradient-end: #1c2939;   /* 卡片結束色 */
+    --card-accent: rgba(0, 204, 255, 0.12); /* 霓虹藍卡片強調色 */
+    --card-hover-border: rgba(0, 204, 255, 0.5); /* 懸停邊框顏色 */
 }
 
 .page-bg {
     background: linear-gradient(180deg, var(--page-gradient-start), var(--page-gradient-end));
     min-height: 100vh;
-    /* 柔和赛博点状背景 */
+    /* 柔和賽博點狀背景 */
     background-image: 
         linear-gradient(180deg, var(--page-gradient-start), var(--page-gradient-end)),
         radial-gradient(circle at 25px 25px, rgba(0, 204, 255, 0.04) 2px, transparent 3px),
@@ -70,7 +70,7 @@ button, .card-hover {
     transition: all 0.3s ease;
 }
 
-/* 改进卡片适应不同内容长度 */
+/* 改進卡片適應不同內容長度 */
 .card-hover {
     border: 1px solid var(--border-color);
     background: linear-gradient(135deg, var(--card-gradient-start), var(--card-gradient-end));
@@ -83,14 +83,14 @@ button, .card-hover {
     height: 100%;
 }
 
-/* 确保卡片内容区域高度一致性 */
+/* 確保卡片內容區域高度一致性 */
 .card-hover .flex-grow {
-    min-height: unset; /* 移除最小高度限制，让内容自然流动 */
+    min-height: unset; /* 移除最小高度限制，讓內容自然流動 */
     display: flex;
     flex-direction: column;
 }
 
-/* 针对不同长度的标题优化显示 */
+/* 針對不同長度的標題最佳化顯示 */
 .card-hover h3 {
     min-height: unset;
     max-height: unset;
@@ -100,8 +100,8 @@ button, .card-hover {
     text-overflow: ellipsis;
     -webkit-line-clamp: 2;
     line-height: 1.2rem;
-    word-break: break-word; /* 允许在任何字符间断行 */
-    hyphens: auto; /* 允许断词 */
+    word-break: break-word; /* 允許在任何字元間斷行 */
+    hyphens: auto; /* 允許斷詞 */
 }
 
 .card-hover::before {
@@ -131,7 +131,7 @@ button, .card-hover {
     -webkit-text-fill-color: transparent;
 }
 
-/* 改进设置面板样式 */
+/* 改進設定面板樣式 */
 .settings-panel {
     scrollbar-width: thin;
     scrollbar-color: #444 #222;
@@ -251,7 +251,7 @@ body {
     }
 }
 
-/* 移动端布局优化 */
+/* 移動端佈局最佳化 */
 @media screen and (max-width: 768px) {
     .card-hover h3 {
         min-height: 2.5rem;
@@ -312,7 +312,7 @@ body {
     box-shadow: 0 0 0 2px rgba(0, 204, 255, 0.3);
 }
 
-/* 添加广告过滤开关的CSS */
+/* 新增廣告過濾開關的CSS */
 #adFilterToggle:checked + .toggle-bg {
     background-color: var(--primary-color);
 }
@@ -343,7 +343,7 @@ body {
     box-shadow: 0 2px 4px rgba(0, 204, 255, 0.3);
 }
 
-/* 添加API复选框样式 */
+/* 新增API核取方塊樣式 */
 .form-checkbox {
     appearance: none;
     -webkit-appearance: none;
@@ -375,7 +375,7 @@ body {
     transform: rotate(45deg);
 }
 
-/* API滚动区域美化 */
+/* API滾動區域美化 */
 #apiCheckboxes {
     scrollbar-width: thin;
     scrollbar-color: #444 #222;
@@ -395,7 +395,7 @@ body {
     border-radius: 4px;
 }
 
-/* 自定义API列表样式 */
+/* 自定義API列表樣式 */
 #customApisList {
     scrollbar-width: thin;
     scrollbar-color: #444 #222;
@@ -414,7 +414,7 @@ body {
     border-radius: 4px;
 }
 
-/* 设置面板滚动样式 */
+/* 設定面板滾動樣式 */
 .settings-panel {
     scrollbar-width: thin;
     scrollbar-color: #444 #222;
@@ -433,7 +433,7 @@ body {
     border-radius: 4px;
 }
 
-/* 添加自定义API表单动画 */
+/* 新增自定義API表單動畫 */
 #addCustomApiForm {
     transition: all 0.3s ease;
     max-height: 0;
@@ -452,12 +452,12 @@ body {
     opacity: 1;
 }
 
-/* 成人内容API标记样式 */
+/* 成人內容API標記樣式 */
 .api-adult + label {
     color: #ff6b8b !important;
 }
 
-/* 添加警告图标和标签样式 */
+/* 新增警告圖示和標籤樣式 */
 .adult-warning {
     display: inline-flex;
     align-items: center;
@@ -471,14 +471,14 @@ body {
     margin-right: 4px;
 }
 
-/* 过滤器禁用样式 */
+/* 過濾器禁用樣式 */
 .filter-disabled {
     opacity: 0.5;
     pointer-events: none;
     cursor: not-allowed;
 }
 
-/* API组标题样式 */
+/* API組標題樣式 */
 .api-group-title {
     grid-column: span 2;
     padding: 0.25rem 0;
@@ -494,7 +494,7 @@ body {
     color: #ff6b8b;
 }
 
-/* 过滤器禁用样式 - 改进版本 */
+/* 過濾器禁用樣式 - 改進版本 */
 .filter-disabled {
     position: relative;
 }
@@ -524,14 +524,14 @@ body {
     background-color: #666 !important;
 }
 
-/* 改进过滤器禁用样式 */
+/* 改進過濾器禁用樣式 */
 .filter-disabled .filter-description {
     color: #ff6b8b !important;
     font-style: italic;
     font-weight: 500;
 }
 
-/* 修改过滤器禁用样式，确保文字清晰可见 */
+/* 修改過濾器禁用樣式，確保文字清晰可見 */
 .filter-disabled {
     position: relative;
 }
@@ -549,19 +549,19 @@ body {
 }
 
 .filter-disabled > * {
-    opacity: 1; /* 提高子元素不透明度，保证可见性 */
-    z-index: 6; /* 确保内容在遮罩上方 */
+    opacity: 1; /* 提高子元素不透明度，保證可見性 */
+    z-index: 6; /* 確保內容在遮罩上方 */
 }
 
-/* 改进过滤器禁用状态下的描述样式 */
+/* 改進過濾器禁用狀態下的描述樣式 */
 .filter-disabled .filter-description {
     color: #ff7b9d !important; /* 更亮的粉色 */
     font-style: italic;
     font-weight: 500;
-    text-shadow: 0 0 2px rgba(0,0,0,0.8); /* 添加文字阴影提高对比度 */
+    text-shadow: 0 0 2px rgba(0,0,0,0.8); /* 新增文字陰影提高對比度 */
 }
 
-/* 开关的禁用样式 */
+/* 開關的禁用樣式 */
 .filter-disabled .toggle-bg {
     background-color: #444 !important;
     opacity: 0.8;
@@ -573,7 +573,7 @@ body {
     opacity: 0.9;
 }
 
-/* 警告提示样式改进 */
+/* 警告提示樣式改進 */
 .filter-tooltip {
     background-color: rgba(255, 61, 87, 0.1);
     border: 1px solid rgba(255, 61, 87, 0.2);
@@ -595,7 +595,7 @@ body {
     margin-right: 0.35rem;
 }
 
-/* 编辑按钮样式 */
+/* 編輯按鈕樣式 */
 .custom-api-edit {
     color: #3b82f6;
     transition: color 0.2s ease;
@@ -605,7 +605,7 @@ body {
     color: #2563eb;
 }
 
-/* 自定义API条目样式改进 */
+/* 自定義API條目樣式改進 */
 #customApisList .api-item {
     display: flex;
     align-items: center;
@@ -621,7 +621,7 @@ body {
     background-color: #2a2a2a;
 }
 
-/* 成人内容标签样式 */
+/* 成人內容標籤樣式 */
 .adult-tag {
     display: inline-flex;
     align-items: center;
@@ -631,15 +631,15 @@ body {
     margin-right: 0.35rem;
 }
 
-/* 历史记录面板样式 */
+/* 歷史記錄面板樣式 */
 .history-panel {
     box-shadow: 2px 0 10px rgba(0,0,0,0.5);
     transition: transform 0.3s ease-in-out;
-    overflow-y: scroll; /* 始终显示滚动条，防止宽度变化 */
-    overflow-x: hidden; /* 防止水平滚动 */
-    width: 320px; /* 固定宽度 */
-    box-sizing: border-box; /* 确保padding不影响总宽度 */
-    scrollbar-gutter: stable; /* 现代浏览器：为滚动条预留空间 */
+    overflow-y: scroll; /* 始終顯示捲軸，防止寬度變化 */
+    overflow-x: hidden; /* 防止水平滾動 */
+    width: 320px; /* 固定寬度 */
+    box-sizing: border-box; /* 確保padding不影響總寬度 */
+    scrollbar-gutter: stable; /* 現代瀏覽器：為捲軸預留空間 */
 }
 
 .history-panel.show {
@@ -647,20 +647,20 @@ body {
 }
 
 #historyList {
-    padding-right: 6px; /* 为滚动条预留空间，确保内容不被挤压 */
+    padding-right: 6px; /* 為捲軸預留空間，確保內容不被擠壓 */
 }
 
-/* 历史记录项样式优化 */
+/* 歷史記錄項樣式最佳化 */
 .history-item {
     background: #1a1a1a;
-    border-radius: 6px; /* 减小圆角 */
+    border-radius: 6px; /* 減小圓角 */
     border: 1px solid #333;
     overflow: hidden;
     transition: all 0.2s ease;
     padding: 10px 14px;
     position: relative;
-    margin-bottom: 8px; /* 减小底部间距 */
-    width: 100%; /* 确保宽度一致 */
+    margin-bottom: 8px; /* 減小底部間距 */
+    width: 100%; /* 確保寬度一致 */
 }
 
 .history-item:hover {
@@ -669,7 +669,7 @@ body {
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
-/* 添加组悬停效果，使删除按钮在悬停时显示 */
+/* 新增組懸停效果，使刪除按鈕在懸停時顯示 */
 .history-item .delete-btn {
     opacity: 0;
     transition: opacity 0.2s ease;
@@ -680,14 +680,14 @@ body {
 }
 
 .history-info {
-    padding: 0; /* 移除额外的内边距 */
+    padding: 0; /* 移除額外的內邊距 */
     min-height: 70px;
 }
 
 .history-title {
     font-weight: 500;
-    font-size: 0.95rem; /* 减小字体大小 */
-    margin-bottom: 2px; /* 减小底部边距 */
+    font-size: 0.95rem; /* 減小字型大小 */
+    margin-bottom: 2px; /* 減小底部邊距 */
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -695,10 +695,10 @@ body {
 
 .history-meta {
     color: #bbb;
-    font-size: 0.75rem; /* 减小字体大小 */
+    font-size: 0.75rem; /* 減小字型大小 */
     display: flex;
     flex-wrap: wrap;
-    margin-bottom: 1px; /* 减小边距 */
+    margin-bottom: 1px; /* 減小邊距 */
 }
 
 .history-episode {
@@ -711,8 +711,8 @@ body {
 
 .history-time {
     color: #888;
-    font-size: 0.7rem; /* 减小字体大小 */
-    margin-top: 1px; /* 减小顶部边距 */
+    font-size: 0.7rem; /* 減小字型大小 */
+    margin-top: 1px; /* 減小頂部邊距 */
 }
 
 .history-separator {
@@ -749,7 +749,7 @@ body {
     text-overflow: ellipsis;
 }
 
-/* 添加播放进度条样式 */
+/* 新增播放進度條樣式 */
 .history-progress {
     margin: 5px 0;
 }
@@ -774,7 +774,7 @@ body {
     text-align: right;
 }
 
-/* 添加恢复播放提示样式 */
+/* 新增恢復播放提示樣式 */
 .position-restore-hint {
     position: absolute;
     bottom: 60px;
@@ -795,7 +795,7 @@ body {
     transform: translateX(-50%) translateY(0);
 }
 
-/* 锁定控制时屏蔽交互 */
+/* 鎖定控制時遮蔽互動 */
 .player-container.controls-locked .dplayer-controller,
 .player-container.controls-locked .dplayer-mask,
 .player-container.controls-locked .dplayer-bar-wrap,
@@ -804,13 +804,13 @@ body {
     opacity: 0 !important;
     pointer-events: none !important;
 }
-/* 保留锁按钮可见可点 */
+/* 保留鎖按鈕可見可點 */
 .player-container.controls-locked #lockToggle {
     opacity: 1 !important;
     pointer-events: auto !important;
 }
 
-/* 播放器顶部header移动端优化 */
+/* 播放器頂部header移動端最佳化 */
 .player-header {
     gap: 0.5rem;
 }
@@ -852,36 +852,36 @@ body {
     }
 }
 
-/* 搜索结果卡片优化：横向布局 */
+/* 搜尋結果卡片最佳化：橫向佈局 */
 .search-card-img-container {
-    width: 100px;  /* 增加宽度，从80px到100px */
-    height: 150px; /* 增加高度，从120px到150px */
+    width: 100px;  /* 增加寬度，從80px到100px */
+    height: 150px; /* 增加高度，從120px到150px */
     overflow: hidden;
     background-color: #191919;
 }
 
-/* 确保图片不会被拉伸，并且能够正确显示 */
+/* 確保圖片不會被拉伸，並且能夠正確顯示 */
 .search-card-img-container img {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-/* 针对搜索结果卡片修改网格布局以适应横向卡片 */
+/* 針對搜尋結果卡片修改網格佈局以適應橫向卡片 */
 @media (max-width: 640px) {
     #results {
         grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
     }
 }
 
-/* 响应式调整：在小屏幕上依然保持较好的视觉效果 */
+/* 響應式調整：在小螢幕上依然保持較好的視覺效果 */
 @media (min-width: 641px) and (max-width: 768px) {
     #results {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }
 
-/* 调整网格布局，减少每行卡片数量以适应更大尺寸的卡片 */
+/* 調整網格佈局，減少每行卡片數量以適應更大尺寸的卡片 */
 @media (min-width: 769px) and (max-width: 1024px) {
     #results {
         grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
@@ -894,34 +894,34 @@ body {
     }
 }
 
-/* 优化卡片内元素间距 */
+/* 最佳化卡片內元素間距 */
 .card-hover .p-2 {
-    padding: 0.75rem; /* 增加内边距 */
+    padding: 0.75rem; /* 增加內邊距 */
 }
 
-/* 增加卡片内字体大小 */
+/* 增加卡片內字型大小 */
 .card-hover h3 {
-    font-size: 0.95rem; /* 增加标题字体大小 */
+    font-size: 0.95rem; /* 增加標題字型大小 */
     line-height: 1.3rem;
     margin-bottom: 0.5rem;
 }
 
 .card-hover p {
-    font-size: 0.8rem; /* 增加描述字体大小 */
+    font-size: 0.8rem; /* 增加描述字型大小 */
 }
 
-/* 优化卡片内元素间距 */
+/* 最佳化卡片內元素間距 */
 .card-hover .p-2 {
     padding: 0.5rem;
 }
 
-/* 确保Toast显示在顶层并有适当的转换效果 */
+/* 確保Toast顯示在頂層並有適當的轉換效果 */
 #toast {
-    z-index: 9999; /* 确保显示在最上层 */
+    z-index: 9999; /* 確保顯示在最上層 */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     min-width: 200px;
     text-align: center;
-    pointer-events: none; /* 防止toast阻挡点击事件 */
+    pointer-events: none; /* 防止toast阻擋點擊事件 */
     transform: translateX(-50%) translateY(0);
     transition: opacity 0.3s ease, transform 0.3s ease;
 }
@@ -931,7 +931,7 @@ body {
     transform: translateX(-50%) translateY(-100%);
 }
 
-/* 详情模态框样式优化 */
+/* 詳情彈出視窗樣式最佳化 */
 #modal .modal-detail-info {
     background: linear-gradient(135deg, #0a0a0a, #111);
     border: 1px solid #222;
@@ -1002,7 +1002,7 @@ body {
     border-radius: 4px;
 }
 
-/* 集数统计信息样式 */
+/* 集數統計資訊樣式 */
 #modal .episode-stats {
     color: #9ca3af;
     font-size: 0.875rem;
@@ -1011,7 +1011,7 @@ body {
     gap: 0.5rem;
 }
 
-/* 移动端优化 */
+/* 移動端最佳化 */
 @media (max-width: 640px) {
     #modal .detail-grid {
         gap: 0.5rem;

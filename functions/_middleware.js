@@ -8,7 +8,7 @@ export async function onRequest(context) {
   if (contentType.includes("text/html")) {
     let html = await response.text();
     
-    // 处理普通密码
+    // 處理普通密碼
     const password = env.PASSWORD || "";
     let passwordHash = "";
     if (password) {

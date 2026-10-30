@@ -3,9 +3,9 @@ services:
     image: bestzwei/libretv:latest
     container_name: libretv
     ports:
-      - "8899:8080" # 将内部 8080 端口映射到主机的 8899 端口
+      - "8899:8080" # 將內部 8080 埠對映到主機的 8899 埠
     environment:
-      - PASSWORD=${PASSWORD:-your_password} # 可将 your_password 修改为你想要的密码，默认为 your_password
+      - PASSWORD=${PASSWORD:-your_password} # 可將 your_password 修改為你想要的密碼，預設為 your_password
 #    volumes:
 #      - libretv_data:/app # 不要修改
     restart: unless-stopped
@@ -16,4 +16,4 @@ services:
 #    driver_opts:
 #      type: none
 #      o: bind
-#      device: ${PWD:-.}/data # 可将 ${PWD:-.} 修改为你想要的路径，默认为当前目录下的 data 文件夹
+#      device: ${PWD:-.}/data # 可將 ${PWD:-.} 修改為你想要的路徑，預設為當前目錄下的 data 資料夾

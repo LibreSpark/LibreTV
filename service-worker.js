@@ -1,4 +1,4 @@
-// 不使用缓存，直接通过网络获取资源
+// 不使用快取，直接透過網路獲取資源
 self.addEventListener('install', event => {
   self.skipWaiting();
 });

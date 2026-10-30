@@ -1,4 +1,4 @@
-name: BUG Report / BUG 报告
+name: BUG Report / BUG 報告
 description: "Create a report to help us improve"
 title: "[BUG]"
 labels: ["bug"]
@@ -9,19 +9,19 @@ body:
       label: Self-check / 自查
       description: Self-Check before submitting the Issue / 在提交Issue之前的自查
       options:
-        - label: I have already cleard my browser cache / 我已经清除了浏览器缓存
+        - label: I have already cleard my browser cache / 我已經清除了瀏覽器快取
           required: false
   - type: checkboxes
     id: confirm
     attributes:
-      label: Confirm / 确认
-      description: Please confirm / 请你确认
+      label: Confirm / 確認
+      description: Please confirm / 請你確認
       options:
-        - label: I have searched the Issue and found no related issues / 我已经搜索过Issue，没有找到相关问题
+        - label: I have searched the Issue and found no related issues / 我已經搜尋過Issue，沒有找到相關問題
           required: true
-        - label: I am using the latest source from this repository / 我使用的是来自此仓库的最新版代码
+        - label: I am using the latest source from this repository / 我使用的是來自此倉庫的最新版程式碼
           required: true
-        - label: I provided information which does not include sensitive information / 我提供的信息里不包含敏感信息
+        - label: I provided information which does not include sensitive information / 我提供的資訊裡不包含敏感資訊
           required: true
   - type: textarea
     id: description
@@ -33,28 +33,28 @@ body:
   - type: textarea
     id: expected_behavior
     attributes:
-      label: Expected Behavior / 预期行为
-      description: What you expect to happen / 你认为的预期行为
+      label: Expected Behavior / 預期行為
+      description: What you expect to happen / 你認為的預期行為
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: Reproduction Steps / 复现步骤
-      description: How to reproduce / 如何复现
+      label: Reproduction Steps / 復現步驟
+      description: How to reproduce / 如何復現
     validations:
       required: true
   - type: textarea
     id: debug
     attributes:
-      label: Console Log / 控制台日志
-      description: F12 -> Console / 从 F12 -> 控制台 复制你觉得可能有帮助的日志
+      label: Console Log / 控制檯日誌
+      description: F12 -> Console / 從 F12 -> 控制檯 複製你覺得可能有幫助的日誌
     validations:
       required: false
   - type: textarea
     id: additional_context
     attributes:
-      label: Additional Information / 附加信息
-      description: Any other information you think might be helpful to solve this BUG / 你觉得对解决此BUG有帮助的其它信息
+      label: Additional Information / 附加資訊
+      description: Any other information you think might be helpful to solve this BUG / 你覺得對解決此BUG有幫助的其它資訊
     validations:
       required: false

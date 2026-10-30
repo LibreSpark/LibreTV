@@ -1,4 +1,4 @@
-name: Feature request / 功能请求
+name: Feature request / 功能請求
 description: "Suggest an idea for this project"
 title: "[Feature Request]"
 labels: ["enhancement"]
@@ -6,10 +6,10 @@ body:
   - type: checkboxes
     id: confirm
     attributes:
-      label: Confirm / 确认
-      description: Please confirm / 请你确认
+      label: Confirm / 確認
+      description: Please confirm / 請你確認
       options:
-        - label: I have searched the Issue and found no related feature requests / 我已经搜索过Issue，没有找到相关的功能请求
+        - label: I have searched the Issue and found no related feature requests / 我已經搜尋過Issue，沒有找到相關的功能請求
           required: true
   - type: textarea
     id: description
@@ -21,14 +21,14 @@ body:
   - type: textarea
     id: how_to
     attributes:
-      label: How to Implement / 如何实现
-      description: How to implement this feature / 应该如何实现这个功能
+      label: How to Implement / 如何實現
+      description: How to implement this feature / 應該如何實現這個功能
     validations:
       required: false
   - type: textarea
     id: additional_context
     attributes:
-      label: Additional Information / 附加信息
-      description: Any other information you think might be helpful to implement this feature / 你觉得对实现此功能有帮助的其它信息
+      label: Additional Information / 附加資訊
+      description: Any other information you think might be helpful to implement this feature / 你覺得對實現此功能有幫助的其它資訊
     validations:
       required: false
