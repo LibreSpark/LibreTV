@@ -94,27 +94,6 @@ function simpleUid() {
   return `${Date.now().toString(36)}-${simpleUidCounter}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-function getCustomSources(): any[] {
-  try {
-    // 🚀 直接从 Zustand 拿数据，无视一切缓存机制！
-    const state = useStore.getState() as any;
-    const currentSources = state.customAPIs || [];
-
-    if (Array.isArray(currentSources) && currentSources.length > 0) {
-      console.log("🚀 成功读取到动态源:", currentSources);
-      return currentSources.map((item: any) => ({
-        ...item,
-        url: item.url || item.api || item.path,
-        key: item.key || item.name || '默认',
-        name: item.name || '自定义源'
-      }));
-    }
-    return [];
-  } catch (e) {
-    console.warn("读取 Zustand 状态失败", e);
-    return [];
-  }
-}
 
 function saveCustomSources(list: { name: string; url: string }[]) {
   try {
