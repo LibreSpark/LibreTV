@@ -2,15 +2,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
-type Message = { id: string; role: 'user' | 'assistant'; type: 'text' | 'movie_card' | 'system'; content: string; data?: any; };
+type Message = { id: string; role: 'user' | 'assistant' | 'system'; type: 'text' | 'movie_card' | 'system'; content: string; data?: any; };
 const INIT_MESSAGE: Message = { id: 'init', role: 'assistant', type: 'text', content: '你好！我是 Friday。想看什么电影，或者需要我帮你换几个新接口？' };
 type SpeechState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
+// ✅ 补丁4：增强 UID 随机性
 function simpleUid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 6);
 }
 
 if (typeof document !== 'undefined') {
@@ -34,6 +35,8 @@ if (typeof document !== 'undefined') {
 }
 
 export default function AIFloatingBall() {
+  const isSafari = typeof window !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -41,12 +44,9 @@ export default function AIFloatingBall() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([INIT_MESSAGE]);
   const [loading, setLoading] = useState(false);
-
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [speechState, setSpeechState] = useState<SpeechState>('idle');
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
-
-  const AGENT_SECRET = process.env.NEXT_PUBLIC_AGENT_SECRET || 'default_fallback_secret_change_me';
 
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -56,18 +56,16 @@ export default function AIFloatingBall() {
   const inputRef = useRef<HTMLInputElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
-
   const abortControllerRef = useRef<AbortController | null>(null);
   const agentAbortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(false);
   const messagesRef = useRef(messages);
   const isOpenRef = useRef(false);
-
   const focusTimerRef = useRef<NodeJS.Timeout | null>(null);
   const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const reloadTimerRef = useRef<NodeJS.Timeout | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const redirectTimerRef = useRef<NodeJS.Timeout | null>(null); 
+  const redirectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { speechStateRef.current = speechState; }, [speechState]);
@@ -78,7 +76,6 @@ export default function AIFloatingBall() {
     debounceTimerRef.current = setTimeout(() => {
       if (isOpenRef.current) {
         setIsOpen(false); setTimeout(() => setIsExpanded(false), 300);
-        
         if (isVoiceModeRef.current) {
           isVoiceModeRef.current = false;
           setIsVoiceMode(false);
@@ -86,14 +83,11 @@ export default function AIFloatingBall() {
           synthRef.current?.cancel();
           try { recognitionRef.current?.stop(); } catch (e) {}
         }
-        
         synthRef.current?.cancel();
         if (abortControllerRef.current) abortControllerRef.current.abort();
         if (agentAbortControllerRef.current) agentAbortControllerRef.current.abort();
         if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
-
         setLoading(false); document.body.classList.remove('friday-popup-lock');
-        
         closeTimerRef.current = setTimeout(() => {
           if (mountedRef.current) setIsMounted(false);
         }, 300);
@@ -112,7 +106,6 @@ export default function AIFloatingBall() {
     mountedRef.current = true;
     if (typeof window === 'undefined') return;
     synthRef.current = window.speechSynthesis;
-
     if (window.__FRIDAY_PENDING_OPEN__) {
       window.__FRIDAY_PENDING_OPEN__ = false;
       const openTimer = setTimeout(() => {
@@ -121,10 +114,8 @@ export default function AIFloatingBall() {
       }, 50);
       closeTimerRef.current = openTimer;
     }
-
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) setIsSpeechSupported(false);
-
     return () => {
       mountedRef.current = false;
       document.body.classList.remove('friday-popup-lock');
@@ -135,8 +126,8 @@ export default function AIFloatingBall() {
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      if (focusTimerRef.current) clearTimeout(focusTimerRef.current); 
-      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current); 
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
     };
   }, [togglePanel]);
 
@@ -185,7 +176,7 @@ export default function AIFloatingBall() {
         if (isVoiceModeRef.current && speechStateRef.current === 'listening') {
           setTimeout(() => {
             if (!mountedRef.current) return;
-            try { recognitionRef.current?.start(); } catch (e) { 
+            try { recognitionRef.current?.start(); } catch (e) {
               setIsVoiceMode(false); isVoiceModeRef.current = false; micDeniedRef.current = true; setSpeechState('idle');
             }
           }, 300);
@@ -202,13 +193,19 @@ export default function AIFloatingBall() {
     utterance.lang = 'zh-CN';
     utterance.onstart = () => setSpeechState('speaking');
     utterance.onend = () => {
-      if (isVoiceModeRef.current || forceResume) {
+      if ((isVoiceModeRef.current || forceResume) && !isSafari) {
         setSpeechState('listening');
         try { recognitionRef.current?.start(); } catch (e) { }
-      } else setSpeechState('idle');
+      } else {
+        setSpeechState('idle');
+        if (isSafari) {
+          isVoiceModeRef.current = false;
+          setIsVoiceMode(false);
+        }
+      }
     };
     synthRef.current.speak(utterance);
-  }, []);
+  }, [isSafari]);
 
   const toggleVoiceMode = () => {
     if (!isSpeechSupported) return;
@@ -243,11 +240,35 @@ export default function AIFloatingBall() {
   const safeNavigate = (href: string) => {
     const cleanHref = href.replace(/[\s\x00-\x1f]/g, '').toLowerCase();
     const blockProtocols = ['javascript:', 'data:', 'vbscript:', 'blob:', 'about:'];
-    if (blockProtocols.some(p => cleanHref.startsWith(p))) {
+    if (blockProtocols.some(p => cleanHref.includes(p))) {
       setMessages(prev => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: '⚠️ 不安全链接已被拦截' }]);
       return;
     }
     window.location.href = href;
+  };
+
+  const executePlayerAction = (action: string, time?: number): string => {
+    const video = document.getElementById('libretv-main-video') as HTMLVideoElement;
+    if (!video) {
+      speakText("当前页面没有正在播放的视频哦，请先打开一个视频。");
+      return "[工具失败] control_player：未找到播放器DOM";
+    }
+    try {
+      switch(action) {
+        case 'play': video.play(); break;
+        case 'pause': video.pause(); break;
+        case 'seek_forward': video.currentTime += 10; break;
+        case 'seek_backward': video.currentTime -= 10; break;
+        case 'seek_to': if (time !== undefined) video.currentTime = time; break;
+        case 'volume_up': video.volume = Math.min(1, video.volume + 0.1); break;
+        case 'volume_down': video.volume = Math.max(0, video.volume - 0.1); break;
+        case 'fullscreen': video.requestFullscreen(); break;
+      }
+      return `[工具成功] control_player action:${action} time:${time ?? "无"}`;
+    } catch (e: any) {
+      console.error("播放器控制失败:", e);
+      return `[工具失败] control_player 异常:${String(e.message)}`;
+    }
   };
 
   const processStreamResponse = async (response: Response) => {
@@ -267,9 +288,12 @@ export default function AIFloatingBall() {
         buffer = lines.pop() || '';
         if (done) { decoder.decode(); break; }
         for (const line of lines) {
-          if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+          const trimLine = line.trim();
+          if (!trimLine || trimLine.startsWith(':')) continue;
+          
+          if (trimLine.startsWith('data: ') && !trimLine.includes('[DONE]')) {
             try {
-              const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta;
+              const delta = JSON.parse(trimLine.slice(6)).choices?.[0]?.delta;
               if (delta?.content) {
                 fullContent += delta.content;
                 if (!hasStreamedText) {
@@ -286,43 +310,59 @@ export default function AIFloatingBall() {
               }
               if (delta?.tool_calls && delta.tool_calls.length > 0) {
                 const tc = delta.tool_calls[0];
-                if (tc.function?.name) { toolName = tc.function.name; toolArgsBuffer = ''; }
-                if (tc.function?.arguments && toolArgsBuffer.length < 10000) toolArgsBuffer += tc.function.arguments;
+                if (tc.function?.name && !toolName) {
+                  toolName = tc.function.name;
+                  toolArgsBuffer = '';
+                }
+                if (tc.function?.arguments && toolArgsBuffer.length < 50000) {
+                  toolArgsBuffer += tc.function.arguments;
+                }
               }
-            } catch (e) { }
+            } catch (e) { 
+              console.warn("分片解析异常，跳过当前行", e); 
+            }
           }
         }
       }
       if (!mountedRef.current) return;
-      
+
       if (toolName && toolArgsBuffer) {
         if (hasStreamedText) {
           setMessages(prev => prev.filter(m => m.id !== streamMsgId));
         }
-
+        let toolResultText = "";
         try {
           const args = JSON.parse(toolArgsBuffer);
-          if (toolName === 'search_movie' && args.keyword) {
+          if (toolName === 'control_player') {
+            toolResultText = executePlayerAction(args.action, args.time);
+            speakText("操作已执行");
+            setMessages(prev => [...prev, {
+              id: simpleUid(),
+              role: 'assistant',
+              type: 'system',
+              content: `🎬 已执行播放器操作: ${args.action}`
+            }]);
+          }
+          else if (toolName === 'search_movie' && args.keyword) {
+            if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+            const targetLink = `/search?q=${encodeURIComponent(args.keyword)}`;
+            const fallbackPoster = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=300&auto=format&fit=crop';
             setMessages(prev => [...prev, {
               id: simpleUid(), role: 'assistant', type: 'movie_card', content: '',
-              data: {
-                title: args.keyword,
-                poster: `https://picsum.photos/seed/${encodeURIComponent(args.keyword)}/300/450`,
-                link: `/search?q=${encodeURIComponent(args.keyword)}`
-              }
+              data: { title: args.keyword, poster: fallbackPoster, link: targetLink }
             }]);
-            
-            speakText(`已为您搜索到关于${args.keyword}的影片。`);
-            
+            toolResultText = `[工具成功] search_movie keyword:${args.keyword}`;
+            speakText(`已为您找到${args.keyword}`);
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('friday-action-search', { detail: args.keyword }));
-              if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
               redirectTimerRef.current = setTimeout(() => {
-                window.location.href = `/search?q=${encodeURIComponent(args.keyword)}`; 
-              }, 1000); 
+                window.location.href = targetLink;
+                togglePanel(false);
+              }, 800);
             }
           } else if (toolName === 'fetch_and_add_source') {
             executeAgentFetchSources();
+            toolResultText = `[工具触发] fetch_and_add_source`;
           } else if (toolName === 'add_video_source' && args.name && args.api_url) {
             setMessages(prev => [...prev, {
               id: simpleUid(), role: 'assistant', type: 'system',
@@ -340,15 +380,27 @@ export default function AIFloatingBall() {
               existing = existing.slice(-15);
               localStorage.setItem('custom_api_url', JSON.stringify(existing));
             } catch (e) { console.error("写入失败", e); }
+            toolResultText = `[工具成功] add_video_source name:${args.name}`;
             speakText(`已为您添加${args.name}接口，请手动刷新页面生效。`);
           }
-        } catch (err) {
+        } catch (err: any) {
+          toolResultText = `[工具解析失败] ${String(err.message)}`;
           const errMsg = '⚠️ 工具调用解析出错，请重试';
           setMessages(prev => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: errMsg }]);
           speakText(errMsg, true);
         }
-      } else if (fullContent) { 
-        speakText(fullContent); 
+        
+        // ✅ 补丁2：工具结果伪装为 user，增加极强前缀防混淆
+        if (toolResultText) {
+          setMessages(prev => [...prev, {
+            id: simpleUid(),
+            role: "user", 
+            type: "system",
+            content: `【内部系统执行结果，非用户发言，请参考】：${toolResultText}`
+          }]);
+        }
+      } else if (fullContent) {
+        speakText(fullContent);
       }
     } finally {
       reader.releaseLock();
@@ -361,17 +413,12 @@ export default function AIFloatingBall() {
     setIsExpanded(true); setLoading(true);
     setMessages(prev => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: `正在全网抓取接口并自动筛选...` }]);
     forceScrollToBottom();
-    
     agentAbortControllerRef.current = new AbortController();
     const ac = agentAbortControllerRef.current;
-
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'X-Agent-Secret': AGENT_SECRET 
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'fetch_sources',
           messages: messagesRef.current.map(m => ({ role: m.role, content: m.content }))
@@ -394,19 +441,29 @@ export default function AIFloatingBall() {
   const handleSend = async (overrideText?: string) => {
     const text = overrideText || input.trim(); if (!text || loading) return;
     synthRef.current?.cancel(); setInput(''); setIsExpanded(true);
-    setMessages(prev => [...prev, { id: simpleUid(), role: 'user', type: 'text', content: text }]);
+    const userMsgId = simpleUid();
+    const userMessage: Message = { id: userMsgId, role: 'user', type: 'text', content: text };
+    setMessages(prev => [...prev, userMessage]);
     setLoading(true); if (isVoiceModeRef.current) setSpeechState('thinking'); forceScrollToBottom();
     abortControllerRef.current = new AbortController();
+
     try {
+      const history = messagesRef.current.map(m => ({ role: m.role, content: m.content }));
+      let playerContext = '';
+      const video = document.getElementById('libretv-main-video') as HTMLVideoElement;
+      
+      if (video) {
+        playerContext = `[系统提示：当前视频进度为 ${Math.floor(video.currentTime)} 秒，${video.paused ? '处于暂停状态' : '正在播放'}，音量为 ${Math.floor(video.volume * 100)}%。]`;
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Agent-Secret': AGENT_SECRET
-        },
-        body: JSON.stringify({ messages: messagesRef.current.map(m => ({ role: m.role, content: m.content })) }),
+        headers: { 'Content-Type': 'application/json' },
+        // ✅ 补丁1：作为独立字段传递
+        body: JSON.stringify({ messages: history, playerContext }), 
         signal: abortControllerRef.current.signal
       });
+
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.error || `网络错误`);
@@ -425,25 +482,24 @@ export default function AIFloatingBall() {
   const lastMsg = messages[messages.length - 1];
 
   return createPortal(
-    <div className={`fixed inset-0 z-[9999] flex items-start justify-center pt-[15vh] pointer-events-none transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>
-      <div className="absolute inset-0 bg-black/20 pointer-events-auto backdrop-blur-sm transition-opacity" onClick={() => togglePanel(false)}></div>
+    <div className={`fixed inset-0 z-[9999] flex items-start justify-center pt-[15vh] pointer-events-none transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`} style={{ transform: 'translateZ(1px)' }}>
+      <div className="absolute inset-0 bg-black/20 pointer-events-auto backdrop-blur-sm transition-opacity" style={{ transform: 'translateZ(1px)' }} onClick={() => togglePanel(false)}></div>
       
-      <div ref={popupRef} onClick={expandPopup} 
+      <div ref={popupRef} onClick={expandPopup}
         className={`relative bg-[#050505] overflow-hidden flex flex-col items-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] border border-white/10 transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] will-change-transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-90 -translate-y-8 opacity-0'}`}
         style={{ 
+          transform: 'translateZ(1px)',
           width: isExpanded ? '90%' : '260px', 
           maxWidth: isExpanded ? '360px' : '260px', 
           height: isExpanded ? '450px' : '110px', 
           borderRadius: isExpanded ? '36px' : '55px', 
           cursor: isExpanded ? 'default' : 'pointer' 
         }}>
-        
         <div className={`absolute bottom-0 left-0 w-full pointer-events-none z-0 overflow-hidden transition-all duration-700 ${isExpanded ? 'h-[100px]' : 'h-[60px]'} ${isOpen ? 'opacity-100' : 'opacity-0'}`}>
-           <div className="absolute bottom-[-15px] left-[10%] w-[80%] h-[50px] bg-[radial-gradient(ellipse_at_bottom,rgba(0,140,255,0.3)_0%,transparent_70%)] blur-[15px] animate-breathe-1 mix-blend-screen"></div>
-           <div className="absolute bottom-[-5px] left-[30%] w-[40%] h-[30px] bg-[radial-gradient(ellipse_at_center,rgba(255,200,100,0.3)_0%,transparent_70%)] blur-[10px] animate-breathe-2 mix-blend-screen"></div>
-           <div className="absolute bottom-[5px] left-[40%] w-[20%] h-[10px] bg-white/40 blur-[8px] animate-breathe-3 mix-blend-screen"></div>
+          <div className="absolute bottom-[-15px] left-[10%] w-[80%] h-[50px] bg-[radial-gradient(ellipse_at_bottom,rgba(0,140,255,0.3)_0%,transparent_70%)] blur-[15px] animate-breathe-1 mix-blend-screen"></div>
+          <div className="absolute bottom-[-5px] left-[30%] w-[40%] h-[30px] bg-[radial-gradient(ellipse_at_center,rgba(255,200,100,0.3)_0%,transparent_70%)] blur-[10px] animate-breathe-2 mix-blend-screen"></div>
+          <div className="absolute bottom-[5px] left-[40%] w-[20%] h-[10px] bg-white/40 blur-[8px] animate-breathe-3 mix-blend-screen"></div>
         </div>
-
         {!isExpanded && (
           <div className="relative z-10 w-full h-full flex flex-col justify-center px-6">
             <p className="text-[13px] text-gray-200 leading-relaxed font-medium line-clamp-2 overflow-hidden pb-2">{lastMsg?.content || "点击这里和我对话..."}</p>
@@ -462,32 +518,44 @@ export default function AIFloatingBall() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-4 scrollbar-hide" ref={chatContainerRef}>
-              {messages.map((msg) => (
-                <div key={msg.id} className={`w-full flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  {msg.type === 'text' && (
-                    <div className={`text-[14px] leading-relaxed break-words max-w-[85%] ${
-                      msg.role === 'user' ? 'bg-[#2c2c2e] text-white p-3 rounded-2xl rounded-br-sm' : 'text-gray-100 p-1'
-                    }`}>
-                      <div dangerouslySetInnerHTML={formatText(msg.content)} />
-                    </div>
-                  )}
-                  {msg.type === 'movie_card' && (
-                    <div className="bg-[#1c1c1e] border border-white/10 rounded-2xl overflow-hidden w-full max-w-[220px] shadow-lg mt-1 inline-block text-left">
-                      <div className="h-[120px] bg-cover bg-center" style={{ backgroundImage: `url(${msg.data.poster})` }} />
-                      <div className="p-3 flex flex-col gap-1">
-                        <span className="text-white font-bold text-sm truncate">{msg.data.title}</span>
-                        <button onClick={(e) => { e.stopPropagation(); synthRef.current?.cancel(); safeNavigate(msg.data.link); togglePanel(false); }} className="mt-2 w-full bg-white text-black text-[12px] py-1.5 rounded-lg font-bold active:scale-95 transition-transform">立即播放</button>
+              {messages.map((msg) => {
+                if (msg.type === 'system' && msg.role === 'user') return null; 
+                return (
+                  <div key={msg.id} className={`w-full flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    {msg.type === 'text' && (
+                      <div className={`text-[14px] leading-relaxed break-words max-w-[85%] ${msg.role === 'user' ? 'bg-[#2c2c2e] text-white p-3 rounded-2xl rounded-br-sm' : 'text-gray-100 p-1'}`}>
+                        <div dangerouslySetInnerHTML={formatText(msg.content)} />
                       </div>
-                    </div>
-                  )}
-                  {msg.type === 'system' && (
-                    <div className="text-[12px] text-green-400 bg-green-500/10 border border-green-500/20 p-2.5 rounded-xl mt-1 text-left inline-block">{msg.content}</div>
-                  )}
-                </div>
-              ))}
+                    )}
+                    {msg.type === 'movie_card' && (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); synthRef.current?.cancel(); safeNavigate(msg.data.link); togglePanel(false); }}
+                        className="bg-[#1c1c1e] border border-white/10 rounded-2xl overflow-hidden w-full max-w-[220px] shadow-lg mt-1 inline-block text-left cursor-pointer hover:scale-[1.02] transition-transform"
+                      >
+                        <div className="h-[120px] w-full relative bg-[#2c2c2e] overflow-hidden">
+                          <img
+                            src={msg.data.poster}
+                            alt={msg.data.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=300&auto=format&fit=crop';
+                            }}
+                          />
+                        </div>
+                        <div className="p-3 flex flex-col gap-1">
+                          <span className="text-white font-bold text-sm truncate">{msg.data.title}</span>
+                          <button className="mt-2 w-full bg-white text-black text-[12px] py-1.5 rounded-lg font-bold active:scale-95 transition-transform">立即播放</button>
+                        </div>
+                      </div>
+                    )}
+                    {msg.type === 'system' && msg.role !== 'user' && (
+                      <div className="text-[12px] text-green-400 bg-green-500/10 border border-green-500/20 p-2.5 rounded-xl mt-1 text-left inline-block">{msg.content}</div>
+                    )}
+                  </div>
+                )
+              })}
               {loading && (<div className="self-start flex gap-1 items-center p-1"><span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></span><span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce delay-100"></span><span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce delay-200"></span></div>)}
             </div>
-            
             <div className="flex items-center px-4 pb-4 pt-2 gap-2 shrink-0 bg-transparent">
               {isSpeechSupported && (
                 <button onClick={(e) => { e.stopPropagation(); toggleVoiceMode(); }} className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${isVoiceMode ? 'text-red-400 bg-red-500/20' : 'text-gray-400 hover:text-white bg-white/5'}`}>
@@ -498,21 +566,21 @@ export default function AIFloatingBall() {
                   </svg>
                 </button>
               )}
-              <input 
-                ref={inputRef} 
-                type="text" 
-                value={input} 
-                onChange={(e) => setInput(e.target.value)} 
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }} 
-                onClick={(e) => e.stopPropagation()} 
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+                onClick={(e) => e.stopPropagation()}
                 placeholder={
-                  speechState === 'listening' ? '正在聆听...' : 
-                  speechState === 'thinking' ? '思考中...' : 
-                  speechState === 'speaking' ? '正在播报...' : '问点什么...'
-                } 
-                disabled={loading} 
-                className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder-gray-500 px-2 py-1" 
-                style={{ color: '#ffffff', caretColor: '#ffffff' }} 
+                  speechState === 'listening' ? '正在聆听...' :
+                    speechState === 'thinking' ? '思考中...' :
+                      speechState === 'speaking' ? '正在播报...' : '问点什么...'
+                }
+                disabled={loading}
+                className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder-gray-500 px-2 py-1"
+                style={{ color: '#ffffff', caretColor: '#ffffff' }}
               />
               <button onClick={(e) => { e.stopPropagation(); handleSend(); }} disabled={!input.trim() || loading} className="w-8 h-8 rounded-full flex items-center justify-center text-white disabled:opacity-30">
                 {loading ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>}
