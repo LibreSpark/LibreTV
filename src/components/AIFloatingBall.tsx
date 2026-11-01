@@ -8,10 +8,7 @@ declare global {
   }
 }
 
-// ================= 核心常量 =================
-// ⚠️ 请核对是否为你项目真实的 video ID
 const VIDEO_ELEMENT_ID = 'libretv-main-video'; 
-// ⚠️ 请核对是否为你项目读取自定义源的 localStorage Key
 const STORAGE_KEY = 'custom_api_url'; 
 const MAX_FRONTEND_SSE_BUFFER = 1024 * 512;
 const PLAYER_ACTION_TIMEOUT = 10000;
@@ -42,7 +39,6 @@ function simpleUid() {
   return `${Date.now().toString(36)}-${simpleUidCounter}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-// ================= LocalStorage 封装 =================
 function getCustomSources(): { name: string; url: string }[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -56,14 +52,13 @@ function getCustomSources(): { name: string; url: string }[] {
 
 function saveCustomSources(list: { name: string; url: string }[]) {
   try {
-    // ✅ 补全了严格的 TS 泛型
     const uniqueMap = new Map<string, { name: string; url: string }>();
     list.forEach((item) => uniqueMap.set(item.url, item));
     const finalList = Array.from(uniqueMap.values()).slice(-15);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(finalList));
     return finalList;
-  } catch (e) {
-    console.warn('保存自定义源失败，可能是隐私模式限制', e);
+  } catch (err: unknown) {
+    console.warn('保存自定义源失败，可能是隐私模式限制', err);
     return [];
   }
 }
@@ -497,8 +492,8 @@ export default function AIFloatingBall() {
           return { success: false, msg: '未知播放器操作' };
       }
       return { success: true, msg: `已执行操作: ${action}` };
-    } catch (e: any) {
-      return { success: false, msg: `浏览器拦截或异常: ${String(e.message)}` };
+    } catch (err: unknown) {
+      return { success: false, msg: `浏览器拦截或异常: ${String((err as Error).message)}` };
     }
   };
 
@@ -527,7 +522,7 @@ export default function AIFloatingBall() {
     }
   };
 
-  const validateFrontendTool = (name: string, args: any): boolean => {
+  const validateFrontendTool = (name: string, args: Record<string, any>): boolean => {
     if (!args || typeof args !== 'object') return false;
     if (name === 'search_movie') return typeof args.keyword === 'string' && args.keyword.trim().length > 0 && args.keyword.length <= 100;
     if (name === 'add_video_source') return typeof args.name === 'string' && args.name.length > 0 && args.name.length <= 30 && typeof args.api_url === 'string' && isSafeUrl(args.api_url);
@@ -738,8 +733,8 @@ export default function AIFloatingBall() {
               ]);
               speakTextRef.current?.('本地 API 配置已更新');
             }
-          } catch (error: any) {
-            const message = `⚠️ 工具 ${call.name} 执行失败：${error?.message || '参数错误'}`;
+          } catch (err: unknown) {
+            const message = `⚠️ 工具 ${call.name} 执行失败：${(err as Error)?.message || '参数错误'}`;
             setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: message }]);
             speakTextRef.current?.(message);
           }
@@ -780,9 +775,9 @@ export default function AIFloatingBall() {
       });
       if (!response.ok) throw new Error('Agent 抓取失败');
       await processStreamResponse(response);
-    } catch (error: any) {
-      if (error.name !== 'AbortError' && mountedRef.current) {
-        const errText = `⚠️ 抓取源失败：${error.message}`;
+    } catch (err: unknown) {
+      if ((err as Error).name !== 'AbortError' && mountedRef.current) {
+        const errText = `⚠️ 抓取源失败：${(err as Error).message}`;
         setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: errText }]);
         speakTextRef.current?.(errText);
       }
@@ -833,9 +828,9 @@ export default function AIFloatingBall() {
         throw new Error(err.error || `网络错误`);
       }
       await processStreamResponse(response);
-    } catch (error: any) {
-      if (error.name !== 'AbortError' && mountedRef.current) {
-        const errMsg = `⚠️ ${error.message}`;
+    } catch (err: unknown) {
+      if ((err as Error).name !== 'AbortError' && mountedRef.current) {
+        const errMsg = `⚠️ ${(err as Error).message}`;
         setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: errMsg }]);
         speakTextRef.current?.(errMsg);
       }
