@@ -112,10 +112,7 @@ function getCustomSources(): any[] {
     return [];
   }
 }
-  } catch {
-    return [];
-  }
-}
+
 
 function saveCustomSources(list: { name: string; url: string }[]) {
   try {
