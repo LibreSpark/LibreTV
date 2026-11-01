@@ -13,12 +13,18 @@ const STORAGE_KEY = 'custom_api_url';
 const MAX_FRONTEND_SSE_BUFFER = 1024 * 512;
 const PLAYER_ACTION_TIMEOUT = 10000;
 
+type MessageData = {
+  title: string;
+  poster: string;
+  link: string;
+};
+
 type Message = {
   id: string;
   role: 'user' | 'assistant' | 'system';
   type: 'text' | 'movie_card' | 'system';
   content: string;
-  data?: any;
+  data?: MessageData;
 };
 
 const INIT_MESSAGE: Message = {
@@ -125,8 +131,9 @@ export default function AIFloatingBall() {
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const redirectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleSendRef = useRef<(overrideText?: string) => Promise<void>>();
-  const speakTextRef = useRef<(text: string, forceResume?: boolean) => void>();
+  // ✅ 修复：给 useRef 提供 null 初始值，完美适配 Next 15 严格类型
+  const handleSendRef = useRef<((overrideText?: string) => Promise<void>) | null>(null);
+  const speakTextRef = useRef<((text: string, forceResume?: boolean) => void) | null>(null);
 
   const setSpeechStateSafe = useCallback((state: SpeechState) => {
     speechStateRef.current = state;
@@ -867,7 +874,7 @@ export default function AIFloatingBall() {
         {!isExpanded && (
           <div className="relative z-10 w-full h-full flex flex-col justify-center px-6">
             <p className="text-[13px] text-gray-200 leading-relaxed font-medium line-clamp-2 overflow-hidden pb-2">
-              {lastMsg?.type === 'movie_card' ? `已为您找到《${lastMsg.data.title}》，点击展开` : (lastMsg?.content || "点击这里和我对话...")}
+              {lastMsg?.type === 'movie_card' ? `已为您找到《${lastMsg.data?.title}》，点击展开` : (lastMsg?.content || "点击这里和我对话...")}
             </p>
             <div className="absolute bottom-2 left-6 text-[10px] text-gray-500">点击展开</div>
           </div>
@@ -889,12 +896,12 @@ export default function AIFloatingBall() {
                     </div>
                   )}
                   {msg.type === 'movie_card' && (
-                    <div onClick={(e) => { e.stopPropagation(); synthRef.current?.cancel(); safeNavigate(msg.data.link); togglePanel(false); }} className="bg-[#1c1c1e] border border-white/10 rounded-2xl overflow-hidden w-full max-w-[220px] shadow-lg mt-1 inline-block text-left cursor-pointer hover:scale-[1.02] transition-transform">
+                    <div onClick={(e) => { e.stopPropagation(); synthRef.current?.cancel(); safeNavigate(msg.data!.link); togglePanel(false); }} className="bg-[#1c1c1e] border border-white/10 rounded-2xl overflow-hidden w-full max-w-[220px] shadow-lg mt-1 inline-block text-left cursor-pointer hover:scale-[1.02] transition-transform">
                       <div className="h-[120px] w-full relative bg-[#2c2c2e] overflow-hidden">
-                        <img src={msg.data.poster} alt={msg.data.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/300/450'; }} />
+                        <img src={msg.data!.poster} alt={msg.data!.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/300/450'; }} />
                       </div>
                       <div className="p-3 flex flex-col gap-1">
-                        <span className="text-white font-bold text-sm truncate">{msg.data.title}</span>
+                        <span className="text-white font-bold text-sm truncate">{msg.data!.title}</span>
                         <button className="mt-2 w-full bg-white text-black text-[12px] py-1.5 rounded-lg font-bold active:scale-95 transition-transform">立即播放</button>
                       </div>
                     </div>
