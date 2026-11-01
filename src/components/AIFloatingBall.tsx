@@ -1,46 +1,6 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-function getCustomSources(): any[] {
-  try {
-    // 🚀 1. 遍历 localStorage，寻找 Zustand 持久化的数据
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      
-      try {
-        const val = localStorage.getItem(key);
-        if (!val) continue;
-        
-        // 只要存的数据里包含这几个词，说明大概率是源配置
-        if (val.includes('customAPIs') || val.includes('sources') || val.includes('bfzy')) {
-          const parsed = JSON.parse(val);
-          
-          // Zustand persist 的数据通常包裹在 state 里
-          const apis = parsed?.state?.customAPIs || parsed?.customAPIs || parsed?.state?.sources;
-          
-          if (Array.isArray(apis) && apis.length > 0) {
-            console.log("🚀 成功从浏览器动态读取到真实源:", apis);
-            return apis.map((item: any) => ({
-              ...item,
-              url: item.url || item.api || item.path,
-              key: item.key || item.name || '默认',
-              name: item.name || '自定义源'
-            }));
-          }
-        }
-      } catch {}
-    }
-  } catch (e) {
-    console.warn("动态读取源失败，将使用兜底源", e);
-  }
-
-  // 🚨 2. 兜底策略：如果遍历没找到，用写死的源保证不崩溃
-  console.log("⚠️ 未找到动态源，使用兜底源");
-  return [
-    { key: 'bfzy', name: '风暴', url: 'https://bfzyapi.com/api.php/provide/vod' },
-    { key: '360', name: '360', url: 'https://360zy.com/api.php/provide/vod' }
-  ];
-}
+import { createPortal } from 'react-dom';
 
 declare global {
   interface Window {
@@ -55,7 +15,6 @@ const CHAT_STORAGE_KEY = 'friday_chat_history';
 const MAX_FRONTEND_SSE_BUFFER = 1024 * 512;
 const PLAYER_ACTION_TIMEOUT = 10000;
 
-// 🚀 核心数据结构：用于复合卡片渲染的真实数据
 type MovieCardItem = {
   title: string;
   poster: string;
@@ -69,7 +28,6 @@ type Message = {
   role: 'user' | 'assistant' | 'system';
   type: 'text' | 'composite_movie' | 'system';
   content: string;
-  // 🚀 苹果 AI 同款复合模块
   compositeMovie?: {
     summary: string;
     items: MovieCardItem[];
@@ -91,19 +49,100 @@ function simpleUid() {
     return crypto.randomUUID();
   }
   simpleUidCounter += 1;
-  return `${Date.now().toString(36)}-${simpleUidCounter}-${Math.random().toString(36).slice(2, 12)}`;
+  return `${Date.now().toString(36)}-${simpleUidCounter}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
+// 🚀 把 isSafeUrl 抽出到全局，方便 saveCustomSources 调用
+const isSafeUrl = (urlStr: string) => {
+  try {
+    const url = new URL(urlStr);
+    if (!['http:', 'https:'].includes(url.protocol)) return false;
+    if (url.username || url.password) return false;
+    let host = url.hostname.toLowerCase();
+    if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+    if (host.endsWith('.local') || host.endsWith('.localhost') || host === 'localhost' || host === '::' || host === '::1') return false;
+    if (host.startsWith('127.') || host.startsWith('0.') || host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) return false;
+    const parts = host.split('.');
+    if (parts.length === 4) {
+      const p0 = parseInt(parts[0]); const p1 = parseInt(parts[1]);
+      if (p0 === 172 && p1 >= 16 && p1 <= 31) return false;
+      if (p0 === 100 && p1 >= 64 && p1 <= 127) return false;
+      if (p0 >= 224 && p0 <= 239) return false;
+    }
+    if (host.startsWith('fe80:') || host.startsWith('fc00:') || host.startsWith('fd00:')) return false;
+    if (host.startsWith('::ffff:') || host.includes('127.0.0.1')) return false;
+    return true;
+  } catch { return false; }
+};
 
+// 🚀 核心修复：动态读取 + SSR 防崩溃 + 强行兜底
+function getCustomSources(): any[] {
+  if (typeof window === 'undefined') {
+    return [
+      { key: 'bfzy', name: '风暴', url: 'https://bfzyapi.com/api.php/provide/vod' },
+      { key: '360', name: '360', url: 'https://360zy.com/api.php/provide/vod' }
+    ];
+  }
+
+  try {
+    const candidates: any[] = [];
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        candidates.push(...parsed.map((item: any) => ({
+          ...item,
+          url: item.url || item.api || item.path,
+          key: item.key || item.name || '默认源',
+          name: item.name || '自定义源'
+        })));
+      }
+    }
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      try {
+        const val = localStorage.getItem(key);
+        if (!val) continue;
+        if (val.includes('customAPIs') || val.includes('sources') || val.includes('bfzy')) {
+          const parsed = JSON.parse(val);
+          const apis = parsed?.state?.customAPIs || parsed?.customAPIs || parsed?.state?.sources;
+          if (Array.isArray(apis) && apis.length > 0) {
+            candidates.push(...apis.map((item: any) => ({
+              ...item,
+              url: item.url || item.api || item.path,
+              key: item.key || item.name || '默认',
+              name: item.name || '自定义源'
+            })));
+          }
+        }
+      } catch {}
+    }
+
+    if(candidates.length > 0){
+      const map = new Map<string,any>();
+      candidates.forEach(it=>map.set(it.url,it));
+      return Array.from(map.values());
+    }
+  } catch (e) {}
+
+  return [
+    { key: 'bfzy', name: '风暴', url: 'https://bfzyapi.com/api.php/provide/vod' },
+    { key: '360', name: '360', url: 'https://360zy.com/api.php/provide/vod' }
+  ];
+}
+
+// 🚀 优化 A：复用 isSafeUrl 做安全校验
 function saveCustomSources(list: { name: string; url: string }[]) {
   try {
+    const validList = list.filter(item => item && item.url && item.url.length < 500 && isSafeUrl(item.url));
     const uniqueMap = new Map<string, { name: string; url: string }>();
-    list.forEach((item) => uniqueMap.set(item.url, item));
+    validList.forEach((item) => uniqueMap.set(item.url, item));
     const finalList = Array.from(uniqueMap.values()).slice(-15);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(finalList));
     return finalList;
   } catch (err: unknown) {
-    console.warn('保存自定义源失败', err);
     return [];
   }
 }
@@ -130,19 +169,14 @@ if (typeof document !== 'undefined') {
 }
 
 export default function AIFloatingBall() {
-  const isSafari =
-    typeof window !== 'undefined' &&
-    /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isSafari = typeof window !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [input, setInput] = useState('');
-  
-  // 🚀 初始化给默认值，解决 SSR 水合冲突
   const [messages, setMessages] = useState<Message[]>([INIT_MESSAGE]);
-  
   const [loading, setLoading] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [speechState, setSpeechState] = useState<SpeechState>('idle');
@@ -167,8 +201,6 @@ export default function AIFloatingBall() {
   const isOpenRef = useRef(false);
   const hasInitMessageRef = useRef(false);
   const skipSpeakThisTurnRef = useRef(false);
-  
-  // 记录当前正在流式渲染的 AI 气泡 ID，用于中断/失败清理
   const currentStreamMsgIdRef = useRef<string | null>(null);
 
   const focusTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -185,7 +217,6 @@ export default function AIFloatingBall() {
     setSpeechState(state);
   }, []);
 
-  // 🚀 客户端挂载后，异步读取本地历史，防止 hydration 闪屏
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -196,14 +227,11 @@ export default function AIFloatingBall() {
           setMessages(parsed);
         }
       }
-    } catch (e) {
-      console.warn("读取聊天历史失败", e);
-    }
+    } catch (e) {}
   }, []);
 
-  // 🚀 核心解耦：派发事件，不跳转、不关弹窗
   const loadVideoInsidePage = useCallback(async (vodId: string | number, title: string) => {
-    if (!vodId) {
+    if (vodId === null || vodId === undefined || vodId === '') {
       setMessages(prev => [...prev, { id: simpleUid(), role: 'system', type: 'system', content: '⚠️ 缺少视频ID，无法播放' }]);
       return;
     }
@@ -213,7 +241,6 @@ export default function AIFloatingBall() {
     speakTextRef.current?.(`已为您播放${title}`);
   }, []);
 
-  // 🚀 监听播放结束事件
   useEffect(() => {
     const handleVideoEnded = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -226,16 +253,13 @@ export default function AIFloatingBall() {
     return () => window.removeEventListener('friday-video-ended', handleVideoEnded);
   }, []);
 
-  // 同步 messages 到 ref 并持久化
   useEffect(() => {
     messagesRef.current = messages;
     if (typeof window !== 'undefined' && messages.length > 0) {
-      const toSave = messages.slice(-50); // 限制存 50 条
+      const toSave = messages.slice(-50);
       try {
         localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(toSave));
-      } catch (e) {
-        console.warn("本地存储超限", e);
-      }
+      } catch (e) {}
     }
   }, [messages]);
 
@@ -277,6 +301,7 @@ export default function AIFloatingBall() {
               localStorage.removeItem(CHAT_STORAGE_KEY);
               hasInitMessageRef.current = true;
               skipSpeakThisTurnRef.current = false;
+              currentStreamMsgIdRef.current = null;
               if (abortControllerRef.current) abortControllerRef.current.abort();
               if (agentAbortControllerRef.current) agentAbortControllerRef.current.abort();
               synthRef.current?.cancel();
@@ -415,7 +440,7 @@ export default function AIFloatingBall() {
           startRecognition();
         } else {
           setSpeechStateSafe('idle');
-          if (isSafari) {
+          if (isSafari && !forceResume) {
             isVoiceModeRef.current = false;
             setIsVoiceMode(false);
           }
@@ -455,7 +480,6 @@ export default function AIFloatingBall() {
     }
   };
 
-  // 🚀 修复：使用 setTimeout 等待 DOM 渲染完再滚动，防止复合卡片被截断
   const forceScrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
       setTimeout(() => {
@@ -498,40 +522,18 @@ export default function AIFloatingBall() {
     };
     try {
       switch (action) {
-        case 'play': await Promise.race([video.play(), new Promise((_, reject) => setTimeout(() => reject(new Error('播放超时')), PLAYER_ACTION_TIMEOUT))]); break;
+        case 'play': await video.play(); break;
         case 'pause': video.pause(); break;
         case 'seek_forward': if (!safeSeek(video.currentTime + 10)) return { success: false, msg: '无法快进' }; break;
         case 'seek_backward': if (!safeSeek(video.currentTime - 10)) return { success: false, msg: '无法快退' }; break;
         case 'seek_to': if (typeof time !== 'number' || !Number.isFinite(time) || !safeSeek(time)) return { success: false, msg: '时间不可达' }; break;
         case 'volume_up': video.volume = Math.min(1, video.volume + 0.1); break;
         case 'volume_down': video.volume = Math.max(0, video.volume - 0.1); break;
-        case 'fullscreen': if (video.requestFullscreen) await Promise.race([video.requestFullscreen(), new Promise((_, reject) => setTimeout(() => reject(new Error('全屏超时')), PLAYER_ACTION_TIMEOUT))]); else return { success: false, msg: '不支持全屏' }; break;
+        case 'fullscreen': if (video.requestFullscreen) await video.requestFullscreen(); else return { success: false, msg: '不支持全屏' }; break;
         default: return { success: false, msg: '未知操作' };
       }
       return { success: true, msg: `已执行操作: ${action}` };
     } catch (err: unknown) { return { success: false, msg: `异常: ${String((err as Error).message)}` }; }
-  };
-
-  const isSafeUrl = (urlStr: string) => {
-    try {
-      const url = new URL(urlStr);
-      if (!['http:', 'https:'].includes(url.protocol)) return false;
-      if (url.username || url.password) return false;
-      let host = url.hostname.toLowerCase();
-      if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
-      if (host.endsWith('.local') || host.endsWith('.localhost') || host === 'localhost' || host === '::' || host === '::1') return false;
-      if (host.startsWith('127.') || host.startsWith('0.') || host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) return false;
-      const parts = host.split('.');
-      if (parts.length === 4) {
-        const p0 = parseInt(parts[0]); const p1 = parseInt(parts[1]);
-        if (p0 === 172 && p1 >= 16 && p1 <= 31) return false;
-        if (p0 === 100 && p1 >= 64 && p1 <= 127) return false;
-        if (p0 >= 224 && p0 <= 239) return false;
-      }
-      if (host.startsWith('fe80:') || host.startsWith('fc00:') || host.startsWith('fd00:')) return false;
-      if (host.startsWith('::ffff:') || host.includes('127.0.0.1')) return false;
-      return true;
-    } catch { return false; }
   };
 
   const validateFrontendTool = (name: string, args: Record<string, any>): boolean => {
@@ -608,7 +610,12 @@ export default function AIFloatingBall() {
               if (tc.function?.name) current.name += tc.function.name;
               if (tc.function?.arguments) {
                 if (current.arguments.length + tc.function.arguments.length <= 50000) current.arguments += tc.function.arguments;
-                else { current.isDiscarded = true; current.name = ''; current.arguments = ''; }
+                else {
+                  current.isDiscarded = true;
+                  current.name = '';
+                  current.arguments = '';
+                  setMessages(p=>[...p,{id:simpleUid(),role:'system',type:'system',content:"⚠️工具调用参数过大，已丢弃本次工具请求"}]);
+                }
               }
               toolCalls.set(index, current);
             }
@@ -628,7 +635,6 @@ export default function AIFloatingBall() {
         }
         buffer += decoder.decode(value, { stream: true });
         if (buffer.length > MAX_FRONTEND_SSE_BUFFER) {
-          console.warn('数据包过大，已安全截断');
           buffer = buffer.slice(0, MAX_FRONTEND_SSE_BUFFER);
           streamCorrupted = true; receivedDone = true; break;
         }
@@ -644,8 +650,6 @@ export default function AIFloatingBall() {
       }
 
       if (!mountedRef.current) return;
-      
-      // 🚀 修复：异常或网络断开时，清理没说完的 AI 废话气泡
       if (streamCorrupted || !receivedDone) {
         if (currentStreamMsgIdRef.current) {
           setMessages(prev => prev.filter(m => m.id !== currentStreamMsgIdRef.current));
@@ -657,7 +661,8 @@ export default function AIFloatingBall() {
       }
 
       if (toolCalls.size > 0) {
-        const tempMsgId = currentStreamMsgIdRef.current; 
+        const tempMsgId = currentStreamMsgIdRef.current;
+        currentStreamMsgIdRef.current = null;
         for (const [, call] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
           if (!call.name || !call.arguments || call.isDiscarded) continue;
           try {
@@ -676,9 +681,6 @@ export default function AIFloatingBall() {
               setLoading(true);
               const sources = getCustomSources();
               
-              console.log("🔍 search_movie keyword:", args.keyword);
-              console.log("🔍 sources:", sources);
-              
               const searchRes = await fetch('/api/search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -688,8 +690,6 @@ export default function AIFloatingBall() {
               if (searchRes.ok) {
                 const text = await searchRes.text();
                 let realList: any[] = [];
-                
-                console.log("🔍 /api/search 原始返回 text:", text);
                 
                 try {
                   const searchData = JSON.parse(text);
@@ -707,15 +707,11 @@ export default function AIFloatingBall() {
                   }
                 }
                 
-                console.log("🔍 过滤前 realList:", realList);
-                
                 realList = realList.filter(m => m && m.vod_id && (m.vod_name || m.title));
-                
-                console.log("🔍 过滤后有效数据 realList:", realList);
                 
                 if (realList.length > 0) {
                   const formattedList = realList
-                    .slice(0, 5)
+                    .slice(0, 10)
                     .map((m: any) => ({
                       title: m.vod_name || m.title,
                       poster: m.vod_pic || m.poster || 'https://picsum.photos/300/450',
@@ -736,7 +732,7 @@ export default function AIFloatingBall() {
                       type: 'composite_movie', 
                       content: '', 
                       compositeMovie: {
-                        summary: `已为您找到 ${formattedList.length} 部关于“${args.keyword}”的影片，点击卡片直接播放：`,
+                        summary: `已为您找到 ${formattedList.length} 部关于“${args.keyword}”的详细真实影片，点击卡片直接播放：`,
                         items: formattedList
                       }
                     }
@@ -745,13 +741,12 @@ export default function AIFloatingBall() {
                 } else {
                   setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: '抱歉，采集站没有找到相关真实资源。' }]);
                 }
-          } else {
+              } else {
                 const errData = await searchRes.json().catch(() => ({}));
                 setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: `⚠️ 搜索接口异常：${errData.error || searchRes.status}` }]);
               }
               setLoading(false);
             } else if (call.name === 'fetch_and_add_source') {
-              // 🚀 修复：清理流式引用防错乱
               currentStreamMsgIdRef.current = null;
               await executeAgentFetchSources();
             } else if (call.name === 'add_video_source') {
@@ -813,6 +808,9 @@ export default function AIFloatingBall() {
       const text = overrideText || input.trim();
       if (!text || loading) return;
 
+      if(isVoiceModeRef.current){
+        try{ recognitionRef.current?.stop(); }catch{}
+      }
       synthRef.current?.cancel();
       setInput('');
       setIsExpanded(true);
@@ -871,7 +869,8 @@ export default function AIFloatingBall() {
     <div className={`fixed inset-0 z-[9999] flex items-start justify-center pt-[15vh] pointer-events-none transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`} style={{ transform: 'translateZ(1px)' }}>
       <div className="absolute inset-0 bg-black/20 pointer-events-auto backdrop-blur-sm transition-opacity" style={{ transform: 'translateZ(1px)' }} onClick={() => togglePanel(false)}></div>
       
-      <div ref={popupRef} onClick={expandPopup} className={`relative bg-[#050505] overflow-hidden flex flex-col items-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] border border-white/10 transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] will-change-transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-90 -translate-y-8 opacity-0'}`} style={{ transform: 'translateZ(1px)', width: isExpanded ? '90%' : '260px', maxWidth: isExpanded ? '360px' : '260px', height: isExpanded ? '500px' : '110px', borderRadius: isExpanded ? '36px' : '55px', cursor: isExpanded ? 'default' : 'pointer' }}>
+      {/* 🚀 优化 C：弹窗高度适配移动端视口 vh */}
+      <div ref={popupRef} onClick={expandPopup} className={`relative bg-[#050505] overflow-hidden flex flex-col items-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] border border-white/10 transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] will-change-transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-90 -translate-y-8 opacity-0'}`} style={{ transform: 'translateZ(1px)', width: isExpanded ? '90%' : '260px', maxWidth: isExpanded ? '360px' : '260px', height: isExpanded ? 'min(80vh, 520px)' : '110px', borderRadius: isExpanded ? '36px' : '55px', cursor: isExpanded ? 'default' : 'pointer' }}>
         
         <div className={`absolute bottom-0 left-0 w-full pointer-events-none z-0 overflow-hidden transition-all duration-700 ${isExpanded ? 'h-[100px]' : 'h-[60px]'} ${isOpen ? 'opacity-100' : 'opacity-0'}`}>
           <div className="absolute bottom-[-15px] left-[10%] w-[80%] h-[50px] bg-[radial-gradient(ellipse_at_bottom,rgba(0,140,255,0.3)_0%,transparent_70%)] blur-[15px] animate-breathe-1 mix-blend-screen"></div>
@@ -882,7 +881,11 @@ export default function AIFloatingBall() {
         {!isExpanded && (
           <div className="relative z-10 w-full h-full flex flex-col justify-center px-6">
             <p className="text-[13px] text-gray-200 leading-relaxed font-medium line-clamp-2 overflow-hidden pb-2">
-              {lastMsg?.type === 'composite_movie' ? `已为您找到真实资源，点击展开` : lastMsg?.content || '点击这里和我对话...'}
+              {lastMsg?.type === 'composite_movie' 
+                ? (lastMsg.compositeMovie?.items && lastMsg.compositeMovie.items.length > 0 
+                    ? `已为您找到真实资源，点击展开` 
+                    : `未找到资源，点击展开查看详情`) 
+                : lastMsg?.content || '点击这里和我对话...'}
             </p>
             <div className="absolute bottom-2 left-6 text-[10px] text-gray-500">点击展开</div>
           </div>
@@ -906,7 +909,6 @@ export default function AIFloatingBall() {
                     </div>
                   )}
 
-                  {/* 苹果AI风格复合消息块：AI总结 + 顶部横向海报预览 + 卡片列表 */}
                   {msg.type === 'composite_movie' && msg.compositeMovie && (
                     <div className="w-full mt-2 animate-fadeIn">
                       <div className="text-[13px] text-gray-200 leading-relaxed mb-3">
@@ -914,7 +916,8 @@ export default function AIFloatingBall() {
                       </div>
                       <div className="relative w-full h-[110px] rounded-2xl overflow-hidden mb-3 bg-gradient-to-br from-indigo-900/40 to-emerald-900/40">
                         <div className="flex gap-2 px-3 pt-3 overflow-x-auto scrollbar-hide absolute inset-0">
-                          {msg.compositeMovie.items.slice(0, 3).map((item, idx) => (
+                          {/* 🚀 优化 B：横向预览同样展示前 10 张 */}
+                          {msg.compositeMovie.items.slice(0, 10).map((item, idx) => (
                             <img
                               key={idx}
                               src={item.poster}
