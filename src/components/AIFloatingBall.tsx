@@ -809,7 +809,10 @@ export default function AIFloatingBall() {
           signal: abortControllerRef.current.signal,
         });
 
-        if (!response.ok) throw new Error('网络错误');
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `请求失败，状态码: ${response.status}`);
+        }
         await processStreamResponse(response);
       } catch (err: unknown) {
         if ((err as Error).name !== 'AbortError' && mountedRef.current) {
