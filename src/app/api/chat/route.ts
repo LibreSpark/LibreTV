@@ -34,6 +34,8 @@ function checkRateLimit(ip: string): boolean {
 function getCorsHeaders(req: Request): Record<string, string> | null {
   const origin = req.headers.get("origin") || "";
   const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
+
+  // 未配置环境变量时：仅放行本地开发
   if (!allowedOriginsEnv) {
     if (!origin || origin.includes("localhost") || origin.includes("127.0.0.1")) {
       return {
@@ -46,6 +48,7 @@ function getCorsHeaders(req: Request): Record<string, string> | null {
     }
     return null;
   }
+
   const allowedList = allowedOriginsEnv.split(",").map((o) => o.trim());
   if (origin && allowedList.includes(origin)) {
     return {
@@ -67,7 +70,7 @@ export async function OPTIONS(req: Request) {
 
 function sanitizeMessages(messages: any[]) {
   if (!Array.isArray(messages)) return [];
-  
+
   const cleaned = messages
     .slice(-50)
     .filter(
@@ -81,7 +84,7 @@ function sanitizeMessages(messages: any[]) {
       role: msg.role,
       content: msg.content.trim().slice(0, 2000),
     }));
-    
+
   return cleaned.length > MAX_MESSAGES ? cleaned.slice(-MAX_MESSAGES) : cleaned;
 }
 
@@ -227,7 +230,7 @@ export async function POST(req: Request) {
       action?: string;
       playerContext?: string;
     };
-    
+
     const apiKey = process.env.ZHIPU_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "未配置 ZHIPU_API_KEY" }), {
