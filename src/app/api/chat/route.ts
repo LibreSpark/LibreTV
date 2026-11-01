@@ -6,8 +6,7 @@ const MAX_SSE_BUFFER = 1024 * 512;
 const MAX_TOOL_ARGS_SIZE = 100 * 1024;
 const MAX_TOOL_COUNT = 5;
 
-// 限流（生产环境多实例建议换 Redis）
-const rateLimitMap = new Map();
+const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
 const RATE_LIMIT_MAX = 20;
 const RATE_LIMIT_WINDOW = 60 * 1000;
 
@@ -32,8 +31,7 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// 严格 CORS 校验
-function getCorsHeaders(req: Request): Record<string, any> | null {
+function getCorsHeaders(req: Request): Record<string, string> | null {
   const origin = req.headers.get("origin") || "";
   const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
   if (!allowedOriginsEnv) {
@@ -69,7 +67,9 @@ export async function OPTIONS(req: Request) {
 
 function sanitizeMessages(messages: any[]) {
   if (!Array.isArray(messages)) return [];
-  let cleaned = messages
+  
+  // ✅ 1. 这里必须是 const
+  const cleaned = messages
     .slice(-50)
     .filter(
       (msg) =>
@@ -82,13 +82,13 @@ function sanitizeMessages(messages: any[]) {
       role: msg.role,
       content: msg.content.trim().slice(0, 2000),
     }));
+    
   return cleaned.length > MAX_MESSAGES ? cleaned.slice(-MAX_MESSAGES) : cleaned;
 }
 
-// 服务端工具参数严格校验
 function validateToolCall(
   name: string,
-  args: any
+  args: Record<string, any>
 ): { valid: boolean; msg?: string } {
   if (name === "search_movie") {
     if (
@@ -206,7 +206,7 @@ export async function POST(req: Request) {
       chunks.push(value);
     }
 
-    let payload: any;
+    let payload: Record<string, any>;
     try {
       payload = JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
     } catch {
@@ -223,7 +223,12 @@ export async function POST(req: Request) {
       });
     }
 
-    const { messages, action, playerContext } = payload;
+    const { messages, action, playerContext } = payload as {
+      messages: any[];
+      action?: string;
+      playerContext?: string;
+    };
+    
     const apiKey = process.env.ZHIPU_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "未配置 ZHIPU_API_KEY" }), {
@@ -232,7 +237,8 @@ export async function POST(req: Request) {
       });
     }
 
-    let finalMessages = sanitizeMessages(messages);
+    // ✅ 2. 这里必须是 const
+    const finalMessages = sanitizeMessages(messages);
 
     const tools = [
       {
@@ -312,7 +318,7 @@ export async function POST(req: Request) {
     let toolChoice: any = "auto";
 
     if (action === "fetch_sources") {
-      let githubData: any[] = [];
+      let githubData: { name: string; api: string }[] = [];
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1500);
       try {
@@ -342,14 +348,8 @@ export async function POST(req: Request) {
 
       if (githubData.length === 0) {
         githubData = [
-          {
-            name: "非凡资源",
-            api: "https://cj.ffzyapi.com/api.php/provide/vod/",
-          },
-          {
-            name: "量子资源",
-            api: "https://cj.lziapi.com/api.php/provide/vod/",
-          },
+          { name: "非凡资源", api: "https://cj.ffzyapi.com/api.php/provide/vod/" },
+          { name: "量子资源", api: "https://cj.lziapi.com/api.php/provide/vod/" },
         ];
       }
 
@@ -412,7 +412,8 @@ export async function POST(req: Request) {
         let receivedUpstreamDone = false;
         let streamInvalid = false;
 
-        let toolCallBuffer: any[] = [];
+        // ✅ 3. 这里必须是 const，且带类型
+        const toolCallBuffer: { name: string; arguments: string }[] = [];
         let hasToolCall = false;
         let totalToolArgsSize = 0;
 
@@ -553,10 +554,9 @@ export async function POST(req: Request) {
           }
 
           controller.close();
-        } catch (error: any) {
-          // 异常直接 error，绝不发送伪造 DONE
+        } catch (err: unknown) {
           try {
-            controller.error(error);
+            controller.error(err);
           } catch {}
         } finally {
           req.signal.removeEventListener("abort", onAbort);
@@ -580,8 +580,8 @@ export async function POST(req: Request) {
         ...corsHeaders,
       },
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (err: unknown) {
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
