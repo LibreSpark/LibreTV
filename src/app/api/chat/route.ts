@@ -1,221 +1,589 @@
 export const runtime = "nodejs";
 
-export async function OPTIONS(req: Request) {
-  const origin = req.headers.get('origin') || '*';
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
-}
+const MAX_MESSAGES = 8;
+const FETCH_SOURCES_KEEP_ROUND = 6;
+const MAX_SSE_BUFFER = 1024 * 512;
+const MAX_TOOL_ARGS_SIZE = 100 * 1024;
+const MAX_TOOL_COUNT = 5;
 
-// ✅ 补丁3：简易字符估算裁剪逻辑
-function sanitizeMessages(rawMessages: any[]) {
-  if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
-    return [{ role: 'user', content: '你好' }];
-  }
-  
-  const cleaned: any[] = [];
-  let totalChars = 0;
-  const MAX_CHARS = 6000; // 控制最大长度，防止超限
+// 限流（生产环境多实例建议换 Redis）
+const rateLimitMap = new Map();
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW = 60 * 1000;
 
-  // 从后往前遍历，保留最新消息
-  for (let i = rawMessages.length - 1; i >= 0; i--) {
-    const msg = rawMessages[i];
-    if (!msg || !msg.role || !msg.content || String(msg.content).trim() === '') continue;
-    
-    const contentStr = String(msg.content);
-    // 如果加上这条会超长，且已经有消息了，就停止
-    if (totalChars + contentStr.length > MAX_CHARS && cleaned.length > 0) break;
-
-    cleaned.unshift({ role: msg.role, content: contentStr });
-    totalChars += contentStr.length;
-  }
-
-  // 合并相邻同角色消息
-  const merged: any[] = [];
-  let lastRole = '';
-  for (const msg of cleaned) {
-    if (msg.role === lastRole && (msg.role === 'user' || msg.role === 'assistant')) {
-      merged[merged.length - 1].content += '\n' + String(msg.content);
-    } else {
-      merged.push({ role: msg.role, content: String(msg.content) });
-      lastRole = msg.role;
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  if (rateLimitMap.size > 1000) {
+    for (const [key, value] of rateLimitMap.entries()) {
+      if (now - value.lastReset > RATE_LIMIT_WINDOW) rateLimitMap.delete(key);
     }
   }
-
-  if (!merged.some(m => m.role === 'user')) {
-    merged.push({ role: 'user', content: '继续' });
+  const record = rateLimitMap.get(ip);
+  if (!record) {
+    rateLimitMap.set(ip, { count: 1, lastReset: now });
+    return true;
   }
-  return merged;
+  if (now - record.lastReset > RATE_LIMIT_WINDOW) {
+    rateLimitMap.set(ip, { count: 1, lastReset: now });
+    return true;
+  }
+  if (record.count >= RATE_LIMIT_MAX) return false;
+  record.count += 1;
+  return true;
+}
+
+// 严格 CORS 校验
+function getCorsHeaders(req: Request): Record<string, any> | null {
+  const origin = req.headers.get("origin") || "";
+  const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
+  if (!allowedOriginsEnv) {
+    if (!origin || origin.includes("localhost") || origin.includes("127.0.0.1")) {
+      return {
+        "Access-Control-Allow-Origin": origin || "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400",
+        Vary: "Origin",
+      };
+    }
+    return null;
+  }
+  const allowedList = allowedOriginsEnv.split(",").map((o) => o.trim());
+  if (origin && allowedList.includes(origin)) {
+    return {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400",
+      Vary: "Origin",
+    };
+  }
+  return null;
+}
+
+export async function OPTIONS(req: Request) {
+  const corsHeaders = getCorsHeaders(req);
+  if (!corsHeaders) return new Response("CORS Blocked", { status: 403 });
+  return new Response(null, { headers: corsHeaders });
+}
+
+function sanitizeMessages(messages: any[]) {
+  if (!Array.isArray(messages)) return [];
+  let cleaned = messages
+    .slice(-50)
+    .filter(
+      (msg) =>
+        msg &&
+        (msg.role === "user" || msg.role === "assistant") &&
+        typeof msg.content === "string" &&
+        msg.content.trim().length > 0
+    )
+    .map((msg) => ({
+      role: msg.role,
+      content: msg.content.trim().slice(0, 2000),
+    }));
+  return cleaned.length > MAX_MESSAGES ? cleaned.slice(-MAX_MESSAGES) : cleaned;
+}
+
+// 服务端工具参数严格校验
+function validateToolCall(
+  name: string,
+  args: any
+): { valid: boolean; msg?: string } {
+  if (name === "search_movie") {
+    if (
+      typeof args.keyword !== "string" ||
+      args.keyword.trim().length === 0 ||
+      args.keyword.length > 100
+    ) {
+      return { valid: false, msg: "关键词为空或超长" };
+    }
+    return { valid: true };
+  }
+  if (name === "add_video_source" || name === "update_api_config") {
+    if (typeof args.api_url !== "string" || args.api_url.length > 500) {
+      return { valid: false, msg: "URL长度不合法" };
+    }
+    if (
+      name === "add_video_source" &&
+      (typeof args.name !== "string" || args.name.length > 30)
+    ) {
+      return { valid: false, msg: "源名称不合法" };
+    }
+    try {
+      const u = new URL(args.api_url);
+      if (!["http:", "https:"].includes(u.protocol)) {
+        return { valid: false, msg: "协议不合法" };
+      }
+      if (u.username || u.password) {
+        return { valid: false, msg: "禁止包含账密" };
+      }
+      const h = u.hostname.toLowerCase();
+      if (
+        h === "localhost" ||
+        h === "127.0.0.1" ||
+        h === "::1" ||
+        h.startsWith("192.168.") ||
+        h.startsWith("10.") ||
+        h.startsWith("172.")
+      ) {
+        return { valid: false, msg: "禁止访问内网" };
+      }
+      return { valid: true };
+    } catch {
+      return { valid: false, msg: "URL格式错误" };
+    }
+  }
+  if (name === "control_player") {
+    const validActions = [
+      "play",
+      "pause",
+      "seek_forward",
+      "seek_backward",
+      "volume_up",
+      "volume_down",
+      "fullscreen",
+      "seek_to",
+    ];
+    if (!validActions.includes(args.action)) {
+      return { valid: false, msg: "动作不合法" };
+    }
+    if (
+      args.action === "seek_to" &&
+      (typeof args.time !== "number" || !Number.isFinite(args.time))
+    ) {
+      return { valid: false, msg: "时间参数错误" };
+    }
+    return { valid: true };
+  }
+  if (name === "fetch_and_add_source") return { valid: true };
+  return { valid: false, msg: "未知工具" };
 }
 
 export async function POST(req: Request) {
+  const corsHeaders = getCorsHeaders(req);
+  if (!corsHeaders) {
+    return new Response(JSON.stringify({ error: "CORS Blocked" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
-    // ✅ 补丁1：接收独立 playerContext
-    const { messages, action, playerContext } = await req.json(); 
-    const apiKey = process.env.ZHIPU_API_KEY;
-    if (!apiKey) return new Response(JSON.stringify({ error: "未配置 ZHIPU_API_KEY" }), { status: 500 });
-
-    let finalMessages = sanitizeMessages(messages || []);
-    if (action && action !== 'fetch_sources') return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400 });
-
-    // ✅ 补丁1：将 playerContext 安全拼接到最后一条 user 消息
-    if (playerContext) {
-      const lastUserMsg = finalMessages[finalMessages.length - 1];
-      if (lastUserMsg && lastUserMsg.role === 'user') {
-        lastUserMsg.content = `${playerContext}\n用户说：${lastUserMsg.content}`;
-      }
+    const ip =
+      process.env.TRUST_PROXY === "true"
+        ? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+        : req.headers.get("x-real-ip") || "unknown";
+    if (!checkRateLimit(ip)) {
+      return new Response(JSON.stringify({ error: "请求过于频繁" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
+    const MAX_PAYLOAD = 256 * 1024;
+    const reader = req.body?.getReader();
+    if (!reader) {
+      return new Response(JSON.stringify({ error: "Empty body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    let receivedLength = 0;
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      receivedLength += value.length;
+      if (receivedLength > MAX_PAYLOAD) {
+        await reader.cancel();
+        return new Response(JSON.stringify({ error: "请求体过大" }), {
+          status: 413,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      chunks.push(value);
+    }
+
+    let payload: any;
+    try {
+      payload = JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
+    } catch {
+      return new Response(JSON.stringify({ error: "JSON格式错误" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!payload || typeof payload !== "object") {
+      return new Response(JSON.stringify({ error: "Payload 必须为对象" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { messages, action, playerContext } = payload;
+    const apiKey = process.env.ZHIPU_API_KEY;
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: "未配置 ZHIPU_API_KEY" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    let finalMessages = sanitizeMessages(messages);
 
     const tools = [
       {
-        "type": "function",
-        "function": {
-          "name": "search_movie",
-          "description": "只用于搜索电影或推荐影视资源。如果用户想要看片、找资源、求推荐电影时才调用。闲聊、问天气、问常识时绝对不要调用此工具。",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "keyword": { "type": "string", "description": "电影名称或推荐类型（例如：蜘蛛侠、2026年最新电影、热门科幻片）" }
-            },
-            "required": ["keyword"]
-          }
-        }
+        type: "function",
+        function: {
+          name: "search_movie",
+          description: "只用于搜索电影。",
+          parameters: {
+            type: "object",
+            properties: { keyword: { type: "string" } },
+            required: ["keyword"],
+          },
+        },
       },
       {
-        "type": "function",
-        "function": {
-          "name": "control_player",
-          "description": "控制网页视频播放器。可以播放、暂停、快进、回退、跳转到绝对时间、调音量、全屏。",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "action": {
-                "type": "string",
-                "enum": ["play", "pause", "seek_forward", "seek_backward", "volume_up", "volume_down", "fullscreen", "seek_to"],
-                "description": "要执行的操作"
-              },
-              "time": {
-                "type": "number",
-                "description": "当action为seek_to时必填，表示要跳转到的绝对秒数，例如80。"
-              }
+        type: "function",
+        function: {
+          name: "control_player",
+          description: "控制播放器。",
+          parameters: {
+            type: "object",
+            properties: {
+              action: { type: "string" },
+              time: { type: "number" },
             },
-            "required": ["action"]
-          }
-        }
+            required: ["action"],
+          },
+        },
       },
-      { type: "function", function: { name: "update_api_config", description: "修改全局 API 配置。", parameters: { type: "object", properties: { api_url: { type: "string" } }, required: ["api_url"] } } },
-      { type: "function", function: { name: "fetch_and_add_source", description: "当用户要求找新接口、新源时调用此函数。", parameters: { type: "object", properties: {} } } },
-      { type: "function", function: { name: "add_video_source", description: "将选好的视频源写入系统。", parameters: { type: "object", properties: { name: { type: "string" }, api_url: { type: "string" } }, required: ["name", "api_url"] } } }
+      {
+        type: "function",
+        function: {
+          name: "update_api_config",
+          description: "修改本地 API 配置。",
+          parameters: {
+            type: "object",
+            properties: { api_url: { type: "string" } },
+            required: ["api_url"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "fetch_and_add_source",
+          description: "当用户要求找新接口时调用。",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "add_video_source",
+          description: "将选好的视频源写入系统。",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              api_url: { type: "string" },
+            },
+            required: ["name", "api_url"],
+          },
+        },
+      },
     ];
 
-    // ✅ 补丁2：增强 Prompt，指导模型识别系统反馈
-    let systemPrompt = `你是一个名叫 Friday 的全能 AI 助手，驻扎在 LibreTV 影视网站。
-你有两个核心能力：
-1. 【影视管家模式】：当用户想看电影、找资源、求推荐时，你必须立刻调用 search_movie 工具。提取电影名或推荐条件作为 keyword。绝对禁止反问，直接调用！
-2. 【视频控制模式】：如果用户要求播放、暂停、快进、调音量、跳转到指定时间或全屏，你必须立刻调用 control_player 工具。
-3. 【日常聊天模式】：如果用户问与电影无关的事情（比如"你是谁"、"今天天气"、"讲笑话"），你要像朋友一样自然回复，绝对不要调用任何工具。
-【最高准则】：
-- 系统会附带当前播放器的状态信息。你要根据该状态回答用户关于进度的提问。
-- 只有当用户确实有对应需求时才调用工具，千万不要把闲聊当成电影名去搜。
-- 请用简短、自然、流畅的口语回答，不要像机器人。
-- 【注意】：如果你看到以"【内部系统执行结果"开头的消息，那是工具的执行反馈，不是用户说的话，请根据执行结果继续下一步，或者总结给用户。`;
+    let systemPrompt = `你是 Friday 助手。能力：1. search_movie 搜片；2. control_player 控播放；3. 日常闲聊。
+严禁输出废话，系统提示带[]的环境信息不要复述，严禁瞎联想旧电影。
+控制播放时 seek_to 的 time 单位必须是秒（number）。`;
 
-    if (action === 'fetch_sources') {
-      let githubData = [];
+    if (playerContext) {
+      systemPrompt += `\n【环境】${String(playerContext).slice(0, 500)}`;
+    }
+
+    let apiMessages = [{ role: "system", content: systemPrompt }, ...finalMessages];
+    let finalTools = tools;
+    let toolChoice: any = "auto";
+
+    if (action === "fetch_sources") {
+      let githubData: any[] = [];
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1500);
       try {
-        const ghRes = await fetch('https://raw.githubusercontent.com/gaotianliuyun/gao/master/js.json', { signal: controller.signal });
+        const ghRes = await fetch(
+          "https://raw.githubusercontent.com/gaotianliuyun/gao/master/js.json",
+          { signal: controller.signal }
+        );
         if (ghRes.ok) {
-          try {
-            const data = await ghRes.json();
-            if (data && data.sites) {
-              githubData = data.sites.slice(0, 10).map((s: any) => ({ name: s.name, api: s.api }));
-            }
-          } catch (jsonErr) { console.warn("Github JSON解析失败"); }
+          const data = await ghRes.json();
+          if (data && data.sites) {
+            githubData = data.sites
+              .filter(
+                (s: any) =>
+                  typeof s.name === "string" &&
+                  typeof s.api === "string" &&
+                  s.api.startsWith("http")
+              )
+              .slice(0, 10)
+              .map((s: any) => ({ name: s.name, api: s.api }));
+          }
         }
-      } catch (e) { console.warn("Github拉取失败或超时，使用兜底源"); } finally { clearTimeout(timeoutId); }
-      
+      } catch {
+        // ignore
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
       if (githubData.length === 0) {
         githubData = [
-          { name: "非凡资源", api: "https://cj.ffzyapi.com/api.php/provide/vod/" },
-          { name: "量子资源", api: "https://cj.lziapi.com/api.php/provide/vod/" }
+          {
+            name: "非凡资源",
+            api: "https://cj.ffzyapi.com/api.php/provide/vod/",
+          },
+          {
+            name: "量子资源",
+            api: "https://cj.lziapi.com/api.php/provide/vod/",
+          },
         ];
       }
-      
-      const recentChat = finalMessages.filter((m: any) => m.role !== 'system').slice(-6);
-      finalMessages = [...recentChat, { role: 'user', content: `系统为你抓取到以下源列表，请立刻调用 add_video_source 挑选一个添加：${JSON.stringify(githubData)}` }];
-      systemPrompt = '你正在执行自动添加源的任务，必须直接调用 add_video_source，禁止输出废话。';
+
+      apiMessages = [
+        { role: "system", content: "请直接调用 add_video_source。" },
+        ...finalMessages.slice(-FETCH_SOURCES_KEEP_ROUND),
+        { role: "user", content: `源列表：${JSON.stringify(githubData)}` },
+      ];
+      finalTools = tools.filter((t) => t.function.name !== "fetch_and_add_source");
+      toolChoice = { type: "function", function: { name: "add_video_source" } };
     }
 
-    const finalTools = action === 'fetch_sources' ? tools.filter(t => t.function.name !== 'fetch_and_add_source') : tools;
-    const apiMessages = [{ role: 'system', content: systemPrompt }, ...finalMessages];
+    const upstreamController = new AbortController();
+    const onAbort = () => upstreamController.abort();
+    req.signal.addEventListener("abort", onAbort);
 
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-      body: JSON.stringify({
-        model: 'glm-4-air',
-        messages: apiMessages,
-        tools: finalTools,
-        stream: true,
-        temperature: 0.3
-      })
-    });
+    const response = await fetch(
+      "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({
+          model: "glm-4-air",
+          messages: apiMessages,
+          tools: finalTools,
+          tool_choice: toolChoice,
+          stream: true,
+          temperature: 0.2,
+          max_tokens: 1024,
+        }),
+        signal: upstreamController.signal,
+      }
+    );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      if (response.body) { try { await response.body.cancel(); } catch { /* ignore */ } }
-      return new Response(JSON.stringify({ error: `上游报错: ${errText}` }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+    if (!response.ok || !response.body) {
+      const errText = response.body ? await response.text() : "Empty response";
+      if (response.body) {
+        try {
+          await response.body.cancel();
+        } catch {}
+      }
+      req.signal.removeEventListener("abort", onAbort);
+      return new Response(JSON.stringify({ error: `上游报错: ${errText}` }), {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-    
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const errData = await response.text();
-      if (response.body) { try { await response.body.cancel(); } catch { /* ignore */ } }
-      return new Response(JSON.stringify({ error: `API格式错误: ${errData}` }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
 
-    // Safari 心跳修复
-    const upstreamReader = response.body!.getReader();
     const stream = new ReadableStream({
       async start(controller) {
+        const decoder = new TextDecoder();
         const encoder = new TextEncoder();
-        const pingTimer = setInterval(() => {
-          try { controller.enqueue(encoder.encode(': ping\n\n')); } catch (e) { clearInterval(pingTimer); }
-        }, 750);
+        const upstreamReader = response.body!.getReader();
+
+        let buffer = "";
+        let receivedUpstreamDone = false;
+        let streamInvalid = false;
+
+        let toolCallBuffer: any[] = [];
+        let hasToolCall = false;
+        let totalToolArgsSize = 0;
 
         try {
           while (true) {
             const { done, value } = await upstreamReader.read();
             if (done) break;
-            controller.enqueue(value);
+
+            buffer += decoder.decode(value, { stream: true });
+            if (buffer.length > MAX_SSE_BUFFER) {
+              throw new Error("上游 SSE 数据块过大");
+            }
+
+            let match;
+            const delimiter = /\r\n\r\n|\n\n|\r\r/;
+
+            while ((match = delimiter.exec(buffer)) !== null) {
+              const eventBlock = buffer.slice(0, match.index);
+              buffer = buffer.slice(match.index + match[0].length);
+
+              const dataMatches = eventBlock.match(/^data:\s?(.*)$/gm);
+              if (!dataMatches) continue;
+              const dataStr = dataMatches
+                .map((m) => m.replace(/^data:\s?/, ""))
+                .join("\n");
+
+              if (dataStr === "[DONE]") {
+                receivedUpstreamDone = true;
+                break;
+              }
+
+              try {
+                const parsed = JSON.parse(dataStr);
+                const delta = parsed.choices?.[0]?.delta;
+
+                if (delta?.tool_calls) {
+                  hasToolCall = true;
+                  for (const tc of delta.tool_calls) {
+                    const idx = tc.index ?? 0;
+                    if (!toolCallBuffer[idx]) {
+                      toolCallBuffer[idx] = { name: "", arguments: "" };
+                    }
+                    if (tc.function?.name) {
+                      toolCallBuffer[idx].name += tc.function.name;
+                    }
+                    if (tc.function?.arguments) {
+                      toolCallBuffer[idx].arguments += tc.function.arguments;
+                      totalToolArgsSize += tc.function.arguments.length;
+
+                      const activeCount = toolCallBuffer.filter(
+                        (b) => b && (b.name || b.arguments)
+                      ).length;
+                      if (
+                        totalToolArgsSize > MAX_TOOL_ARGS_SIZE ||
+                        activeCount > MAX_TOOL_COUNT
+                      ) {
+                        streamInvalid = true;
+                        throw new Error("工具参数过多或体积过大");
+                      }
+                    }
+                  }
+                } else {
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`)
+                  );
+                }
+              } catch {
+                streamInvalid = true;
+                throw new Error("数据解析失败或异常");
+              }
+            }
+
+            if (receivedUpstreamDone || streamInvalid) break;
           }
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        } catch (error) {
-          controller.error(error);
-        } finally {
-          clearInterval(pingTimer);
+
+          if (!receivedUpstreamDone || streamInvalid) {
+            throw new Error("上游异常或数据损坏，未正常完成");
+          }
+
+          if (hasToolCall) {
+            let isValid = true;
+            let errorMsg = "";
+
+            const activeCalls = toolCallBuffer.filter(
+              (c) => c && c.name && c.arguments
+            );
+
+            for (const call of activeCalls) {
+              try {
+                const args = JSON.parse(call.arguments);
+                const v = validateToolCall(call.name, args);
+                if (!v.valid) {
+                  isValid = false;
+                  errorMsg = `工具 ${call.name} 校验失败: ${v.msg}`;
+                  break;
+                }
+              } catch {
+                isValid = false;
+                errorMsg = "参数 JSON 解析失败";
+                break;
+              }
+            }
+
+            if (isValid && activeCalls.length > 0) {
+              const toolMsg = {
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: activeCalls.map((c, i) => ({
+                        index: i,
+                        function: { name: c.name, arguments: c.arguments },
+                      })),
+                    },
+                  },
+                ],
+              };
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify(toolMsg)}\n\n`)
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            } else {
+              const errMsg = {
+                choices: [
+                  {
+                    delta: {
+                      content: `\n[服务端拦截] ${errorMsg || "无效工具调用"}`,
+                    },
+                  },
+                ],
+              };
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify(errMsg)}\n\n`)
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            }
+          } else {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          }
+
           controller.close();
+        } catch (error: any) {
+          // 异常直接 error，绝不发送伪造 DONE
+          try {
+            controller.error(error);
+          } catch {}
+        } finally {
+          req.signal.removeEventListener("abort", onAbort);
+          try {
+            upstreamReader.releaseLock();
+          } catch {}
         }
       },
-      cancel() { upstreamReader.cancel(); }
+      cancel() {
+        upstreamController.abort();
+        req.signal.removeEventListener("abort", onAbort);
+      },
     });
 
     return new Response(stream, {
-      headers: { 
-        'Content-Type': 'text/event-stream', 
-        'Cache-Control': 'no-cache', 
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no'
-      }
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+        ...corsHeaders,
+      },
     });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 }
