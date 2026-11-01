@@ -131,7 +131,6 @@ export default function AIFloatingBall() {
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const redirectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ 修复：给 useRef 提供 null 初始值，完美适配 Next 15 严格类型
   const handleSendRef = useRef<((overrideText?: string) => Promise<void>) | null>(null);
   const speakTextRef = useRef<((text: string, forceResume?: boolean) => void) | null>(null);
 
