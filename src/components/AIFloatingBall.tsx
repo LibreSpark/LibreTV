@@ -1,6 +1,46 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useStore } from '@/lib/store';
+function getCustomSources(): any[] {
+  try {
+    // 🚀 1. 遍历 localStorage，寻找 Zustand 持久化的数据
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      
+      try {
+        const val = localStorage.getItem(key);
+        if (!val) continue;
+        
+        // 只要存的数据里包含这几个词，说明大概率是源配置
+        if (val.includes('customAPIs') || val.includes('sources') || val.includes('bfzy')) {
+          const parsed = JSON.parse(val);
+          
+          // Zustand persist 的数据通常包裹在 state 里
+          const apis = parsed?.state?.customAPIs || parsed?.customAPIs || parsed?.state?.sources;
+          
+          if (Array.isArray(apis) && apis.length > 0) {
+            console.log("🚀 成功从浏览器动态读取到真实源:", apis);
+            return apis.map((item: any) => ({
+              ...item,
+              url: item.url || item.api || item.path,
+              key: item.key || item.name || '默认',
+              name: item.name || '自定义源'
+            }));
+          }
+        }
+      } catch {}
+    }
+  } catch (e) {
+    console.warn("动态读取源失败，将使用兜底源", e);
+  }
+
+  // 🚨 2. 兜底策略：如果遍历没找到，用写死的源保证不崩溃
+  console.log("⚠️ 未找到动态源，使用兜底源");
+  return [
+    { key: 'bfzy', name: '风暴', url: 'https://bfzyapi.com/api.php/provide/vod' },
+    { key: '360', name: '360', url: 'https://360zy.com/api.php/provide/vod' }
+  ];
+}
 
 declare global {
   interface Window {
