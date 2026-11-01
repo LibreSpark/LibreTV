@@ -74,6 +74,42 @@ const isSafeUrl = (urlStr: string) => {
   } catch { return false; }
 };
 
+// 🚀 终极递归解析：不管后端套多少层 data/list/items，只要里面有数组，全部挖出来！
+function extractMoviesRecursively(obj: any): any[] {
+  let bestList: any[] = [];
+
+  function traverse(node: any) {
+    if (!node || typeof node !== 'object') return;
+
+    // 如果是数组，检查里面是不是电影数据
+    if (Array.isArray(node)) {
+      let validCount = 0;
+      for (const item of node) {
+        if (item && typeof item === 'object') {
+          // 只要包含 id 或 name/title，就认定是电影数据
+          const hasId = item.vod_id !== undefined || item.id !== undefined || item.vid !== undefined;
+          const hasName = item.vod_name || item.title || item.name;
+          if (hasId && hasName) validCount++;
+        }
+      }
+      if (validCount > 0 && node.length > bestList.length) {
+        bestList = node; // 找到包含有效数据最多的数组
+      }
+      // 继续遍历数组里的对象
+      for (const item of node) traverse(item);
+      return;
+    }
+
+    // 如果是对象，遍历它的属性
+    for (const key in node) {
+      traverse(node[key]);
+    }
+  }
+
+  traverse(obj);
+  return bestList;
+}
+
 function getCustomSources(): any[] {
   if (typeof window === 'undefined') {
     return [
@@ -687,23 +723,27 @@ export default function AIFloatingBall() {
                 const text = await searchRes.text();
                 let realList: any[] = [];
                 
+                // 🚀 终极递归解析，不管套几层都能挖出来
                 try {
-                  const searchData = JSON.parse(text);
-                  if (searchData.items) realList = searchData.items;
-                  else if (Array.isArray(searchData)) realList = searchData;
-                  else if (searchData.list) realList = searchData.list;
-                } catch {
+                  const parsedData = JSON.parse(text);
+                  realList = extractMoviesRecursively(parsedData);
+                } catch (e) {
+                  // 如果 JSON.parse 失败，兼容正则
                   const matches = [...text.matchAll(/data:\s*(\{.*?\})/g)];
                   for (const m of matches) {
                     try {
                       const d = JSON.parse(m[1]);
-                      if (d.videos) realList.push(...d.videos);
-                      if (d.item) realList.push(d.item);
+                      const res = extractMoviesRecursively(d);
+                      if (res.length > 0) realList = res;
                     } catch {}
                   }
                 }
+
+                // 🚀 照妖镜：如果还是空，直接把原始返回打出来
+                if (realList.length === 0) {
+                  setMessages(p => [...p, { id: simpleUid(), role: 'system', type: 'system', content: `查案: ${text.substring(0, 300)}` }]);
+                }
                 
-                // 🚀 兼容各种奇葩采集站的字段名
                 realList = realList.filter(m => {
                   if (!m) return false;
                   const id = m.vod_id || m.id || m.vid;
