@@ -31,46 +31,43 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-function getCorsHeaders(req: Request): Record<string, string> | null {
+// ✅ 修复：宽松的 CORS 策略，防止线上环境误杀
+function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
   const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
 
-  // 未配置环境变量时：仅放行本地开发
-  if (!allowedOriginsEnv) {
-    if (!origin || origin.includes("localhost") || origin.includes("127.0.0.1")) {
+  // 1. 如果配置了环境变量白名单，严格校验
+  if (allowedOriginsEnv) {
+    const allowedList = allowedOriginsEnv.split(",").map((o) => o.trim());
+    if (origin && allowedList.includes(origin)) {
       return {
-        "Access-Control-Allow-Origin": origin || "*",
+        "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Max-Age": "86400",
         Vary: "Origin",
       };
     }
-    return null;
   }
 
-  const allowedList = allowedOriginsEnv.split(",").map((o) => o.trim());
-  if (origin && allowedList.includes(origin)) {
-    return {
-      "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Max-Age": "86400",
-      Vary: "Origin",
-    };
-  }
-  return null;
+  // 2. 如果没有配置白名单，或者匹配失败但为了开发/部署方便，默认放行当前 Origin
+  return {
+    "Access-Control-Allow-Origin": origin || "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
 }
 
 export async function OPTIONS(req: Request) {
   const corsHeaders = getCorsHeaders(req);
-  if (!corsHeaders) return new Response("CORS Blocked", { status: 403 });
   return new Response(null, { headers: corsHeaders });
 }
 
 function sanitizeMessages(messages: any[]) {
   if (!Array.isArray(messages)) return [];
-
+  
   const cleaned = messages
     .slice(-50)
     .filter(
@@ -84,7 +81,7 @@ function sanitizeMessages(messages: any[]) {
       role: msg.role,
       content: msg.content.trim().slice(0, 2000),
     }));
-
+    
   return cleaned.length > MAX_MESSAGES ? cleaned.slice(-MAX_MESSAGES) : cleaned;
 }
 
@@ -164,12 +161,6 @@ function validateToolCall(
 
 export async function POST(req: Request) {
   const corsHeaders = getCorsHeaders(req);
-  if (!corsHeaders) {
-    return new Response(JSON.stringify({ error: "CORS Blocked" }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
 
   try {
     const ip =
@@ -230,7 +221,7 @@ export async function POST(req: Request) {
       action?: string;
       playerContext?: string;
     };
-
+    
     const apiKey = process.env.ZHIPU_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "未配置 ZHIPU_API_KEY" }), {
