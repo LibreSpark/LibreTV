@@ -57,6 +57,9 @@ const isSafeUrl = (urlStr: string) => {
     const url = new URL(urlStr);
     if (!['http:', 'https:'].includes(url.protocol)) return false;
     if (url.username || url.password) return false;
+    // 🚀 优化：开发环境允许内网源，避免本地调试被拦截
+    if (process.env.NODE_ENV === 'development') return true;
+
     let host = url.hostname.toLowerCase();
     if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
     if (host.endsWith('.local') || host.endsWith('.localhost') || host === 'localhost' || host === '::' || host === '::1') return false;
@@ -74,39 +77,35 @@ const isSafeUrl = (urlStr: string) => {
   } catch { return false; }
 };
 
-// 🚀 终极递归解析：不管后端套多少层 data/list/items，只要里面有数组，全部挖出来！
-function extractMoviesRecursively(obj: any): any[] {
+// 🚀 修复 Bug1：加入最大递归深度 maxDepth，防止死循环 JSON 导致栈溢出崩溃
+function extractMoviesRecursively(obj: any, maxDepth = 8): any[] {
   let bestList: any[] = [];
 
-  function traverse(node: any) {
-    if (!node || typeof node !== 'object') return;
+  function traverse(node: any, depth: number) {
+    if (!node || typeof node !== 'object' || depth > maxDepth) return;
 
-    // 如果是数组，检查里面是不是电影数据
     if (Array.isArray(node)) {
       let validCount = 0;
       for (const item of node) {
         if (item && typeof item === 'object') {
-          // 只要包含 id 或 name/title，就认定是电影数据
-          const hasId = item.vod_id !== undefined || item.id !== undefined || item.vid !== undefined;
+          const hasId = item.vod_id !== undefined || item.id !== undefined || item.vid !== undefined || item.vodId !== undefined;
           const hasName = item.vod_name || item.title || item.name;
           if (hasId && hasName) validCount++;
         }
       }
       if (validCount > 0 && node.length > bestList.length) {
-        bestList = node; // 找到包含有效数据最多的数组
+        bestList = node; 
       }
-      // 继续遍历数组里的对象
-      for (const item of node) traverse(item);
+      for (const item of node) traverse(item, depth + 1);
       return;
     }
 
-    // 如果是对象，遍历它的属性
     for (const key in node) {
-      traverse(node[key]);
+      traverse(node[key], depth + 1);
     }
   }
 
-  traverse(obj);
+  traverse(obj, 0);
   return bestList;
 }
 
@@ -723,40 +722,41 @@ export default function AIFloatingBall() {
                 const text = await searchRes.text();
                 let realList: any[] = [];
                 
-                // 🚀 终极递归解析，不管套几层都能挖出来
                 try {
                   const parsedData = JSON.parse(text);
                   realList = extractMoviesRecursively(parsedData);
                 } catch (e) {
-                  // 如果 JSON.parse 失败，兼容正则
-                  const matches = [...text.matchAll(/data:\s*(\{.*?\})/g)];
-                  for (const m of matches) {
-                    try {
-                      const d = JSON.parse(m[1]);
-                      const res = extractMoviesRecursively(d);
-                      if (res.length > 0) realList = res;
-                    } catch {}
-                  }
+                  // 🚀 修复 Bug3：删除了无用的 SSE 死代码正则
                 }
 
-                // 🚀 照妖镜：如果还是空，直接把原始返回打出来
+                // 🚀 修复 Bug2 & Bug4：仅在开发环境输出查案信息，且截断长度提升至 1200
                 if (realList.length === 0) {
-                  setMessages(p => [...p, { id: simpleUid(), role: 'system', type: 'system', content: `查案: ${text.substring(0, 300)}` }]);
+                  if (process.env.NODE_ENV === 'development') {
+                    const maxLogLen = 1200;
+                    setMessages(p => [...p, { id: simpleUid(), role: 'system', type: 'system', content: `查案: ${text.substring(0, maxLogLen)}` }]);
+                  }
                 }
                 
                 realList = realList.filter(m => {
                   if (!m) return false;
-                  const id = m.vod_id || m.id || m.vid;
+                  const id = m.vod_id || m.id || m.vid || m.vodId; 
                   const name = m.vod_name || m.title || m.name;
                   return id !== undefined && id !== null && name;
-                }).map(m => ({
-                  ...m,
-                  vod_id: m.vod_id || m.id || m.vid, 
-                  vod_name: m.vod_name || m.title || m.name,
-                  vod_pic: m.vod_pic || m.poster || m.pic,
-                  vod_year: m.vod_year || m.year,
-                  vod_remarks: m.vod_remarks || m.overview || m.remarks
-                }));
+                }).map(m => {
+                  // 🚀 优化：处理 //xxx.jpg 协议相对地址
+                  let safePic = m.vod_pic || m.poster || m.pic;
+                  if (safePic && safePic.startsWith('//')) {
+                    safePic = `https:${safePic}`;
+                  }
+                  return {
+                    ...m,
+                    vod_id: m.vod_id || m.id || m.vid || m.vodId, 
+                    vod_name: m.vod_name || m.title || m.name,
+                    vod_pic: safePic,
+                    vod_year: m.vod_year || m.year,
+                    vod_remarks: m.vod_remarks || m.overview || m.remarks
+                  };
+                });
 
                 if (realList.length > 0) {
                   const formattedList = realList
