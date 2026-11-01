@@ -35,7 +35,6 @@ function simpleUid() {
   return `${Date.now()}-${++simpleUidCounter}`;
 }
 
-// 🚨 原生的源获取逻辑，必须保留
 function getCustomSources(): { name: string; url: string }[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -139,10 +138,9 @@ export default function AIFloatingBall() {
             const args = JSON.parse(call.arguments);
             setMessages(prev => [...prev, { id: simpleUid(), role: 'system', type: 'system', content: `🔍 正在为您搜索真实资源：${args.keyword}...` }]);
             
-            // 🚨 获取你真实的源配置！
             const sources = getCustomSources();
 
-            // 🚨 直接调用你截图里原生的、真实的搜索 API！
+            // 请求你原生的真实搜索接口
             const searchRes = await fetch('/api/search', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -150,33 +148,31 @@ export default function AIFloatingBall() {
             });
             
             if (searchRes.ok) {
-              // 如果你原生的搜索返回的是流数据，我们需要稍微解析一下
               const text = await searchRes.text();
-              let realList = [];
+              let realList: any[] = [];
               
+              // 兼容你原生接口可能返回的流式或 JSON 数据
               try {
-                // 尝试把它当 JSON 解析
                 const searchData = JSON.parse(text);
                 if (searchData.items) realList = searchData.items;
                 else if (Array.isArray(searchData)) realList = searchData;
+                else if (searchData.list) realList = searchData.list;
               } catch {
-                // 如果是流，或者包含了 JSON 数据块
-                // 原生的搜索可能会吐 `data: {"videos": [...]}`
                 const matches = [...text.matchAll(/data:\s*(\{.*?\})/g)];
                 for (const m of matches) {
                   try {
                     const d = JSON.parse(m[1]);
                     if (d.videos) realList.push(...d.videos);
                     if (d.item) realList.push(d.item);
+                    if (d.list) realList.push(...d.list);
                   } catch {}
                 }
               }
 
               if (realList.length > 0) {
-                // 格式化为你想要的苹果 AI 列表格式
                 const formattedList = realList.slice(0, 5).map((m: any) => ({
                   title: m.vod_name || m.title || '未知',
-                  poster: m.vod_pic || m.poster || '',
+                  poster: m.vod_pic || m.poster || 'https://picsum.photos/300/450',
                   link: m.vod_id ? `/play/${m.vod_id}` : m.link || '#',
                   year: m.vod_year || m.year,
                   overview: m.vod_remarks || m.overview || '暂无简介'
@@ -193,7 +189,7 @@ export default function AIFloatingBall() {
                   }
                 ]);
               } else {
-                setMessages(prev => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: '抱歉，本地资源库没有找到相关结果。' }]);
+                setMessages(prev => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: '抱歉，没有找到真实的资源。' }]);
               }
             }
           } catch (e) {
@@ -267,7 +263,6 @@ export default function AIFloatingBall() {
                 <div className="text-[12px] text-green-400 bg-green-500/10 px-3 py-1.5 rounded-lg">{msg.content}</div>
               )}
 
-              {/* 🚨 苹果 AI 同款真实列表 */}
               {msg.type === 'movie_list' && msg.dataList && (
                 <div className="flex flex-col gap-3 w-full mt-2">
                   <div className="text-sm text-gray-400">{msg.content}</div>
