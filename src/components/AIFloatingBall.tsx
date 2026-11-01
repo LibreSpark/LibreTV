@@ -56,29 +56,62 @@ function simpleUid() {
 
 function getCustomSources(): any[] {
   try {
+    // 1. 优先尝试默认的 key
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    
-    // 兼容纯字符串的老格式
-    if (typeof parsed === 'string') {
-      return [{ key: 'default', name: '默认', url: parsed }];
-    }
-    
-    // 如果是数组，强行给每一条都塞入 key 和 name
-    if (Array.isArray(parsed)) {
-      return parsed.map((item: any) => {
-        if (typeof item === 'string') {
-          return { key: 'default', name: '默认', url: item };
-        }
-        return {
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((item: any) => ({
           ...item,
-          key: item.key || item.name || '风暴', // 🚨 核心修复：如果没 key，强行给一个！
+          key: item.key || item.name || '默认源',
           name: item.name || '自定义源'
-        };
-      });
+        }));
+      }
+    }
+
+    // 2. 🚨 暴力扫描：如果默认 key 没找到，直接遍历整个 localStorage 找源！
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      try {
+        const val = localStorage.getItem(key);
+        // 只要这个值里包含 http 且是数组或对象
+        if (val && val.includes('http') && (val.startsWith('[') || val.startsWith('{'))) {
+          const parsed = JSON.parse(val);
+          
+          // 情况 A：本身就是源的数组
+          if (Array.isArray(parsed) && parsed.length > 0 && (parsed[0].url || parsed[0].api || parsed[0].path)) {
+            console.log("🚀 发现源配置，key:", key);
+            return parsed.map((item: any) => ({
+              ...item,
+              url: item.url || item.api || item.path,
+              key: item.key || item.name || '默认',
+              name: item.name || '自定义源'
+            }));
+          }
+          
+          // 情况 B：对象里嵌套了源数组（Zustand 常用这种格式）
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            for (const k of Object.keys(parsed)) {
+              if (Array.isArray(parsed[k]) && parsed[k].length > 0 && (parsed[k][0].url || parsed[k][0].api)) {
+                console.log("🚀 发现嵌套源配置，key:", key, "->", k);
+                return parsed[k].map((item: any) => ({
+                  ...item,
+                  url: item.url || item.api || item.path,
+                  key: item.key || item.name || '默认',
+                  name: item.name || '自定义源'
+                }));
+              }
+            }
+          }
+        }
+      } catch {}
     }
     return [];
+  } catch {
+    return [];
+  }
+}
   } catch {
     return [];
   }
