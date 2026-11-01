@@ -54,12 +54,31 @@ function simpleUid() {
   return `${Date.now().toString(36)}-${simpleUidCounter}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-function getCustomSources(): { name: string; url: string }[] {
+function getCustomSources(): any[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return [];
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [{ name: '默认', url: stored }];
+    
+    // 兼容纯字符串的老格式
+    if (typeof parsed === 'string') {
+      return [{ key: 'default', name: '默认', url: parsed }];
+    }
+    
+    // 如果是数组，强行给每一条都塞入 key 和 name
+    if (Array.isArray(parsed)) {
+      return parsed.map((item: any) => {
+        if (typeof item === 'string') {
+          return { key: 'default', name: '默认', url: item };
+        }
+        return {
+          ...item,
+          key: item.key || item.name || '风暴', // 🚨 核心修复：如果没 key，强行给一个！
+          name: item.name || '自定义源'
+        };
+      });
+    }
+    return [];
   } catch {
     return [];
   }
