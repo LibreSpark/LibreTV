@@ -1,7 +1,7 @@
 name = "libretv"
 main = ".open-next/worker.js"
 compatibility_date = "2024-12-01"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "enable_request_signal"]
 assets = { directory = ".open-next/assets", binding = "ASSETS" }
 [vars]
 PASSWORD = "123456"
