@@ -734,8 +734,9 @@ export default function AIFloatingBall() {
                 } else {
                   setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: '抱歉，采集站没有找到相关真实资源。' }]);
                 }
-              } else {
-                setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: `⚠️ 搜索接口异常，状态码：${searchRes.status}` }]);
+          } else {
+                const errData = await searchRes.json().catch(() => ({}));
+                setMessages((prev) => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: `⚠️ 搜索接口异常：${errData.error || searchRes.status}` }]);
               }
               setLoading(false);
             } else if (call.name === 'fetch_and_add_source') {
