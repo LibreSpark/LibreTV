@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useStore } from '@/lib/store';
 
 declare global {
   interface Window {
@@ -56,63 +56,25 @@ function simpleUid() {
 
 function getCustomSources(): any[] {
   try {
-    // 1. 优先尝试默认的 key
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((item: any) => ({
-          ...item,
-          key: item.key || item.name || '默认源',
-          name: item.name || '自定义源'
-        }));
-      }
-    }
+    // 🚀 直接从 Zustand 拿数据，无视一切缓存机制！
+    const state = useStore.getState() as any;
+    const currentSources = state.customAPIs || [];
 
-    // 2. 🚨 暴力扫描：如果默认 key 没找到，直接遍历整个 localStorage 找源！
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      try {
-        const val = localStorage.getItem(key);
-        // 只要这个值里包含 http 且是数组或对象
-        if (val && val.includes('http') && (val.startsWith('[') || val.startsWith('{'))) {
-          const parsed = JSON.parse(val);
-          
-          // 情况 A：本身就是源的数组
-          if (Array.isArray(parsed) && parsed.length > 0 && (parsed[0].url || parsed[0].api || parsed[0].path)) {
-            console.log("🚀 发现源配置，key:", key);
-            return parsed.map((item: any) => ({
-              ...item,
-              url: item.url || item.api || item.path,
-              key: item.key || item.name || '默认',
-              name: item.name || '自定义源'
-            }));
-          }
-          
-          // 情况 B：对象里嵌套了源数组（Zustand 常用这种格式）
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            for (const k of Object.keys(parsed)) {
-              if (Array.isArray(parsed[k]) && parsed[k].length > 0 && (parsed[k][0].url || parsed[k][0].api)) {
-                console.log("🚀 发现嵌套源配置，key:", key, "->", k);
-                return parsed[k].map((item: any) => ({
-                  ...item,
-                  url: item.url || item.api || item.path,
-                  key: item.key || item.name || '默认',
-                  name: item.name || '自定义源'
-                }));
-              }
-            }
-          }
-        }
-      } catch {}
+    if (Array.isArray(currentSources) && currentSources.length > 0) {
+      console.log("🚀 成功读取到动态源:", currentSources);
+      return currentSources.map((item: any) => ({
+        ...item,
+        url: item.url || item.api || item.path,
+        key: item.key || item.name || '默认',
+        name: item.name || '自定义源'
+      }));
     }
     return [];
-  } catch {
+  } catch (e) {
+    console.warn("读取 Zustand 状态失败", e);
     return [];
   }
 }
-
 
 function saveCustomSources(list: { name: string; url: string }[]) {
   try {
