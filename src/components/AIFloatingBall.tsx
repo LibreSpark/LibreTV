@@ -52,7 +52,6 @@ function simpleUid() {
   return `${Date.now().toString(36)}-${simpleUidCounter}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-// 🚀 把 isSafeUrl 抽出到全局，方便 saveCustomSources 调用
 const isSafeUrl = (urlStr: string) => {
   try {
     const url = new URL(urlStr);
@@ -75,7 +74,6 @@ const isSafeUrl = (urlStr: string) => {
   } catch { return false; }
 };
 
-// 🚀 核心修复：动态读取 + SSR 防崩溃 + 强行兜底
 function getCustomSources(): any[] {
   if (typeof window === 'undefined') {
     return [
@@ -133,7 +131,6 @@ function getCustomSources(): any[] {
   ];
 }
 
-// 🚀 优化 A：复用 isSafeUrl 做安全校验
 function saveCustomSources(list: { name: string; url: string }[]) {
   try {
     const validList = list.filter(item => item && item.url && item.url.length < 500 && isSafeUrl(item.url));
@@ -147,7 +144,6 @@ function saveCustomSources(list: { name: string; url: string }[]) {
   }
 }
 
-// 全局样式注入
 if (typeof document !== 'undefined') {
   if (!document.getElementById('friday-global-style')) {
     const styleEl = document.createElement('style');
@@ -707,17 +703,30 @@ export default function AIFloatingBall() {
                   }
                 }
                 
-                realList = realList.filter(m => m && m.vod_id && (m.vod_name || m.title));
-                
+                // 🚀 兼容各种奇葩采集站的字段名
+                realList = realList.filter(m => {
+                  if (!m) return false;
+                  const id = m.vod_id || m.id || m.vid;
+                  const name = m.vod_name || m.title || m.name;
+                  return id !== undefined && id !== null && name;
+                }).map(m => ({
+                  ...m,
+                  vod_id: m.vod_id || m.id || m.vid, 
+                  vod_name: m.vod_name || m.title || m.name,
+                  vod_pic: m.vod_pic || m.poster || m.pic,
+                  vod_year: m.vod_year || m.year,
+                  vod_remarks: m.vod_remarks || m.overview || m.remarks
+                }));
+
                 if (realList.length > 0) {
                   const formattedList = realList
                     .slice(0, 10)
                     .map((m: any) => ({
-                      title: m.vod_name || m.title,
-                      poster: m.vod_pic || m.poster || 'https://picsum.photos/300/450',
+                      title: m.vod_name,
+                      poster: m.vod_pic || 'https://picsum.photos/300/450',
                       vodId: m.vod_id,
-                      year: m.vod_year || m.year,
-                      overview: m.vod_remarks || m.overview || '暂无简介'
+                      year: m.vod_year,
+                      overview: m.vod_remarks || '暂无简介'
                     }));
                   
                   if (tempMsgId) {
@@ -869,7 +878,6 @@ export default function AIFloatingBall() {
     <div className={`fixed inset-0 z-[9999] flex items-start justify-center pt-[15vh] pointer-events-none transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`} style={{ transform: 'translateZ(1px)' }}>
       <div className="absolute inset-0 bg-black/20 pointer-events-auto backdrop-blur-sm transition-opacity" style={{ transform: 'translateZ(1px)' }} onClick={() => togglePanel(false)}></div>
       
-      {/* 🚀 优化 C：弹窗高度适配移动端视口 vh */}
       <div ref={popupRef} onClick={expandPopup} className={`relative bg-[#050505] overflow-hidden flex flex-col items-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] border border-white/10 transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] will-change-transform ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-90 -translate-y-8 opacity-0'}`} style={{ transform: 'translateZ(1px)', width: isExpanded ? '90%' : '260px', maxWidth: isExpanded ? '360px' : '260px', height: isExpanded ? 'min(80vh, 520px)' : '110px', borderRadius: isExpanded ? '36px' : '55px', cursor: isExpanded ? 'default' : 'pointer' }}>
         
         <div className={`absolute bottom-0 left-0 w-full pointer-events-none z-0 overflow-hidden transition-all duration-700 ${isExpanded ? 'h-[100px]' : 'h-[60px]'} ${isOpen ? 'opacity-100' : 'opacity-0'}`}>
@@ -916,7 +924,6 @@ export default function AIFloatingBall() {
                       </div>
                       <div className="relative w-full h-[110px] rounded-2xl overflow-hidden mb-3 bg-gradient-to-br from-indigo-900/40 to-emerald-900/40">
                         <div className="flex gap-2 px-3 pt-3 overflow-x-auto scrollbar-hide absolute inset-0">
-                          {/* 🚀 优化 B：横向预览同样展示前 10 张 */}
                           {msg.compositeMovie.items.slice(0, 10).map((item, idx) => (
                             <img
                               key={idx}
