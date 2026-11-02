@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -102,8 +103,6 @@ function compactHistory(
     return history;
   }
 
-  // 从最近一条用户消息开始保留，
-  // 避免截断工具调用和工具结果之间的关系。
   let lastUserIndex = -1;
 
   for (let i = history.length - 1; i >= 0; i--) {
@@ -120,7 +119,7 @@ function compactHistory(
   return history.slice(-MAX_HISTORY);
 }
 
-export function AIFloatingBall() {
+export default function AIFloatingBall() {
   const router = useRouter();
 
   const [active, setActive] = useState(false);
@@ -143,7 +142,6 @@ export function AIFloatingBall() {
   });
 
   const listRef = useRef<HTMLDivElement | null>(null);
-
   const sendLock = useRef(false);
 
   const abortRef = useRef<AbortController | null>(
@@ -231,7 +229,6 @@ export function AIFloatingBall() {
           return '工具参数必须是对象';
         }
 
-        // 播放器控制
         if (tc.function.name === 'control_player') {
           const video = document.getElementById(
             'libretv-main-video'
@@ -319,7 +316,6 @@ export function AIFloatingBall() {
           return '未知播放器操作';
         }
 
-        // 页面控制
         if (tc.function.name === 'page_control') {
           const action = args.action;
 
@@ -467,7 +463,6 @@ export function AIFloatingBall() {
             break;
           }
 
-          // 处理影片卡片
           if (
             Array.isArray(data.movieData) &&
             data.movieData.length > 0
@@ -477,7 +472,6 @@ export function AIFloatingBall() {
             );
           }
 
-          // 最终答复
           if (data.type === 'final') {
             const finalText =
               typeof data.text === 'string'
@@ -500,7 +494,6 @@ export function AIFloatingBall() {
             break;
           }
 
-          // 工具调用批次
           if (data.type === 'tool_calls') {
             const assistantMessage =
               data.assistantMessage;
@@ -527,7 +520,6 @@ export function AIFloatingBall() {
               throw new Error('前端工具调用格式错误');
             }
 
-            // 先保存完整 assistant 工具调用消息
             apiHistoryRef.current.push(
               assistantMessage as HistoryMessage
             );
@@ -540,7 +532,6 @@ export function AIFloatingBall() {
 
             const receivedIds = new Set<string>();
 
-            // 保存后端已经执行的搜索结果
             for (const rawMessage of serverToolMessages) {
               if (
                 !isRecord(rawMessage) ||
@@ -560,7 +551,6 @@ export function AIFloatingBall() {
               );
             }
 
-            // 前端逐个执行浏览器工具
             for (const rawCall of uiToolCalls) {
               if (controller.signal.aborted) {
                 break;
@@ -595,12 +585,10 @@ export function AIFloatingBall() {
               break;
             }
 
-            // 每个工具调用都必须有结果
             if (receivedIds.size !== expectedIds.size) {
               throw new Error('存在未完成的工具调用');
             }
 
-            // 完整批次进入下一轮模型请求
             continue;
           }
 
@@ -614,7 +602,6 @@ export function AIFloatingBall() {
           );
         }
 
-        // 压缩历史，保留最近一轮完整上下文
         apiHistoryRef.current = compactHistory(
           apiHistoryRef.current
         );
@@ -732,47 +719,18 @@ export function AIFloatingBall() {
     };
 
     const handleUp = () => {
-      window.removeEventListener(
-        'mousemove',
-        handleMove
-      );
-
-      window.removeEventListener(
-        'mouseup',
-        handleUp
-      );
-
-      window.removeEventListener(
-        'touchmove',
-        handleMove
-      );
-
-      window.removeEventListener(
-        'touchend',
-        handleUp
-      );
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleUp);
     };
 
-    window.addEventListener(
-      'mousemove',
-      handleMove
-    );
-
-    window.addEventListener(
-      'mouseup',
-      handleUp
-    );
-
-    window.addEventListener(
-      'touchmove',
-      handleMove,
-      { passive: true }
-    );
-
-    window.addEventListener(
-      'touchend',
-      handleUp
-    );
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('touchmove', handleMove, {
+      passive: true,
+    });
+    window.addEventListener('touchend', handleUp);
   };
 
   return (
@@ -831,8 +789,7 @@ export function AIFloatingBall() {
               background: 'rgba(20, 20, 25, 0.7)',
               backdropFilter: 'blur(30px)',
               WebkitBackdropFilter: 'blur(30px)',
-              border:
-                '1px solid rgba(255, 255, 255, 0.15)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
             }}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
@@ -914,52 +871,43 @@ export function AIFloatingBall() {
                         <div>{message.content}</div>
 
                         <div className="grid grid-cols-2 gap-3">
-                          {message.items?.map(
-                            (item, index) => (
-                              <div
-                                key={`${item.id}-${index}`}
-                                onClick={() => {
-                                  if (
-                                    isSafeInternalPath(
-                                      item.link
-                                    )
-                                  ) {
-                                    router.push(item.link);
-                                  }
-                                }}
-                                className="group relative flex flex-col bg-[#1c1c1e] rounded-xl overflow-hidden border border-white/5 hover:border-white/20 cursor-pointer transition"
-                              >
-                                <div className="aspect-[2/3] w-full bg-white/5 relative overflow-hidden">
-                                  {item.poster && (
-                                    <img
-                                      src={item.poster}
-                                      alt={item.title}
-                                      referrerPolicy="no-referrer"
-                                      loading="lazy"
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                      onError={(event) => {
-                                        event.currentTarget.style.display =
-                                          'none';
-                                      }}
-                                    />
-                                  )}
-                                </div>
-
-                                <div className="p-2.5 flex flex-col gap-1">
-                                  <span className="text-[13px] font-bold text-white/90 truncate">
-                                    {item.title}
-                                  </span>
-
-                                  <span className="text-[11px] text-white/40">
-                                    {item.year || '年份未知'}
-                                    {item.rating
-                                      ? ` · ${item.rating}`
-                                      : ''}
-                                  </span>
-                                </div>
+                          {message.items?.map((item, index) => (
+                            <div
+                              key={`${item.id}-${index}`}
+                              onClick={() => {
+                                if (isSafeInternalPath(item.link)) {
+                                  router.push(item.link);
+                                }
+                              }}
+                              className="group relative flex flex-col bg-[#1c1c1e] rounded-xl overflow-hidden border border-white/5 hover:border-white/20 cursor-pointer transition"
+                            >
+                              <div className="aspect-[2/3] w-full bg-white/5 relative overflow-hidden">
+                                {item.poster && (
+                                  <img
+                                    src={item.poster}
+                                    alt={item.title}
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    onError={(event) => {
+                                      event.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                )}
                               </div>
-                            )
-                          )}
+
+                              <div className="p-2.5 flex flex-col gap-1">
+                                <span className="text-[13px] font-bold text-white/90 truncate">
+                                  {item.title}
+                                </span>
+
+                                <span className="text-[11px] text-white/40">
+                                  {item.year || '年份未知'}
+                                  {item.rating ? ` · ${item.rating}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -981,9 +929,7 @@ export function AIFloatingBall() {
             <div className="p-3 bg-white/5 border-t border-white/10 flex items-center gap-2">
               <input
                 value={input}
-                onChange={(event) =>
-                  setInput(event.target.value)
-                }
+                onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
                   if (
                     event.key === 'Enter' &&
