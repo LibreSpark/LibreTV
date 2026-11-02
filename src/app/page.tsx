@@ -63,7 +63,7 @@ export default function HomePage() {
   return (
     <Suspense>
       <HomeContent />
-      <AIFloatingBall />
+      
     </Suspense>
   );
 }
