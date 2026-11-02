@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -39,7 +40,6 @@ import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
 import { Icon } from '@/components/icon';
 import { SiteFooter } from '@/components/site-footer';
-import AIFloatingBall from '@/components/AIFloatingBall';
 
 /**
  * 首页：搜索（URL ?s= 驱动，可后退/分享）+ 豆瓣推荐。
@@ -63,7 +63,6 @@ export default function HomePage() {
   return (
     <Suspense>
       <HomeContent />
-      
     </Suspense>
   );
 }
@@ -101,12 +100,12 @@ function HomeContent() {
 
   /**
    * Friday 搜索卡片通过自定义事件请求打开首页原生详情弹窗。
+   * 优先使用本地数据源；仅 friday-cms 允许使用环境变量兜底。
    * 不使用 /detail/{id} 路由，避免丢失 CMS 来源信息。
    */
   useEffect(() => {
     const handleFridayOpenDetail = (event: Event) => {
-      const customEvent = event as CustomEvent<unknown>;
-      const raw = customEvent.detail;
+      const raw = (event as CustomEvent<unknown>).detail;
 
       if (!isRecord(raw)) {
         return;
@@ -126,6 +125,7 @@ function HomeContent() {
         isAdult,
       } = raw;
 
+      // 必需字段校验：保持原有 vodId 严格格式
       if (
         typeof sourceKey !== 'string' ||
         !sourceKey.trim() ||
@@ -133,8 +133,6 @@ function HomeContent() {
         typeof sourceName !== 'string' ||
         !sourceName.trim() ||
         sourceName.length > 100 ||
-        typeof sourceUrl !== 'string' ||
-        !validateSourceUrl(sourceUrl) ||
         typeof vodId !== 'string' ||
         !/^[a-zA-Z0-9_-]{1,30}$/.test(vodId) ||
         typeof name !== 'string' ||
@@ -145,72 +143,127 @@ function HomeContent() {
         return;
       }
 
+      // sourceUrl 是可选字段；如果事件提供了它，必须是合法 URL。
       if (
-        pic !== undefined &&
-        typeof pic !== 'string'
+        sourceUrl !== undefined &&
+        typeof sourceUrl !== 'string'
       ) {
+        toast('影片详情来源地址格式无效', 'warning');
         return;
       }
 
       if (
-        typeName !== undefined &&
-        typeof typeName !== 'string'
+        typeof sourceUrl === 'string' &&
+        sourceUrl.trim() &&
+        !validateSourceUrl(sourceUrl.trim())
       ) {
+        toast('影片详情来源地址未通过安全校验', 'warning');
         return;
       }
 
+      // 可选字段类型校验
       if (
-        year !== undefined &&
-        typeof year !== 'string'
+        (pic !== undefined && typeof pic !== 'string') ||
+        (typeName !== undefined && typeof typeName !== 'string') ||
+        (year !== undefined && typeof year !== 'string') ||
+        (area !== undefined && typeof area !== 'string') ||
+        (remarks !== undefined && typeof remarks !== 'string') ||
+        (isAdult !== undefined && typeof isAdult !== 'boolean')
       ) {
+        toast('影片详情附加参数格式无效', 'warning');
         return;
       }
 
-      if (
-        area !== undefined &&
-        typeof area !== 'string'
-      ) {
+      const normalizedSourceKey = sourceKey.trim();
+      const normalizedSourceName = sourceName.trim();
+
+      const currentStore = useAppStore.getState();
+
+      // 先查找用户已经配置的数据源
+      let source = resolveSource(
+        currentStore,
+        normalizedSourceKey
+      );
+
+      // 只有 Friday CMS 来源允许使用环境变量兜底
+      if (!source) {
+        if (normalizedSourceKey !== 'friday-cms') {
+          toast(
+            '本地数据源配置不存在，请检查数据源设置',
+            'error'
+          );
+          return;
+        }
+
+        const fallbackUrl =
+          process.env.NEXT_PUBLIC_CMS_SEARCH_API?.trim() || '';
+
+        if (
+          !fallbackUrl ||
+          !validateSourceUrl(fallbackUrl)
+        ) {
+          toast(
+            'Friday CMS 数据源地址无效或未配置',
+            'error'
+          );
+          return;
+        }
+
+        source = resolveSource(
+          currentStore,
+          normalizedSourceKey,
+          {
+            url: fallbackUrl,
+            name: normalizedSourceName,
+          }
+        );
+      }
+
+      // 确认最终来源存在
+      if (!source || !source.url) {
+        toast('找不到可用的数据源', 'error');
         return;
       }
 
-      if (
-        remarks !== undefined &&
-        typeof remarks !== 'string'
-      ) {
+      // 最终来源 URL 必须通过项目已有校验
+      if (!validateSourceUrl(source.url)) {
+        toast('数据源地址未通过安全校验', 'error');
         return;
       }
 
-      if (
-        isAdult !== undefined &&
-        typeof isAdult !== 'boolean'
-      ) {
-        return;
-      }
-
+      // 构建首页原生详情弹窗需要的数据
       const item: SearchResultItem = {
-        sourceKey,
-        sourceName,
-        sourceUrl,
+        sourceKey: source.key,
+        sourceName: source.name,
+        sourceUrl: source.url,
         vodId,
         name: name.trim(),
+
         ...(typeof pic === 'string' && pic
           ? { pic }
           : {}),
+
         ...(typeof typeName === 'string' && typeName
           ? { typeName }
           : {}),
+
         ...(typeof year === 'string' && year
           ? { year }
           : {}),
+
         ...(typeof area === 'string' && area
           ? { area }
           : {}),
+
         ...(typeof remarks === 'string' && remarks
           ? { remarks }
           : {}),
+
         ...(typeof isAdult === 'boolean'
           ? { isAdult }
-          : {}),
+          : source.isAdult !== undefined
+            ? { isAdult: source.isAdult }
+            : {}),
       };
 
       setDetailItem(item);
