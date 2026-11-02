@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -9,23 +8,14 @@ import {
 } from 'react';
 
 import { useRouter } from 'next/navigation';
-
-type MovieItem = {
-  id: string;
-  title: string;
-  poster: string;
-  link: string;
-  year: string;
-  rating: string;
-  overview: string;
-};
+import type { SearchResultItem } from '@/lib/types';
 
 type UIMessage = {
   id: string;
   role: 'user' | 'assistant';
   type: 'text' | 'movie_list';
   content: string;
-  items?: MovieItem[];
+  items?: SearchResultItem[];
 };
 
 type ToolCall = {
@@ -70,6 +60,31 @@ function isRecord(
     typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value)
+  );
+}
+
+function isSearchResultItem(
+  value: unknown
+): value is SearchResultItem {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.sourceKey === 'string' &&
+    value.sourceKey.length > 0 &&
+    typeof value.sourceName === 'string' &&
+    value.sourceName.length > 0 &&
+    typeof value.vodId === 'string' &&
+    /^[a-zA-Z0-9_-]{1,30}$/.test(value.vodId) &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    (
+      value.pic === undefined ||
+      typeof value.pic === 'string'
+    ) &&
+    (
+      value.sourceUrl === undefined ||
+      typeof value.sourceUrl === 'string'
+    )
   );
 }
 
@@ -186,8 +201,14 @@ export default function AIFloatingBall() {
   );
 
   const addMovieList = useCallback(
-    (items: MovieItem[]) => {
+    (items: SearchResultItem[]) => {
       if (!Array.isArray(items) || items.length === 0) {
+        return;
+      }
+
+      const safeItems = items.filter(isSearchResultItem);
+
+      if (safeItems.length === 0) {
         return;
       }
 
@@ -198,11 +219,46 @@ export default function AIFloatingBall() {
           role: 'assistant',
           type: 'movie_list',
           content: '为你找到以下资源：',
-          items,
+          items: safeItems,
         },
       ]);
     },
     []
+  );
+
+  const openNativeDetail = useCallback(
+    (item: SearchResultItem) => {
+      if (
+        !isSearchResultItem(item) ||
+        typeof item.sourceUrl !== 'string' ||
+        !item.sourceUrl
+      ) {
+        addTextMessage(
+          'assistant',
+          '这条影片资源缺少详情接口地址，暂时无法打开详情。'
+        );
+        return;
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('friday-open-detail', {
+          detail: {
+            sourceKey: item.sourceKey,
+            sourceName: item.sourceName,
+            sourceUrl: item.sourceUrl,
+            vodId: item.vodId,
+            name: item.name,
+            pic: item.pic,
+            typeName: item.typeName,
+            year: item.year,
+            area: item.area,
+            remarks: item.remarks,
+            isAdult: item.isAdult,
+          },
+        })
+      );
+    },
+    [addTextMessage]
   );
 
   const executeUiTool = useCallback(
@@ -468,7 +524,7 @@ export default function AIFloatingBall() {
             data.movieData.length > 0
           ) {
             addMovieList(
-              data.movieData as MovieItem[]
+              data.movieData.filter(isSearchResultItem)
             );
           }
 
@@ -872,20 +928,17 @@ export default function AIFloatingBall() {
 
                         <div className="grid grid-cols-2 gap-3">
                           {message.items?.map((item, index) => (
-                            <div
-                              key={`${item.id}-${index}`}
-                              onClick={() => {
-                                if (isSafeInternalPath(item.link)) {
-                                  router.push(item.link);
-                                }
-                              }}
-                              className="group relative flex flex-col bg-[#1c1c1e] rounded-xl overflow-hidden border border-white/5 hover:border-white/20 cursor-pointer transition"
+                            <button
+                              type="button"
+                              key={`${item.sourceKey}-${item.vodId}-${index}`}
+                              onClick={() => openNativeDetail(item)}
+                              className="group relative flex flex-col bg-[#1c1c1e] rounded-xl overflow-hidden border border-white/5 hover:border-white/20 cursor-pointer transition text-left"
                             >
                               <div className="aspect-[2/3] w-full bg-white/5 relative overflow-hidden">
-                                {item.poster && (
+                                {item.pic && (
                                   <img
-                                    src={item.poster}
-                                    alt={item.title}
+                                    src={item.pic}
+                                    alt={item.name}
                                     referrerPolicy="no-referrer"
                                     loading="lazy"
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -898,15 +951,19 @@ export default function AIFloatingBall() {
 
                               <div className="p-2.5 flex flex-col gap-1">
                                 <span className="text-[13px] font-bold text-white/90 truncate">
-                                  {item.title}
+                                  {item.name}
                                 </span>
 
-                                <span className="text-[11px] text-white/40">
+                                <span className="text-[11px] text-white/40 truncate">
                                   {item.year || '年份未知'}
-                                  {item.rating ? ` · ${item.rating}` : ''}
+                                  {item.remarks ? ` · ${item.remarks}` : ''}
+                                </span>
+
+                                <span className="text-[10px] text-white/30 truncate">
+                                  {item.sourceName}
                                 </span>
                               </div>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
