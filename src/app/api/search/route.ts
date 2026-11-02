@@ -1,275 +1,97 @@
-import { NextResponse } from 'next/server';
-import { guardRequest } from '@/lib/api-guard';
-import { cmsRequestHeaders, filterAdultResults, filterRelevantResults, normalizeTitle, parseSearchList } from '@/lib/cms-parser';
-import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
-import { checkUpstreamAllowed } from '@/lib/ssrf';
-import type { SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-interface SearchBody {
-  wd: string;
-  sources: SourceConfig[];
-  filterAdult?: boolean;
-}
+const CMS_BASE = process.env.CMS_SEARCH_API || '';
+const TIMEOUT_MS = 8000;
 
-/** 搜索结果短缓存：同一关键词 + 同一组源在 TTL 内直接返回（播放页返回搜索页等场景） */
-const SEARCH_CACHE_TTL = 60 * 1000;
+export type MovieItem = {
+  id: string;
+  title: string;
+  poster: string;
+  link: string;
+  year: string;
+  rating: string;
+  overview: string;
+};
 
-/** 缓存键：wd + 成人过滤 + 排序后的源地址集合（直接用完整字符串，避免哈希碰撞串缓存） */
-function searchCacheKey(wd: string, sources: SourceConfig[], filterAdult: boolean): string {
-  const urls = sources.map((s) => s.url.replace(/\/+$/, '')).sort().join('|');
-  return `search:${wd}\n${filterAdult ? 1 : 0}\n${urls}`;
-}
-
-/**
- * 每个源最多抓取的页数。
- * 第一页响应会带回 pagecount（源站真实总页数），实际抓取页数 = min(pagecount, 该值)。
- * 默认 5；页与页之间并行请求，单页失败只丢弃该页。
- */
-const SEARCH_MAX_PAGES = (() => {
-  const n = parseInt(process.env.SEARCH_MAX_PAGES || '5', 10);
-  if (!Number.isFinite(n)) return 5;
-  return Math.min(50, Math.max(1, n));
-})();
-
-/**
- * 单源总死线（毫秒）：该源所有分页请求必须在时限内完成，到点中断在途请求并标记超时。
- * 没有它时慢源最坏要等「首页 8s + 后续页并行 8s」，拖垮整体响应。
- * 环境变量 SEARCH_SOURCE_TIMEOUT_MS 可配，默认 10s。
- */
-const SEARCH_SOURCE_TIMEOUT_MS = (() => {
-  const n = parseInt(process.env.SEARCH_SOURCE_TIMEOUT_MS || '10000', 10);
-  if (!Number.isFinite(n)) return 10000;
-  return Math.min(60000, Math.max(3000, n));
-})();
-
-/** AbortSignal.timeout / 源级死线中断均以 TimeoutError 语义呈现（直接抛出或挂在 cause 上） */
-function isTimeoutError(err: unknown): boolean {
-  const candidates: unknown[] = [err, err instanceof Error ? err.cause : undefined];
-  return candidates.some((e) => e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError'));
-}
-
-/**
- * 服务端聚合搜索：并行请求所有选中源，任一源失败不影响整体。
- * 每个源先取第一页并读取 pagecount，再并行抓取后续页（上限 SEARCH_MAX_PAGES），
- * 整源受 SEARCH_SOURCE_TIMEOUT_MS 总死线约束。
- * 旧版在浏览器里打满 N 个请求（暴露用户 IP、无法缓存、超时失控），现全部上移。
- */
-async function searchSource(source: SourceConfig, wd: string): Promise<SourceSearchOutcome> {
-  const start = Date.now();
-  const finish = (outcome: Omit<SourceSearchOutcome, 'ms'>): SourceSearchOutcome => ({
-    ...outcome,
-    ms: Date.now() - start,
-  });
-
-  if (!/^https?:\/\//.test(source.url || '')) {
-    return finish({ sourceKey: source.key, ok: false, list: [], error: '无效的源地址' });
+// 🚀 核心修复 P1-9：防二次代理套娃
+function normalizePoster(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  let url = raw.trim();
+  if (!url) return '';
+  if (url.startsWith('/api/img?')) return url; // 已经是代理路径，直接放行
+  if (url.startsWith('//')) url = 'https:' + url;
+  if (!/^https?:\/\//i.test(url)) return '';
+  if (url.startsWith('http://')) {
+    return `/api/img?url=${encodeURIComponent(url)}`;
   }
-  // 用户可控地址发起服务端请求，必须先过 SSRF 校验（协议白名单 + 内网/保留地址）
-  const verdict = await checkUpstreamAllowed(source.url);
-  if (!verdict.ok) {
-    return finish({ sourceKey: source.key, ok: false, list: [], error: verdict.reason });
-  }
-
-  // 死线到点中断该源所有在途分页请求，避免后台继续空耗
-  const controller = new AbortController();
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<SourceSearchOutcome>((resolve) => {
-    deadlineTimer = setTimeout(() => {
-      controller.abort(new DOMException('源搜索超时', 'TimeoutError'));
-      resolve(
-        finish({
-          sourceKey: source.key,
-          ok: false,
-          list: [],
-          error: `请求超时（>${Math.round(SEARCH_SOURCE_TIMEOUT_MS / 1000)}s）`,
-          timedOut: true,
-        })
-      );
-    }, SEARCH_SOURCE_TIMEOUT_MS);
-  });
-
-  const base = source.url.replace(/\/+$/, '');
-  const fetchPage = async (page: number) => {
-    const api = `${base}?ac=videolist&wd=${encodeURIComponent(wd)}&pg=${page}`;
-    const res = await fetchUpstream(api, {
-      timeoutMs: 8000,
-      headers: cmsRequestHeaders(),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  };
-
-  const run = async (): Promise<SourceSearchOutcome> => {
-    const first = await fetchPage(1);
-    const list = parseSearchList(first, source);
-    // 源站真实总页数与配置上限取较小者；pagecount 缺失或非法时视为 1 页
-    const rawPageCount = parseInt(String((first as { pagecount?: unknown }).pagecount ?? '1'), 10);
-    const pageCount = Math.min(Number.isFinite(rawPageCount) ? Math.max(1, rawPageCount) : 1, SEARCH_MAX_PAGES);
-    if (pageCount > 1) {
-      const extraPages = await Promise.all(
-        Array.from({ length: pageCount - 1 }, (_, i) => i + 2).map(async (page) => {
-          try {
-            return parseSearchList(await fetchPage(page), source);
-          } catch {
-            return [];
-          }
-        })
-      );
-      list.push(...extraPages.flat());
-    }
-    return { sourceKey: source.key, ok: true, list };
-  };
-
-  try {
-    // 死线先到时 run 仍会在后台被 abort 并 reject，必须先挂 catch 防未处理 rejection
-    const runPromise = run()
-      .then(finish)
-      .catch((err: unknown): SourceSearchOutcome =>
-        finish({
-          sourceKey: source.key,
-          ok: false,
-          list: [],
-          error: err instanceof Error ? err.message : '请求失败',
-          timedOut: isTimeoutError(err),
-        })
-      );
-    return await Promise.race([runPromise, deadline]);
-  } catch (err) {
-    return finish({
-      sourceKey: source.key,
-      ok: false,
-      list: [],
-      error: err instanceof Error ? err.message : '请求失败',
-      timedOut: isTimeoutError(err),
-    });
-  } finally {
-    if (deadlineTimer) clearTimeout(deadlineTimer);
-  }
+  return url;
 }
 
-/** 合并 + 去重 + 过滤 + 排序，stream 与非 stream 两种模式共用 */
-function aggregateOutcomes(outcomes: SourceSearchOutcome[], wd: string, filterAdult: boolean): SearchResponse {
-  const seen = new Set<string>();
-  let list = outcomes.flatMap((o) => o.list).filter((item) => {
-    const key = `${item.sourceKey}_${item.vodId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
+// 🚀 核心修复 P1-11：垃圾过滤逻辑
+function normalizeName(name: string) {
+  return String(name || '').replace(/[\s\(\)（）]/g, '').toLowerCase();
+}
+function filterBadWords(list: any[], keyword: string) {
+  const badWords = ['预告', '花絮', '解说', 'mv', '特辑', '片段', '彩蛋'];
+  const nKeyword = normalizeName(keyword);
+  return list.filter((m) => {
+    const nName = normalizeName(m.vod_name || m.title || '');
+    const matchedBadWord = badWords.find((w) => nName.includes(w));
+    if (matchedBadWord && !nKeyword.includes(matchedBadWord)) return false;
     return true;
   });
-
-  list = filterAdultResults(list, filterAdult);
-  // 部分源站做分词/OR 模糊搜索（搜「摔跤吧！爸爸」返回一堆「爸爸XXX」），按关键词过滤
-  list = filterRelevantResults(list, wd);
-
-  // 精确命中（忽略标点差异）排在最前，其余按名称（与旧版一致），名称相同按源名
-  const exact = normalizeTitle(wd);
-  list.sort((a, b) => {
-    const aExact = normalizeTitle(a.name || '') === exact ? 0 : 1;
-    const bExact = normalizeTitle(b.name || '') === exact ? 0 : 1;
-    if (aExact !== bExact) return aExact - bExact;
-    const nameCompare = (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN');
-    if (nameCompare !== 0) return nameCompare;
-    return (a.sourceName || '').localeCompare(b.sourceName || '', 'zh-Hans-CN');
-  });
-
-  const failures = outcomes
-    .filter((o) => !o.ok)
-    .map((o) => ({ sourceKey: o.sourceKey, error: o.error || '请求失败', timedOut: o.timedOut }));
-
-  return { list, failures };
 }
 
-/**
- * 服务端聚合搜索：
- * - 默认返回完整 JSON（换源流程使用）；
- * - `?stream=1` 以 NDJSON 逐源推送（完成一个推一条，健康源的结果不再等坏源超时），
- *   最终推送聚合后的 done 事件并写入短缓存。
- */
-export async function POST(req: Request) {
-  const guarded = guardRequest(req);
-  if (guarded) return guarded;
+async function handleSearch(keyword: string) {
+  if (!keyword) return NextResponse.json({ items: [], error: '缺少关键词' }, { status: 400 });
+  if (!CMS_BASE) return NextResponse.json({ items: [], error: 'CMS 接口未配置' }, { status: 500 });
 
-  let body: SearchBody;
+  const url = `${CMS_BASE}${CMS_BASE.includes('?') ? '&' : '?'}wd=${encodeURIComponent(keyword)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
   try {
-    body = (await req.json()) as SearchBody;
-  } catch {
-    return NextResponse.json({ error: '请求格式错误' }, { status: 400 });
+    const upstream = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    if (!upstream.ok) throw new Error(`CMS 接口异常: ${upstream.status}`);
+
+    const data = await upstream.json();
+    let rawList = Array.isArray(data?.list) ? data.list : (Array.isArray(data?.data) ? data.data : []);
+    
+    // 执行垃圾词过滤
+    rawList = filterBadWords(rawList, keyword);
+
+    const items: MovieItem[] = rawList.map((it: any) => ({
+      id: String(it.vod_id ?? it.id ?? it.vodId ?? ''),
+      title: String(it.vod_name ?? it.title ?? '未知影片'),
+      poster: normalizePoster(it.vod_pic ?? it.pic ?? it.poster ?? ''),
+      link: `/detail/${it.vod_id ?? it.id ?? it.vodId}`,
+      year: String(it.vod_year ?? it.year ?? ''),
+      rating: String(it.vod_score ?? it.rating ?? ''),
+      overview: String(it.vod_remarks ?? it.overview ?? '暂无简介'),
+    }));
+
+    return NextResponse.json({ items });
+  } catch (err) {
+    return NextResponse.json({ items: [], error: '资源搜索超时或失败' }, { status: 502 });
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  const wd = (body.wd || '').trim();
-  if (!wd || wd.length > 100) {
-    return NextResponse.json({ error: '搜索关键词无效' }, { status: 400 });
-  }
-  if (!Array.isArray(body.sources) || body.sources.length === 0) {
-    return NextResponse.json({ error: '请至少选择一个点播源' }, { status: 400 });
-  }
-  const sources = body.sources.slice(0, 50);
-  const filterAdult = body.filterAdult !== false;
+export async function GET(req: NextRequest) {
+  const keyword = req.nextUrl.searchParams.get('wd') || req.nextUrl.searchParams.get('keyword') || '';
+  return handleSearch(keyword.trim());
+}
 
-  const cacheKey = searchCacheKey(wd, sources, filterAdult);
-  const cached = getCache<SearchResponse>(cacheKey);
-  if (cached) {
-    // 流式模式下缓存命中也要走 done 事件，客户端解析逻辑保持单一
-    if (new URL(req.url).searchParams.get('stream') === '1') {
-      const event: SearchStreamEvent = { type: 'done', list: cached.list, failures: cached.failures };
-      return new Response(JSON.stringify(event) + '\n', {
-        headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' },
-      });
-    }
-    return NextResponse.json(cached);
-  }
-
-  const isStream = new URL(req.url).searchParams.get('stream') === '1';
-  if (!isStream) {
-    const outcomes = await Promise.all(sources.map((source) => searchSource(source, wd)));
-    const payload = aggregateOutcomes(outcomes, wd, filterAdult);
-    setCache(cacheKey, payload, SEARCH_CACHE_TTL);
-    return NextResponse.json(payload);
-  }
-
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let closed = false;
-      const send = (event: SearchStreamEvent) => {
-        if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
-        } catch {
-          closed = true; // 客户端已断开
-        }
-      };
-
-      // 逐源结算即推送；outcomes 按下标回填保证聚合顺序稳定
-      const outcomes: SourceSearchOutcome[] = new Array(sources.length);
-      await Promise.all(
-        sources.map(async (source, i) => {
-          const outcome = await searchSource(source, wd);
-          outcomes[i] = outcome;
-          // 中间结果与最终结果共用去重和过滤规则，避免无关/成人条目短暂出现在页面上。
-          const { list } = aggregateOutcomes([outcome], wd, filterAdult);
-          send({ type: 'source', ...outcome, list });
-        })
-      );
-
-      const payload = aggregateOutcomes(outcomes, wd, filterAdult);
-      setCache(cacheKey, payload, SEARCH_CACHE_TTL);
-      send({ type: 'done', list: payload.list, failures: payload.failures });
-      closed = true;
-      try {
-        controller.close();
-      } catch { /* 已断开 */ }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'application/x-ndjson; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'X-Accel-Buffering': 'no',
-    },
-  });
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
+  const keyword = String(body?.wd || body?.keyword || '').trim();
+  return handleSearch(keyword);
 }
