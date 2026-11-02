@@ -1,3 +1,4 @@
+
 import { fetchUpstream } from '@/lib/fetch-utils';
 import type {
   SearchResultItem,
@@ -8,16 +9,23 @@ import type {
 const MAX_KEYWORD_LENGTH = 50;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_RESULTS_PER_SOURCE = 30;
+const MAX_SOURCES = 30;
 const SEARCH_TIMEOUT_MS = 8000;
 const MAX_CONCURRENT_SOURCES = 6;
 
 function safeString(value: unknown, maxLength: number): string {
-  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return '';
+  }
+
   return String(value).trim().slice(0, maxLength);
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message.slice(0, 200);
+  if (error instanceof Error) {
+    return error.message.slice(0, 200);
+  }
+
   return '未知搜索错误';
 }
 
@@ -42,9 +50,14 @@ function normalizePoster(
 
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+
+    if (
+      parsed.protocol !== 'http:' &&
+      parsed.protocol !== 'https:'
+    ) {
       return undefined;
     }
+
     return `/api/img?url=${encodeURIComponent(parsed.toString())}`;
   } catch {
     return undefined;
@@ -56,12 +69,23 @@ function extractMovieArray(data: unknown): unknown[] {
 
   const record = data as Record<string, unknown>;
 
-  if (Array.isArray(record.list)) return record.list;
-  if (Array.isArray(record.data)) return record.data;
+  if (Array.isArray(record.list)) {
+    return record.list;
+  }
 
-  if (record.data && typeof record.data === 'object') {
+  if (Array.isArray(record.data)) {
+    return record.data;
+  }
+
+  if (
+    record.data &&
+    typeof record.data === 'object'
+  ) {
     const nested = record.data as Record<string, unknown>;
-    if (Array.isArray(nested.list)) return nested.list;
+
+    if (Array.isArray(nested.list)) {
+      return nested.list;
+    }
   }
 
   return [];
@@ -71,48 +95,80 @@ async function readLimitedResponse(
   response: Response,
   signal: AbortSignal,
 ): Promise<string> {
-  if (!response.body) throw new Error('资源接口没有返回内容');
+  if (!response.body) {
+    throw new Error('资源接口没有返回内容');
+  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+
   let received = 0;
   let result = '';
 
   try {
     while (true) {
       if (signal.aborted) {
-        throw new DOMException('请求已取消', 'AbortError');
+        throw new DOMException(
+          '请求已取消',
+          'AbortError',
+        );
       }
 
       const { done, value } = await reader.read();
+
       if (done) break;
 
       received += value.byteLength;
 
       if (received > MAX_RESPONSE_BYTES) {
         await reader.cancel().catch(() => undefined);
-        throw new Error('资源接口响应超过 5MB 限制');
+
+        throw new Error(
+          '资源接口响应超过 5MB 限制',
+        );
       }
 
-      result += decoder.decode(value, { stream: true });
+      result += decoder.decode(value, {
+        stream: true,
+      });
     }
 
     result += decoder.decode();
+
     return result;
   } finally {
     reader.releaseLock();
   }
 }
 
-function buildSearchUrl(sourceUrl: string, keyword: string): URL {
+function buildSearchUrl(
+  sourceUrl: string,
+  keyword: string,
+): URL {
+  if (
+    typeof sourceUrl !== 'string' ||
+    sourceUrl.length > 2048
+  ) {
+    throw new Error('资源接口地址无效');
+  }
+
   const url = new URL(sourceUrl);
 
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+  if (
+    url.protocol !== 'http:' &&
+    url.protocol !== 'https:'
+  ) {
     throw new Error('只允许 HTTP 或 HTTPS 地址');
   }
 
-  if (!url.pathname.toLowerCase().includes('.php')) {
+  if (url.username || url.password) {
+    throw new Error('接口地址不能包含登录凭据');
+  }
+
+  // 已经包含 PHP 接口路径时，不重复拼接。
+  if (!/\.php(?:\/|$)/i.test(url.pathname)) {
     const basePath = url.pathname.replace(/\/+$/, '');
+
     url.pathname = `${basePath}/api.php/provide/vod`;
   }
 
@@ -126,26 +182,39 @@ function normalizeMovie(
   raw: unknown,
   source: SourceConfig,
 ): SearchResultItem | null {
-  if (!raw || typeof raw !== 'object') return null;
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
 
   const item = raw as Record<string, unknown>;
 
   const vodId = safeString(
-    item.vod_id ?? item.id ?? item.vodId ?? item.vid,
+    item.vod_id ??
+      item.id ??
+      item.vodId ??
+      item.vid,
     100,
   );
 
   const name = safeString(
-    item.vod_name ?? item.name ?? item.title,
+    item.vod_name ??
+      item.name ??
+      item.title,
     100,
   );
 
-  if (!vodId || !name) return null;
+  if (!vodId || !name) {
+    return null;
+  }
 
   const score = safeString(item.vod_score, 12);
+
   const remarks = score
     ? `⭐ ${score}`
-    : safeString(item.vod_remarks ?? item.remarks, 50);
+    : safeString(
+        item.vod_remarks ?? item.remarks,
+        50,
+      );
 
   return {
     sourceKey: source.key,
@@ -154,12 +223,24 @@ function normalizeMovie(
     vodId,
     name,
     pic: normalizePoster(
-      item.vod_pic ?? item.pic ?? item.poster ?? item.img,
+      item.vod_pic ??
+        item.pic ??
+        item.poster ??
+        item.img,
       source.url,
     ),
-    typeName: safeString(item.type_name ?? item.typeName, 40),
-    year: safeString(item.vod_year ?? item.year, 12),
-    area: safeString(item.vod_area ?? item.area, 30),
+    typeName: safeString(
+      item.type_name ?? item.typeName,
+      40,
+    ),
+    year: safeString(
+      item.vod_year ?? item.year,
+      12,
+    ),
+    area: safeString(
+      item.vod_area ?? item.area,
+      30,
+    ),
     remarks,
     isAdult: source.isAdult === true,
   };
@@ -183,13 +264,18 @@ async function fetchFromSource(
   }
 
   const controller = new AbortController();
+
   let timedOut = false;
 
-  const abortFromExternal = () => controller.abort();
+  const abortFromExternal = () => {
+    controller.abort();
+  };
 
-  externalSignal?.addEventListener('abort', abortFromExternal, {
-    once: true,
-  });
+  externalSignal?.addEventListener(
+    'abort',
+    abortFromExternal,
+    { once: true },
+  );
 
   const timer = setTimeout(() => {
     timedOut = true;
@@ -197,18 +283,29 @@ async function fetchFromSource(
   }, SEARCH_TIMEOUT_MS);
 
   try {
-    const targetUrl = buildSearchUrl(source.url, keyword);
+    const targetUrl = buildSearchUrl(
+      source.url,
+      keyword,
+    );
 
-    // 必须经过项目统一的上游请求安全层。
-    const response = await fetchUpstream(targetUrl.toString(), {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json,text/plain,*/*',
-        'User-Agent': 'Mozilla/5.0',
+    // 所有用户配置的上游请求必须经过项目安全请求层。
+    // 不允许关闭安全重定向检查，也不允许放行内网地址。
+    const response = await fetchUpstream(
+      targetUrl.toString(),
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json,text/plain,*/*',
+          'User-Agent': 'Mozilla/5.0',
+        },
+        signal: controller.signal,
+        cache: 'no-store',
+        timeoutMs: SEARCH_TIMEOUT_MS,
+        retries: 0,
+        safeRedirects: true,
+        allowPrivate: false,
       },
-      signal: controller.signal,
-      cache: 'no-store',
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -232,7 +329,10 @@ async function fetchFromSource(
     const list = rawList
       .slice(0, MAX_RESULTS_PER_SOURCE)
       .map(item => normalizeMovie(item, source))
-      .filter((item): item is SearchResultItem => item !== null);
+      .filter(
+        (item): item is SearchResultItem =>
+          item !== null,
+      );
 
     return {
       sourceKey: source.key,
@@ -241,9 +341,8 @@ async function fetchFromSource(
       ms: Date.now() - startedAt,
     };
   } catch (error) {
-    const aborted =
-      controller.signal.aborted ||
-      (error instanceof Error && error.name === 'AbortError');
+    const externallyCancelled =
+      externalSignal?.aborted === true;
 
     return {
       sourceKey: source.key,
@@ -251,7 +350,7 @@ async function fetchFromSource(
       list: [],
       error: timedOut
         ? '搜索超时'
-        : externalSignal?.aborted
+        : externallyCancelled
           ? '请求已取消'
           : getErrorMessage(error),
       timedOut,
@@ -259,7 +358,11 @@ async function fetchFromSource(
     };
   } finally {
     clearTimeout(timer);
-    externalSignal?.removeEventListener('abort', abortFromExternal);
+
+    externalSignal?.removeEventListener(
+      'abort',
+      abortFromExternal,
+    );
   }
 }
 
@@ -271,16 +374,28 @@ export async function searchSources(
     signal?: AbortSignal;
   },
 ): Promise<SourceSearchOutcome[]> {
-  const safeKeyword = safeString(keyword, MAX_KEYWORD_LENGTH);
+  const safeKeyword = safeString(
+    keyword,
+    MAX_KEYWORD_LENGTH,
+  );
 
   if (!safeKeyword) return [];
-  if (!Array.isArray(sources) || sources.length === 0) return [];
 
-  const uniqueSources = new Map<string, SourceConfig>();
+  if (!Array.isArray(sources) || sources.length === 0) {
+    return [];
+  }
+
+  const uniqueSources = new Map<
+    string,
+    SourceConfig
+  >();
 
   for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue;
+    }
+
     if (
-      !source ||
       typeof source.key !== 'string' ||
       typeof source.name !== 'string' ||
       typeof source.url !== 'string'
@@ -288,23 +403,57 @@ export async function searchSources(
       continue;
     }
 
-    if (options?.filterAdult && source.isAdult === true) continue;
+    const key = source.key.trim();
+    const name = source.name.trim();
+    const url = source.url.trim();
 
-    if (!uniqueSources.has(source.key)) {
-      uniqueSources.set(source.key, source);
+    if (
+      !key ||
+      key.length > 100 ||
+      !name ||
+      name.length > 100 ||
+      !url ||
+      url.length > 2048
+    ) {
+      continue;
+    }
+
+    if (
+      options?.filterAdult &&
+      source.isAdult === true
+    ) {
+      continue;
+    }
+
+    if (!uniqueSources.has(key)) {
+      uniqueSources.set(key, {
+        ...source,
+        key,
+        name,
+        url,
+      });
+    }
+
+    // 防止大量配置拖垮搜索任务。
+    if (uniqueSources.size >= MAX_SOURCES) {
+      break;
     }
   }
 
-  const sourceList = Array.from(uniqueSources.values());
+  const sourceList = Array.from(
+    uniqueSources.values(),
+  );
+
   const outcomes: SourceSearchOutcome[] = [];
 
-  // 限制并发数量，避免用户勾选大量接口时瞬间发起过多请求。
   for (
     let offset = 0;
     offset < sourceList.length;
     offset += MAX_CONCURRENT_SOURCES
   ) {
-    if (options?.signal?.aborted) break;
+    if (options?.signal?.aborted) {
+      break;
+    }
 
     const batch = sourceList.slice(
       offset,
@@ -330,16 +479,30 @@ export async function searchSources(
 export function mergeSearchResults(
   outcomes: SourceSearchOutcome[],
 ): SearchResultItem[] {
-  const resultMap = new Map<string, SearchResultItem>();
+  const resultMap = new Map<
+    string,
+    SearchResultItem
+  >();
 
   for (const outcome of outcomes) {
-    if (!outcome.ok || !Array.isArray(outcome.list)) continue;
+    if (
+      !outcome.ok ||
+      !Array.isArray(outcome.list)
+    ) {
+      continue;
+    }
 
     for (const item of outcome.list) {
-      if (!item?.sourceKey || !item?.vodId) continue;
+      if (
+        !item?.sourceKey ||
+        !item?.vodId
+      ) {
+        continue;
+      }
 
-      // 同一个源内按 ID 去重，不会错误合并不同源的影片。
-      const key = `${item.sourceKey}\u0000${item.vodId}`;
+      // 不同资源站的相同影片 ID 不会被错误合并。
+      const key =
+        `${item.sourceKey}\u0000${item.vodId}`;
 
       if (!resultMap.has(key)) {
         resultMap.set(key, item);
