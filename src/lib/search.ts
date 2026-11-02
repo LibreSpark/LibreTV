@@ -1,344 +1,351 @@
 import { fetchUpstream } from '@/lib/fetch-utils';
-import type { SearchResultItem } from '@/lib/types';
+import type {
+  SearchResultItem,
+  SourceConfig,
+  SourceSearchOutcome,
+} from '@/lib/types';
 
 const MAX_KEYWORD_LENGTH = 50;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
+const MAX_RESULTS_PER_SOURCE = 30;
 const SEARCH_TIMEOUT_MS = 8000;
-
-const FRIDAY_SOURCE_KEY = 'friday-cms';
+const MAX_CONCURRENT_SOURCES = 6;
 
 function safeString(value: unknown, maxLength: number): string {
-  if (typeof value !== 'string' && typeof value !== 'number') {
-    return '';
-  }
-
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
   return String(value).trim().slice(0, maxLength);
 }
 
-function normalizePoster(raw: unknown): string | undefined {
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message.slice(0, 200);
+  return '未知搜索错误';
+}
+
+function normalizePoster(
+  raw: unknown,
+  baseUrl: string,
+): string | undefined {
   if (typeof raw !== 'string') return undefined;
 
   let url = raw.trim();
-
   if (!url) return undefined;
 
   if (url.startsWith('//')) {
     url = `https:${url}`;
+  } else if (url.startsWith('/')) {
+    try {
+      url = `${new URL(baseUrl).origin}${url}`;
+    } catch {
+      return undefined;
+    }
   }
 
   try {
     const parsed = new URL(url);
-
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return undefined;
     }
-
     return `/api/img?url=${encodeURIComponent(parsed.toString())}`;
   } catch {
     return undefined;
   }
 }
 
-function extractMovieArray(data: unknown, depth = 0): unknown[] {
-  if (!data || typeof data !== 'object' || depth > 5) {
-    return [];
-  }
+function extractMovieArray(data: unknown): unknown[] {
+  if (!data || typeof data !== 'object') return [];
 
-  if (Array.isArray(data)) {
-    return data;
-  }
+  const record = data as Record<string, unknown>;
 
-  const obj = data as Record<string, unknown>;
+  if (Array.isArray(record.list)) return record.list;
+  if (Array.isArray(record.data)) return record.data;
 
-  if (Array.isArray(obj.list)) return obj.list;
-  if (Array.isArray(obj.data)) return obj.data;
-
-  if (
-    obj.data &&
-    typeof obj.data === 'object' &&
-    Array.isArray((obj.data as Record<string, unknown>).list)
-  ) {
-    return (obj.data as Record<string, unknown>).list as unknown[];
-  }
-
-  for (const value of Object.values(obj)) {
-    if (Array.isArray(value)) {
-      if (
-        value.length > 0 &&
-        value[0] !== null &&
-        typeof value[0] === 'object'
-      ) {
-        return value;
-      }
-    }
-
-    if (value && typeof value === 'object') {
-      const result = extractMovieArray(value, depth + 1);
-
-      if (result.length > 0) {
-        return result;
-      }
-    }
+  if (record.data && typeof record.data === 'object') {
+    const nested = record.data as Record<string, unknown>;
+    if (Array.isArray(nested.list)) return nested.list;
   }
 
   return [];
 }
 
-function normalizeMovie(
-  raw: unknown,
-  sourceUrl: string,
-  sourceName: string
-): SearchResultItem | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-
-  const item = raw as Record<string, unknown>;
-
-  const rawId =
-    item.vod_id ??
-    item.id ??
-    item.vodId ??
-    item.vid;
-
-  const vodIdCandidate = safeString(rawId, 30);
-
-  const vodId = /^[a-zA-Z0-9_-]{1,30}$/.test(vodIdCandidate)
-    ? vodIdCandidate
-    : '';
-
-  if (!vodId) {
-    return null;
-  }
-
-  const name = safeString(
-    item.vod_name ??
-      item.name ??
-      item.title ??
-      '未知影片',
-    50
-  );
-
-  if (!name) {
-    return null;
-  }
-
-  const pic = normalizePoster(
-    item.vod_pic ??
-      item.pic ??
-      item.poster ??
-      item.img ??
-      ''
-  );
-
-  const typeName = safeString(
-    item.type_name ??
-      item.typeName ??
-      item.vod_class,
-    50
-  );
-
-  const year = safeString(
-    item.vod_year ?? item.year,
-    12
-  );
-
-  const area = safeString(
-    item.vod_area ?? item.area,
-    30
-  );
-
-  const remarks = safeString(
-    item.vod_remarks ??
-      item.remarks ??
-      item.vod_note,
-    100
-  );
-
-  return {
-    sourceKey: FRIDAY_SOURCE_KEY,
-    sourceName,
-    sourceUrl,
-    vodId,
-    name,
-    ...(pic ? { pic } : {}),
-    ...(typeName ? { typeName } : {}),
-    ...(year ? { year } : {}),
-    ...(area ? { area } : {}),
-    ...(remarks ? { remarks } : {}),
-  };
-}
-
 async function readLimitedResponse(
   response: Response,
-  controller: AbortController
+  signal: AbortSignal,
 ): Promise<string> {
-  if (!response.body) {
-    throw new Error('搜索接口没有返回响应内容');
-  }
-
-  const contentLength = Number(
-    response.headers.get('content-length') || 0
-  );
-
-  if (
-    Number.isFinite(contentLength) &&
-    contentLength > MAX_RESPONSE_BYTES
-  ) {
-    controller.abort();
-    throw new Error('搜索响应超过大小限制');
-  }
+  if (!response.body) throw new Error('资源接口没有返回内容');
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-
   let received = 0;
   let result = '';
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      if (signal.aborted) {
+        throw new DOMException('请求已取消', 'AbortError');
+      }
 
+      const { done, value } = await reader.read();
       if (done) break;
 
       received += value.byteLength;
 
       if (received > MAX_RESPONSE_BYTES) {
-        controller.abort();
-
-        try {
-          await reader.cancel();
-        } catch {}
-
-        throw new Error('搜索响应超过大小限制');
+        await reader.cancel().catch(() => undefined);
+        throw new Error('资源接口响应超过 5MB 限制');
       }
 
-      result += decoder.decode(value, {
-        stream: true,
-      });
+      result += decoder.decode(value, { stream: true });
     }
 
     result += decoder.decode();
-
     return result;
   } finally {
-    try {
-      reader.releaseLock();
-    } catch {}
+    reader.releaseLock();
   }
 }
 
-export async function searchMovies(
-  keyword: string
-): Promise<SearchResultItem[]> {
-  if (
-    typeof keyword !== 'string' ||
-    !keyword.trim() ||
-    keyword.trim().length > MAX_KEYWORD_LENGTH
-  ) {
-    throw new Error('搜索关键词无效');
+function buildSearchUrl(sourceUrl: string, keyword: string): URL {
+  const url = new URL(sourceUrl);
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('只允许 HTTP 或 HTTPS 地址');
   }
 
-  const cmsBase = process.env.CMS_SEARCH_API;
-
-  if (!cmsBase) {
-    throw new Error('未配置 CMS_SEARCH_API');
+  if (!url.pathname.toLowerCase().includes('.php')) {
+    const basePath = url.pathname.replace(/\/+$/, '');
+    url.pathname = `${basePath}/api.php/provide/vod`;
   }
 
-  let targetUrl: URL;
+  url.searchParams.set('ac', 'videolist');
+  url.searchParams.set('wd', keyword);
 
-  try {
-    targetUrl = new URL(cmsBase);
-  } catch {
-    throw new Error('CMS_SEARCH_API 配置错误');
+  return url;
+}
+
+function normalizeMovie(
+  raw: unknown,
+  source: SourceConfig,
+): SearchResultItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const item = raw as Record<string, unknown>;
+
+  const vodId = safeString(
+    item.vod_id ?? item.id ?? item.vodId ?? item.vid,
+    100,
+  );
+
+  const name = safeString(
+    item.vod_name ?? item.name ?? item.title,
+    100,
+  );
+
+  if (!vodId || !name) return null;
+
+  const score = safeString(item.vod_score, 12);
+  const remarks = score
+    ? `⭐ ${score}`
+    : safeString(item.vod_remarks ?? item.remarks, 50);
+
+  return {
+    sourceKey: source.key,
+    sourceName: source.name,
+    sourceUrl: source.url,
+    vodId,
+    name,
+    pic: normalizePoster(
+      item.vod_pic ?? item.pic ?? item.poster ?? item.img,
+      source.url,
+    ),
+    typeName: safeString(item.type_name ?? item.typeName, 40),
+    year: safeString(item.vod_year ?? item.year, 12),
+    area: safeString(item.vod_area ?? item.area, 30),
+    remarks,
+    isAdult: source.isAdult === true,
+  };
+}
+
+async function fetchFromSource(
+  keyword: string,
+  source: SourceConfig,
+  externalSignal?: AbortSignal,
+): Promise<SourceSearchOutcome> {
+  const startedAt = Date.now();
+
+  if (externalSignal?.aborted) {
+    return {
+      sourceKey: source.key,
+      ok: false,
+      list: [],
+      error: '请求已取消',
+      ms: 0,
+    };
   }
-
-  if (
-    targetUrl.protocol !== 'https:' &&
-    targetUrl.protocol !== 'http:'
-  ) {
-    throw new Error('搜索接口协议不合法');
-  }
-
-  // 详情接口需要的是 CMS API 根地址，不能携带搜索关键词 wd。
-  const sourceUrlObject = new URL(targetUrl.toString());
-  sourceUrlObject.searchParams.delete('wd');
-  sourceUrlObject.hash = '';
-
-  const sourceUrl = sourceUrlObject.toString();
-  const sourceName =
-    safeString(process.env.CMS_SOURCE_NAME, 50) || 'Friday CMS';
-
-  targetUrl.searchParams.set('wd', keyword.trim());
 
   const controller = new AbortController();
+  let timedOut = false;
+
+  const abortFromExternal = () => controller.abort();
+
+  externalSignal?.addEventListener('abort', abortFromExternal, {
+    once: true,
+  });
 
   const timer = setTimeout(() => {
+    timedOut = true;
     controller.abort();
   }, SEARCH_TIMEOUT_MS);
 
   try {
-    // 通过项目统一上游请求工具，沿用现有公网地址及重定向检查。
+    const targetUrl = buildSearchUrl(source.url, keyword);
+
+    // 必须经过项目统一的上游请求安全层。
     const response = await fetchUpstream(targetUrl.toString(), {
       method: 'GET',
       headers: {
-        Accept: 'application/json',
-        'User-Agent': 'LibreTV/2.1',
+        Accept: 'application/json,text/plain,*/*',
+        'User-Agent': 'Mozilla/5.0',
       },
       signal: controller.signal,
       cache: 'no-store',
     });
 
     if (!response.ok) {
-      throw new Error(
-        `搜索上游返回 HTTP ${response.status}`
-      );
+      throw new Error(`HTTP ${response.status}`);
     }
 
-    const contentType =
-      response.headers.get('content-type') || '';
-
-    if (
-      !contentType.includes('json') &&
-      !contentType.includes('text')
-    ) {
-      throw new Error('搜索接口返回了不支持的数据格式');
-    }
-
-    const responseText = await readLimitedResponse(
+    const text = await readLimitedResponse(
       response,
-      controller
+      controller.signal,
     );
 
     let data: unknown;
 
     try {
-      data = JSON.parse(responseText);
+      data = JSON.parse(text);
     } catch {
-      throw new Error('搜索接口返回的 JSON 无效');
+      throw new Error('资源接口返回的不是有效 JSON');
     }
 
     const rawList = extractMovieArray(data);
 
-    const result = rawList
-      .slice(0, 30)
-      .map((item) =>
-        normalizeMovie(item, sourceUrl, sourceName)
-      )
-      .filter(
-        (item): item is SearchResultItem => item !== null
-      );
+    const list = rawList
+      .slice(0, MAX_RESULTS_PER_SOURCE)
+      .map(item => normalizeMovie(item, source))
+      .filter((item): item is SearchResultItem => item !== null);
 
-    return result;
+    return {
+      sourceKey: source.key,
+      ok: true,
+      list,
+      ms: Date.now() - startedAt,
+    };
   } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('搜索请求超时或响应过大');
-    }
+    const aborted =
+      controller.signal.aborted ||
+      (error instanceof Error && error.name === 'AbortError');
 
-    throw error instanceof Error
-      ? error
-      : new Error('搜索接口请求失败');
+    return {
+      sourceKey: source.key,
+      ok: false,
+      list: [],
+      error: timedOut
+        ? '搜索超时'
+        : externalSignal?.aborted
+          ? '请求已取消'
+          : getErrorMessage(error),
+      timedOut,
+      ms: Date.now() - startedAt,
+    };
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', abortFromExternal);
   }
+}
+
+export async function searchSources(
+  keyword: string,
+  sources: SourceConfig[],
+  options?: {
+    filterAdult?: boolean;
+    signal?: AbortSignal;
+  },
+): Promise<SourceSearchOutcome[]> {
+  const safeKeyword = safeString(keyword, MAX_KEYWORD_LENGTH);
+
+  if (!safeKeyword) return [];
+  if (!Array.isArray(sources) || sources.length === 0) return [];
+
+  const uniqueSources = new Map<string, SourceConfig>();
+
+  for (const source of sources) {
+    if (
+      !source ||
+      typeof source.key !== 'string' ||
+      typeof source.name !== 'string' ||
+      typeof source.url !== 'string'
+    ) {
+      continue;
+    }
+
+    if (options?.filterAdult && source.isAdult === true) continue;
+
+    if (!uniqueSources.has(source.key)) {
+      uniqueSources.set(source.key, source);
+    }
+  }
+
+  const sourceList = Array.from(uniqueSources.values());
+  const outcomes: SourceSearchOutcome[] = [];
+
+  // 限制并发数量，避免用户勾选大量接口时瞬间发起过多请求。
+  for (
+    let offset = 0;
+    offset < sourceList.length;
+    offset += MAX_CONCURRENT_SOURCES
+  ) {
+    if (options?.signal?.aborted) break;
+
+    const batch = sourceList.slice(
+      offset,
+      offset + MAX_CONCURRENT_SOURCES,
+    );
+
+    const batchResults = await Promise.all(
+      batch.map(source =>
+        fetchFromSource(
+          safeKeyword,
+          source,
+          options?.signal,
+        ),
+      ),
+    );
+
+    outcomes.push(...batchResults);
+  }
+
+  return outcomes;
+}
+
+export function mergeSearchResults(
+  outcomes: SourceSearchOutcome[],
+): SearchResultItem[] {
+  const resultMap = new Map<string, SearchResultItem>();
+
+  for (const outcome of outcomes) {
+    if (!outcome.ok || !Array.isArray(outcome.list)) continue;
+
+    for (const item of outcome.list) {
+      if (!item?.sourceKey || !item?.vodId) continue;
+
+      // 同一个源内按 ID 去重，不会错误合并不同源的影片。
+      const key = `${item.sourceKey}\u0000${item.vodId}`;
+
+      if (!resultMap.has(key)) {
+        resultMap.set(key, item);
+      }
+    }
+  }
+
+  return Array.from(resultMap.values());
 }
