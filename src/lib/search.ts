@@ -1,16 +1,11 @@
+import { fetchUpstream } from '@/lib/fetch-utils';
+import type { SearchResultItem } from '@/lib/types';
+
 const MAX_KEYWORD_LENGTH = 50;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const SEARCH_TIMEOUT_MS = 8000;
 
-export type MovieItem = {
-  id: string;
-  title: string;
-  poster: string;
-  link: string;
-  year: string;
-  rating: string;
-  overview: string;
-};
+const FRIDAY_SOURCE_KEY = 'friday-cms';
 
 function safeString(value: unknown, maxLength: number): string {
   if (typeof value !== 'string' && typeof value !== 'number') {
@@ -20,22 +15,28 @@ function safeString(value: unknown, maxLength: number): string {
   return String(value).trim().slice(0, maxLength);
 }
 
-function normalizePoster(raw: unknown): string {
-  if (typeof raw !== 'string') return '';
+function normalizePoster(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
 
   let url = raw.trim();
 
-  if (!url) return '';
+  if (!url) return undefined;
 
   if (url.startsWith('//')) {
     url = `https:${url}`;
   }
 
-  if (!/^https?:\/\//i.test(url)) {
-    return '';
-  }
+  try {
+    const parsed = new URL(url);
 
-  return `/api/img?url=${encodeURIComponent(url)}`;
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return undefined;
+    }
+
+    return `/api/img?url=${encodeURIComponent(parsed.toString())}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function extractMovieArray(data: unknown, depth = 0): unknown[] {
@@ -83,7 +84,11 @@ function extractMovieArray(data: unknown, depth = 0): unknown[] {
   return [];
 }
 
-function normalizeMovie(raw: unknown): MovieItem | null {
+function normalizeMovie(
+  raw: unknown,
+  sourceUrl: string,
+  sourceName: string
+): SearchResultItem | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
@@ -96,17 +101,40 @@ function normalizeMovie(raw: unknown): MovieItem | null {
     item.vodId ??
     item.vid;
 
-  const idCandidate = safeString(rawId, 30);
+  const vodIdCandidate = safeString(rawId, 30);
 
-  const id = /^[a-zA-Z0-9_-]{1,30}$/.test(idCandidate)
-    ? idCandidate
+  const vodId = /^[a-zA-Z0-9_-]{1,30}$/.test(vodIdCandidate)
+    ? vodIdCandidate
     : '';
 
-  const title = safeString(
+  if (!vodId) {
+    return null;
+  }
+
+  const name = safeString(
     item.vod_name ??
       item.name ??
       item.title ??
       '未知影片',
+    50
+  );
+
+  if (!name) {
+    return null;
+  }
+
+  const pic = normalizePoster(
+    item.vod_pic ??
+      item.pic ??
+      item.poster ??
+      item.img ??
+      ''
+  );
+
+  const typeName = safeString(
+    item.type_name ??
+      item.typeName ??
+      item.vod_class,
     50
   );
 
@@ -115,36 +143,29 @@ function normalizeMovie(raw: unknown): MovieItem | null {
     12
   );
 
-  const rating = safeString(
-    item.vod_score ?? item.rating,
-    12
+  const area = safeString(
+    item.vod_area ?? item.area,
+    30
   );
 
-  const overview = safeString(
+  const remarks = safeString(
     item.vod_remarks ??
-      item.overview ??
-      '暂无简介',
+      item.remarks ??
+      item.vod_note,
     100
   );
 
-  const poster = normalizePoster(
-    item.vod_pic ??
-      item.pic ??
-      item.poster ??
-      item.img ??
-      ''
-  );
-
   return {
-    id,
-    title,
-    poster,
-    link: id
-      ? `/detail/${encodeURIComponent(id)}`
-      : '',
-    year,
-    rating,
-    overview,
+    sourceKey: FRIDAY_SOURCE_KEY,
+    sourceName,
+    sourceUrl,
+    vodId,
+    name,
+    ...(pic ? { pic } : {}),
+    ...(typeName ? { typeName } : {}),
+    ...(year ? { year } : {}),
+    ...(area ? { area } : {}),
+    ...(remarks ? { remarks } : {}),
   };
 }
 
@@ -209,7 +230,7 @@ async function readLimitedResponse(
 
 export async function searchMovies(
   keyword: string
-): Promise<MovieItem[]> {
+): Promise<SearchResultItem[]> {
   if (
     typeof keyword !== 'string' ||
     !keyword.trim() ||
@@ -239,10 +260,16 @@ export async function searchMovies(
     throw new Error('搜索接口协议不合法');
   }
 
-  targetUrl.searchParams.set(
-    'wd',
-    keyword.trim()
-  );
+  // 详情接口需要的是 CMS API 根地址，不能携带搜索关键词 wd。
+  const sourceUrlObject = new URL(targetUrl.toString());
+  sourceUrlObject.searchParams.delete('wd');
+  sourceUrlObject.hash = '';
+
+  const sourceUrl = sourceUrlObject.toString();
+  const sourceName =
+    safeString(process.env.CMS_SOURCE_NAME, 50) || 'Friday CMS';
+
+  targetUrl.searchParams.set('wd', keyword.trim());
 
   const controller = new AbortController();
 
@@ -251,7 +278,8 @@ export async function searchMovies(
   }, SEARCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(targetUrl.toString(), {
+    // 通过项目统一上游请求工具，沿用现有公网地址及重定向检查。
+    const response = await fetchUpstream(targetUrl.toString(), {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -292,10 +320,16 @@ export async function searchMovies(
 
     const rawList = extractMovieArray(data);
 
-    return rawList
+    const result = rawList
       .slice(0, 30)
-      .map(normalizeMovie)
-      .filter((item): item is MovieItem => item !== null);
+      .map((item) =>
+        normalizeMovie(item, sourceUrl, sourceName)
+      )
+      .filter(
+        (item): item is SearchResultItem => item !== null
+      );
+
+    return result;
   } catch (error) {
     if (controller.signal.aborted) {
       throw new Error('搜索请求超时或响应过大');
