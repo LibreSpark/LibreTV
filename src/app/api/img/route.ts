@@ -7,11 +7,30 @@ export const runtime = 'nodejs';
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const IMAGE_TIMEOUT_MS = 8000;
 
+const ALLOWED_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+  'image/bmp',
+]);
+
+function errorResponse(message: string, status: number) {
+  return new NextResponse(message, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get('url') || '';
 
   if (!raw || raw.length > 4096) {
-    return new NextResponse('invalid url', { status: 400 });
+    return errorResponse('invalid url', 400);
   }
 
   let target: URL;
@@ -23,16 +42,14 @@ export async function GET(req: NextRequest) {
       target.protocol !== 'http:' &&
       target.protocol !== 'https:'
     ) {
-      return new NextResponse('bad protocol', { status: 400 });
+      return errorResponse('bad protocol', 400);
     }
 
     if (target.username || target.password) {
-      return new NextResponse('credentials not allowed', {
-        status: 400,
-      });
+      return errorResponse('credentials not allowed', 400);
     }
   } catch {
-    return new NextResponse('invalid url', { status: 400 });
+    return errorResponse('invalid url', 400);
   }
 
   try {
@@ -40,7 +57,7 @@ export async function GET(req: NextRequest) {
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0',
-        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
       },
       timeoutMs: IMAGE_TIMEOUT_MS,
       retries: 0,
@@ -49,9 +66,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (!upstream.ok) {
-      return new NextResponse('upstream error', {
-        status: 502,
-      });
+      return errorResponse('upstream error', 502);
     }
 
     const contentType = (
@@ -61,10 +76,8 @@ export async function GET(req: NextRequest) {
       .trim()
       .toLowerCase();
 
-    if (!contentType.startsWith('image/')) {
-      return new NextResponse('invalid image content type', {
-        status: 502,
-      });
+    if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+      return errorResponse('unsupported image type', 502);
     }
 
     const contentLength = Number(
@@ -75,15 +88,11 @@ export async function GET(req: NextRequest) {
       Number.isFinite(contentLength) &&
       contentLength > MAX_IMAGE_BYTES
     ) {
-      return new NextResponse('image too large', {
-        status: 413,
-      });
+      return errorResponse('image too large', 413);
     }
 
     if (!upstream.body) {
-      return new NextResponse('empty image response', {
-        status: 502,
-      });
+      return errorResponse('empty image response', 502);
     }
 
     const reader = upstream.body.getReader();
@@ -99,23 +108,27 @@ export async function GET(req: NextRequest) {
         total += value.byteLength;
 
         if (total > MAX_IMAGE_BYTES) {
-          await reader.cancel();
+          try {
+            await reader.cancel();
+          } catch {
+            // 忽略取消读取时的错误
+          }
 
-          return new NextResponse('image too large', {
-            status: 413,
-          });
+          return errorResponse('image too large', 413);
         }
 
         chunks.push(value);
       }
     } finally {
-      reader.releaseLock();
+      try {
+        reader.releaseLock();
+      } catch {
+        // 忽略释放锁时的错误
+      }
     }
 
     if (total === 0) {
-      return new NextResponse('empty image response', {
-        status: 502,
-      });
+      return errorResponse('empty image response', 502);
     }
 
     const image = new Uint8Array(total);
@@ -131,15 +144,13 @@ export async function GET(req: NextRequest) {
       headers: {
         'Content-Type': contentType,
         'Content-Length': String(total),
-        'Cache-Control': 'public, max-age=86400',
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
         'X-Content-Type-Options': 'nosniff',
       },
     });
   } catch (error) {
     console.error('[api/img] Image proxy failed:', error);
 
-    return new NextResponse('image fetch failed', {
-      status: 502,
-    });
+    return errorResponse('image fetch failed', 502);
   }
 }
