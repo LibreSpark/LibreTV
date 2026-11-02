@@ -52,12 +52,15 @@ function simpleUid() {
   return `${Date.now().toString(36)}-${simpleUidCounter}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
+function normalizeName(name: string) {
+  return String(name || '').replace(/[\s\(\)（）]/g, '').toLowerCase();
+}
+
 const isSafeUrl = (urlStr: string) => {
   try {
     const url = new URL(urlStr);
     if (!['http:', 'https:'].includes(url.protocol)) return false;
     if (url.username || url.password) return false;
-    // 🚀 优化：开发环境允许内网源，避免本地调试被拦截
     if (process.env.NODE_ENV === 'development') return true;
 
     let host = url.hostname.toLowerCase();
@@ -77,10 +80,8 @@ const isSafeUrl = (urlStr: string) => {
   } catch { return false; }
 };
 
-// 🚀 修复 Bug1：加入最大递归深度 maxDepth，防止死循环 JSON 导致栈溢出崩溃
 function extractMoviesRecursively(obj: any, maxDepth = 8): any[] {
   let bestList: any[] = [];
-
   function traverse(node: any, depth: number) {
     if (!node || typeof node !== 'object' || depth > maxDepth) return;
 
@@ -99,12 +100,10 @@ function extractMoviesRecursively(obj: any, maxDepth = 8): any[] {
       for (const item of node) traverse(item, depth + 1);
       return;
     }
-
     for (const key in node) {
       traverse(node[key], depth + 1);
     }
   }
-
   traverse(obj, 0);
   return bestList;
 }
@@ -261,41 +260,6 @@ export default function AIFloatingBall() {
     } catch (e) {}
   }, []);
 
-  const loadVideoInsidePage = useCallback(async (vodId: string | number, title: string) => {
-    if (vodId === null || vodId === undefined || vodId === '') {
-      setMessages(prev => [...prev, { id: simpleUid(), role: 'system', type: 'system', content: '⚠️ 缺少视频ID，无法播放' }]);
-      return;
-    }
-    setMessages(prev => [...prev, { id: simpleUid(), role: 'system', type: 'system', content: `🎬 已为您加载影片：${title}` }]);
-    const evt = new CustomEvent('friday-play-video', { detail: { vodId, title }, bubbles: true });
-    window.dispatchEvent(evt);
-    speakTextRef.current?.(`已为您播放${title}`);
-  }, []);
-
-  useEffect(() => {
-    const handleVideoEnded = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail && detail.title) {
-        setMessages(prev => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: `《${detail.title}》播放完毕。需要我帮你找下一部吗？` }]);
-        speakTextRef.current?.(`${detail.title}播放完毕`);
-      }
-    };
-    window.addEventListener('friday-video-ended', handleVideoEnded);
-    return () => window.removeEventListener('friday-video-ended', handleVideoEnded);
-  }, []);
-
-  useEffect(() => {
-    messagesRef.current = messages;
-    if (typeof window !== 'undefined' && messages.length > 0) {
-      const toSave = messages.slice(-50);
-      try {
-        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(toSave));
-      } catch (e) {}
-    }
-  }, [messages]);
-
-  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
-
   const togglePanel = useCallback(
     (reset = false) => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -349,6 +313,77 @@ export default function AIFloatingBall() {
     [setSpeechStateSafe]
   );
 
+  // 🚀 全局快捷键监听（修复了 togglePanel 的开关逻辑）
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Alt + A：切换 唤起/关闭悬浮球
+      if (e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        if (isOpen) {
+          togglePanel(false); // 关闭
+        } else {
+          togglePanel(true); // 打开
+        }
+      }
+      // Alt + S：唤起并开启语音模式
+      if (e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (!isOpen) {
+          togglePanel(true);
+        }
+        // 延迟等弹窗展开动画完成，再开启麦克风
+        setTimeout(() => {
+          if (!isVoiceMode) {
+            toggleVoiceMode();
+          }
+        }, 350);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [togglePanel, isOpen, isVoiceMode]);
+
+  // 🚀 纯净事件广播（防狂点）
+  const loadVideoInsidePage = useCallback(async (vodId: string | number, title: string) => {
+    if (loading) return; 
+
+    if (vodId === null || vodId === undefined || vodId === '') {
+      setMessages(prev => [...prev, { id: simpleUid(), role: 'system', type: 'system', content: '⚠️ 缺少视频ID，无法播放' }]);
+      return;
+    }
+
+    const evt = new CustomEvent('friday-play-video', { detail: { vodId, title }, bubbles: true });
+    window.dispatchEvent(evt);
+
+    togglePanel(false); 
+  }, [togglePanel, loading]);
+
+  useEffect(() => {
+    const handleVideoEnded = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.title) {
+        setMessages(prev => [...prev, { id: simpleUid(), role: 'assistant', type: 'text', content: `《${detail.title}》播放完毕。需要我帮你找下一部吗？` }]);
+        if (speakTextRef.current) {
+          speakTextRef.current(`${detail.title}播放完毕`);
+        }
+      }
+    };
+    window.addEventListener('friday-video-ended', handleVideoEnded);
+    return () => window.removeEventListener('friday-video-ended', handleVideoEnded);
+  }, []);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+    if (typeof window !== 'undefined' && messages.length > 0) {
+      const toSave = messages.slice(-50);
+      try {
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(toSave));
+      } catch (e) {}
+    }
+  }, [messages]);
+
+  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
+
   useEffect(() => {
     setMounted(true);
     mountedRef.current = true;
@@ -379,7 +414,6 @@ export default function AIFloatingBall() {
   }, [togglePanel]);
 
   useEffect(() => {
-    if (!isOpen) return;
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) {
         togglePanel(false);
@@ -387,7 +421,7 @@ export default function AIFloatingBall() {
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, togglePanel]);
+  }, [togglePanel]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -725,11 +759,8 @@ export default function AIFloatingBall() {
                 try {
                   const parsedData = JSON.parse(text);
                   realList = extractMoviesRecursively(parsedData);
-                } catch (e) {
-                  // 🚀 修复 Bug3：删除了无用的 SSE 死代码正则
-                }
+                } catch (e) {}
 
-                // 🚀 修复 Bug2 & Bug4：仅在开发环境输出查案信息，且截断长度提升至 1200
                 if (realList.length === 0) {
                   if (process.env.NODE_ENV === 'development') {
                     const maxLogLen = 1200;
@@ -743,7 +774,6 @@ export default function AIFloatingBall() {
                   const name = m.vod_name || m.title || m.name;
                   return id !== undefined && id !== null && name;
                 }).map(m => {
-                  // 🚀 优化：处理 //xxx.jpg 协议相对地址
                   let safePic = m.vod_pic || m.poster || m.pic;
                   if (safePic && safePic.startsWith('//')) {
                     safePic = `https:${safePic}`;
@@ -758,9 +788,47 @@ export default function AIFloatingBall() {
                   };
                 });
 
+                // 🚀 1. 过滤垃圾数据（预告片、花絮、解说、MV）
+                realList = realList.filter(m => {
+                  const name = m.vod_name || '';
+                  const badWords = ['预告', '花絮', '解说', 'MV', '特辑', '片段', '彩蛋'];
+                  const isBad = badWords.some(w => name.includes(w)) && !args.keyword.includes(w);
+                  return !isBad;
+                });
+
+                // 🚀 2. 智能打分排序
+                const scoredList = realList.map(m => {
+                  let score = 0;
+                  const year = parseInt(m.vod_year) || 0;
+                  
+                  if (year > 2000) score += Math.min(50, (year - 2000) * 2);
+                  if (m.vod_pic && !m.vod_pic.includes('picsum')) score += 20;
+                  
+                  const remarks = m.vod_remarks || '';
+                  if (remarks.length > 10) score += 20;
+                  else if (remarks.length > 0) score += 10;
+
+                  if (remarks.includes('HD') || remarks.includes('蓝光') || remarks.includes('1080')) score += 10;
+
+                  return { ...m, _score: score };
+                });
+
+                scoredList.sort((a, b) => b._score - a._score);
+                realList = scoredList;
+
+                // 🚀 3. 名称归一化去重
+                const uniqueMap = new Map();
+                realList.forEach(m => {
+                  const key = `${normalizeName(m.vod_name)}-${m.vod_year || '未知'}`;
+                  if (!uniqueMap.has(key)) {
+                    uniqueMap.set(key, m);
+                  }
+                });
+                realList = Array.from(uniqueMap.values());
+
                 if (realList.length > 0) {
                   const formattedList = realList
-                    .slice(0, 10)
+                    .slice(0, 6)
                     .map((m: any) => ({
                       title: m.vod_name,
                       poster: m.vod_pic || 'https://picsum.photos/300/450',
@@ -935,7 +1003,7 @@ export default function AIFloatingBall() {
                     : `未找到资源，点击展开查看详情`) 
                 : lastMsg?.content || '点击这里和我对话...'}
             </p>
-            <div className="absolute bottom-2 left-6 text-[10px] text-gray-500">点击展开</div>
+            <div className="absolute bottom-2 left-6 text-[10px] text-gray-500">点击展开 (Alt+A)</div>
           </div>
         )}
 
@@ -964,7 +1032,7 @@ export default function AIFloatingBall() {
                       </div>
                       <div className="relative w-full h-[110px] rounded-2xl overflow-hidden mb-3 bg-gradient-to-br from-indigo-900/40 to-emerald-900/40">
                         <div className="flex gap-2 px-3 pt-3 overflow-x-auto scrollbar-hide absolute inset-0">
-                          {msg.compositeMovie.items.slice(0, 10).map((item, idx) => (
+                          {msg.compositeMovie.items.slice(0, 6).map((item, idx) => (
                             <img
                               key={idx}
                               src={item.poster}
