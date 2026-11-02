@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -226,16 +227,13 @@ export default function AIFloatingBall() {
     []
   );
 
+  // 修复：sourceUrl 改为可选，由 page.tsx 负责数据源兜底。
   const openNativeDetail = useCallback(
     (item: SearchResultItem) => {
-      if (
-        !isSearchResultItem(item) ||
-        typeof item.sourceUrl !== 'string' ||
-        !item.sourceUrl
-      ) {
+      if (!isSearchResultItem(item)) {
         addTextMessage(
           'assistant',
-          '这条影片资源缺少详情接口地址，暂时无法打开详情。'
+          '影片资源信息不完整，无法打开详情。'
         );
         return;
       }
@@ -245,7 +243,9 @@ export default function AIFloatingBall() {
           detail: {
             sourceKey: item.sourceKey,
             sourceName: item.sourceName,
-            sourceUrl: item.sourceUrl,
+            ...(item.sourceUrl
+              ? { sourceUrl: item.sourceUrl }
+              : {}),
             vodId: item.vodId,
             name: item.name,
             pic: item.pic,
@@ -934,14 +934,21 @@ export default function AIFloatingBall() {
                               onClick={() => openNativeDetail(item)}
                               className="group relative flex flex-col bg-[#1c1c1e] rounded-xl overflow-hidden border border-white/5 hover:border-white/20 cursor-pointer transition text-left"
                             >
-                              <div className="aspect-[2/3] w-full bg-white/5 relative overflow-hidden">
-                                {item.pic && (
+                              <div className="aspect-[2/3] w-full relative overflow-hidden flex flex-col items-center justify-center bg-gradient-to-br from-[#34343a] via-[#24242b] to-[#15151b]">
+                                <span className="text-white/25 text-4xl mb-2">
+                                  🎬
+                                </span>
+                                <span className="text-white/40 text-xs">
+                                  暂无海报
+                                </span>
+
+                                {item.pic?.trim() && (
                                   <img
                                     src={item.pic}
                                     alt={item.name}
                                     referrerPolicy="no-referrer"
                                     loading="lazy"
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    className="absolute inset-0 z-10 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                     onError={(event) => {
                                       event.currentTarget.style.display = 'none';
                                     }}
