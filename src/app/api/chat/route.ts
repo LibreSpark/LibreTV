@@ -598,9 +598,11 @@ export async function POST(req: NextRequest) {
 
       const uiToolCalls: ToolCall[] = [];
 
-      let movieData: Awaited<
+      type MovieSearchResult = Awaited<
         ReturnType<typeof searchMovies>
-      > = [];
+      >[number];
+
+      const movieMap = new Map<string, MovieSearchResult>();
 
       for (const rawCall of rawCalls) {
         if (!rawCall || typeof rawCall !== 'object') {
@@ -687,7 +689,15 @@ export async function POST(req: NextRequest) {
 
             const items = await searchMovies(keyword);
 
-            movieData = items;
+            // 每次工具调用的 tool result 只返回本次搜索结果。
+            // movieData 则累计所有搜索结果，避免后一次搜索覆盖前一次。
+            for (const item of items) {
+              const key = `${item.sourceKey}:${item.vodId}`;
+
+              if (!movieMap.has(key)) {
+                movieMap.set(key, item);
+              }
+            }
 
             toolMessages.push({
               role: 'tool',
@@ -718,6 +728,8 @@ export async function POST(req: NextRequest) {
 
         uiToolCalls.push(call);
       }
+
+      const movieData = Array.from(movieMap.values());
 
       // 统一返回完整工具批次。
       // 前端必须为每个 uiToolCall 补充真实执行结果。
