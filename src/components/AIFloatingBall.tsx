@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type TouchEvent,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore, resolveSource } from '@/lib/store';
 import type { SearchResultItem } from '@/lib/types';
@@ -38,6 +45,19 @@ type ApiResponse = {
   serverToolMessages?: HistoryMessage[];
   uiToolCalls?: ToolCall[];
   error?: string;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onresult: ((event: any) => void) | null;
+  onerror: ((event: any) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
 };
 
 const MAX_HISTORY = 45;
@@ -135,8 +155,8 @@ function isHistoryMessage(value: unknown): value is HistoryMessage {
 }
 
 /**
- * 按完整用户对话轮次压缩。
- * 不会从中间截断一组 assistant tool_calls / tool 结果。
+ * 按完整对话轮次压缩历史。
+ * 不会从中间截断 assistant tool_calls 与 tool 结果。
  */
 function compactHistory(history: HistoryMessage[]): HistoryMessage[] {
   const groups: HistoryMessage[][] = [];
@@ -147,10 +167,13 @@ function compactHistory(history: HistoryMessage[]): HistoryMessage[] {
       groups.push(current);
       current = [];
     }
+
     current.push(message);
   }
 
-  if (current.length > 0) groups.push(current);
+  if (current.length > 0) {
+    groups.push(current);
+  }
 
   const selected: HistoryMessage[][] = [];
   let count = 0;
@@ -177,25 +200,37 @@ function validateToolPairing(
   if (assistantMessage.role !== 'assistant') return false;
   if (!Array.isArray(assistantMessage.tool_calls)) return false;
   if (!Array.isArray(uiToolCalls)) return false;
-  if (uiToolCalls.length === 0 || uiToolCalls.length > MAX_UI_TOOL_CALLS) {
+
+  if (
+    uiToolCalls.length === 0 ||
+    uiToolCalls.length > MAX_UI_TOOL_CALLS
+  ) {
     return false;
   }
 
   const assistantCalls = assistantMessage.tool_calls;
 
-  if (assistantCalls.length !== uiToolCalls.length) return false;
+  if (assistantCalls.length !== uiToolCalls.length) {
+    return false;
+  }
 
   const assistantIds = new Set<string>();
 
   for (const call of assistantCalls) {
-    if (!isToolCall(call) || assistantIds.has(call.id)) return false;
+    if (!isToolCall(call) || assistantIds.has(call.id)) {
+      return false;
+    }
+
     assistantIds.add(call.id);
   }
 
   const uiIds = new Set<string>();
 
   for (const rawCall of uiToolCalls) {
-    if (!isToolCall(rawCall) || uiIds.has(rawCall.id)) return false;
+    if (!isToolCall(rawCall) || uiIds.has(rawCall.id)) {
+      return false;
+    }
+
     uiIds.add(rawCall.id);
   }
 
@@ -232,8 +267,11 @@ async function readApiResponse(response: Response): Promise<ApiResponse> {
 
   if (!contentType.toLowerCase().includes('application/json')) {
     const detail = await response.text().catch(() => '');
+
     throw new Error(
-      `服务器返回的不是 JSON 数据（HTTP ${response.status}）${detail ? `：${detail.slice(0, 120)}` : ''}`,
+      `服务器返回的不是 JSON 数据（HTTP ${response.status}）${
+        detail ? `：${detail.slice(0, 120)}` : ''
+      }`,
     );
   }
 
@@ -279,7 +317,18 @@ export default function AIFloatingBall() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [listening, setListening] = useState(false);
 
-  const isDragging = useRef(false);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const sendLock = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const apiHistoryRef = useRef<HistoryMessage[]>([]);
+
+  // 语音识别独立管理，不与网络请求取消共用状态。
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const voiceFinalTextRef = useRef('');
+  const voiceAutoSendRef = useRef(false);
+  const voiceErrorRef = useRef(false);
+
   const dragStart = useRef({
     x: 0,
     y: 0,
@@ -287,11 +336,7 @@ export default function AIFloatingBall() {
     ballY: 0,
   });
 
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const sendLock = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const apiHistoryRef = useRef<HistoryMessage[]>([]);
-  const recognitionRef = useRef<any>(null);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     const el = listRef.current;
@@ -307,6 +352,8 @@ export default function AIFloatingBall() {
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+
+      voiceAutoSendRef.current = false;
 
       try {
         recognitionRef.current?.abort();
@@ -393,76 +440,6 @@ export default function AIFloatingBall() {
     );
   }, []);
 
-  const stopRequest = useCallback(() => {
-    abortRef.current?.abort();
-
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      // 忽略识别停止异常。
-    }
-
-    if (
-      typeof window !== 'undefined' &&
-      window.speechSynthesis
-    ) {
-      window.speechSynthesis.cancel();
-    }
-  }, []);
-
-  const startVoice = useCallback(() => {
-    if (typeof window === 'undefined') return;
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      addTextMessage('assistant', '当前浏览器不支持语音识别。');
-      return;
-    }
-
-    try {
-      const rec = new SpeechRecognition();
-
-      rec.lang = 'zh-CN';
-      rec.continuous = false;
-      rec.interimResults = true;
-
-      rec.onstart = () => {
-        setListening(true);
-      };
-
-      rec.onresult = (event: any) => {
-        let text = '';
-
-        for (
-          let i = event.resultIndex;
-          i < event.results.length;
-          i++
-        ) {
-          text += event.results[i][0].transcript;
-        }
-
-        if (text) setInput(text);
-      };
-
-      rec.onerror = () => {
-        setListening(false);
-      };
-
-      rec.onend = () => {
-        setListening(false);
-      };
-
-      recognitionRef.current = rec;
-      rec.start();
-    } catch {
-      setListening(false);
-      addTextMessage('assistant', '语音识别启动失败，请检查浏览器麦克风权限。');
-    }
-  }, [addTextMessage]);
-
   const executeUiTool = useCallback(
     async (call: ToolCall): Promise<string> => {
       try {
@@ -470,7 +447,9 @@ export default function AIFloatingBall() {
           return '工具调用格式无效';
         }
 
-        const args: unknown = JSON.parse(call.function.arguments || '{}');
+        const args: unknown = JSON.parse(
+          call.function.arguments || '{}',
+        );
 
         if (!isRecord(args)) {
           return '工具参数格式无效';
@@ -606,6 +585,7 @@ export default function AIFloatingBall() {
 
       sendLock.current = true;
       setInput('');
+
       setBusy(true);
 
       addTextMessage('user', text);
@@ -657,7 +637,9 @@ export default function AIFloatingBall() {
           if (controller.signal.aborted) break;
 
           if (Array.isArray(data.movieData)) {
-            const validItems = data.movieData.filter(isSearchResultItem);
+            const validItems = data.movieData
+              .filter(isSearchResultItem)
+              .slice(0, 100);
 
             if (validItems.length > 0) {
               addMovieList(validItems);
@@ -689,11 +671,15 @@ export default function AIFloatingBall() {
               throw new Error('服务器返回的前端工具列表无效');
             }
 
-            if (!validateToolPairing(data.assistantMessage, uiCalls)) {
+            if (
+              !validateToolPairing(
+                data.assistantMessage,
+                uiCalls,
+              )
+            ) {
               throw new Error('工具调用记录与执行列表不匹配');
             }
 
-            // 搜索提示单独写入历史，服务器搜索工具不进入前端执行链。
             if (
               typeof data.searchText === 'string' &&
               data.searchText.trim()
@@ -706,9 +692,8 @@ export default function AIFloatingBall() {
               addTextMessage('assistant', data.searchText);
             }
 
-            apiHistoryRef.current.push(data.assistantMessage);
+            apiHistoryRef.current.push(data.assistantMessage!);
 
-            // 兼容后端返回的服务器工具结果。
             if (data.serverToolMessages !== undefined) {
               if (!Array.isArray(data.serverToolMessages)) {
                 throw new Error('服务器工具结果格式无效');
@@ -766,7 +751,7 @@ export default function AIFloatingBall() {
           addTextMessage('assistant', `请求异常：${message}`);
         }
 
-        // 只回退当前用户轮次之后的未完成数据，保留此前完整对话。
+        // 回退当前未完成轮次，保留此前完整对话。
         let lastUserIndex = apiHistoryRef.current.length - 1;
 
         while (
@@ -783,7 +768,9 @@ export default function AIFloatingBall() {
           );
         }
       } finally {
-        apiHistoryRef.current = compactHistory(apiHistoryRef.current);
+        apiHistoryRef.current = compactHistory(
+          apiHistoryRef.current,
+        );
 
         setBusy(false);
         sendLock.current = false;
@@ -801,8 +788,229 @@ export default function AIFloatingBall() {
     ],
   );
 
+  /**
+   * 结束录音：
+   * 只停止语音识别，不取消网络请求。
+   * 已识别的最终文本会在 onend 中自动发送。
+   */
+  const stopVoice = useCallback(() => {
+    const recognition = recognitionRef.current;
+
+    if (!recognition) {
+      setListening(false);
+      return;
+    }
+
+    try {
+      recognition.stop();
+    } catch {
+      setListening(false);
+    }
+  }, []);
+
+  /**
+   * 取消语音识别：
+   * 放弃本次识别内容，不发送。
+   */
+  const cancelVoice = useCallback(() => {
+    voiceAutoSendRef.current = false;
+    voiceFinalTextRef.current = '';
+    voiceErrorRef.current = true;
+
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+
+    try {
+      recognition?.abort();
+    } catch {
+      // 忽略浏览器识别取消异常。
+    }
+
+    setListening(false);
+  }, []);
+
+  /**
+   * 取消当前网络请求。
+   * 不负责停止语音识别，两个流程相互独立。
+   */
+  const stopRequest = useCallback(() => {
+    abortRef.current?.abort();
+
+    if (
+      typeof window !== 'undefined' &&
+      window.speechSynthesis
+    ) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  /**
+   * 开始语音识别。
+   * 识别结束后，自动将最终识别文本交给 send()。
+   */
+  const startVoice = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!window.isSecureContext) {
+      addTextMessage(
+        'assistant',
+        '语音识别需要 HTTPS 安全连接，请通过 HTTPS 网站访问。',
+      );
+      return;
+    }
+
+    if (busy || sendLock.current) {
+      addTextMessage(
+        'assistant',
+        '当前请求尚未结束，请稍后再使用语音输入。',
+      );
+      return;
+    }
+
+    const SpeechRecognitionConstructor =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionConstructor) {
+      addTextMessage(
+        'assistant',
+        '当前浏览器不支持语音识别。请尝试使用支持 Web Speech API 的浏览器。',
+      );
+      return;
+    }
+
+    if (recognitionRef.current) {
+      return;
+    }
+
+    voiceFinalTextRef.current = '';
+    voiceAutoSendRef.current = true;
+    voiceErrorRef.current = false;
+
+    try {
+      const recognition: SpeechRecognitionLike =
+        new SpeechRecognitionConstructor();
+
+      recognition.lang = 'zh-CN';
+
+      // 单句识别，浏览器在一句话结束后触发 onend。
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let interimText = '';
+
+        for (
+          let i = event.resultIndex;
+          i < event.results.length;
+          i++
+        ) {
+          const result = event.results[i];
+          const transcript =
+            result?.[0]?.transcript || '';
+
+          if (result.isFinal) {
+            voiceFinalTextRef.current += transcript;
+          } else {
+            interimText += transcript;
+          }
+        }
+
+        const finalText = voiceFinalTextRef.current.trim();
+
+        // 输入框显示识别过程，但自动发送只使用最终识别文本。
+        setInput(finalText || interimText);
+      };
+
+      recognition.onerror = (event: any) => {
+        const error = event?.error || 'unknown';
+
+        if (
+          error === 'not-allowed' ||
+          error === 'service-not-allowed' ||
+          error === 'audio-capture' ||
+          error === 'aborted'
+        ) {
+          voiceAutoSendRef.current = false;
+          voiceErrorRef.current = true;
+        }
+
+        if (error === 'not-allowed' || error === 'service-not-allowed') {
+          addTextMessage(
+            'assistant',
+            '麦克风权限未获准。请在浏览器设置中允许此网站使用麦克风。',
+          );
+        } else if (error === 'audio-capture') {
+          addTextMessage(
+            'assistant',
+            '没有检测到可用麦克风，请检查设备的麦克风设置。',
+          );
+        } else if (error === 'network') {
+          addTextMessage(
+            'assistant',
+            '语音识别网络连接失败，请检查网络后重试。',
+          );
+        } else if (error === 'no-speech') {
+          // 没有检测到语音，不自动发送空内容。
+          voiceFinalTextRef.current = '';
+        }
+      };
+
+      recognition.onend = () => {
+        setListening(false);
+
+        if (recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+        }
+
+        const shouldSend = voiceAutoSendRef.current;
+        const finalText = voiceFinalTextRef.current.trim();
+
+        voiceAutoSendRef.current = false;
+        voiceFinalTextRef.current = '';
+
+        if (!shouldSend || voiceErrorRef.current) {
+          voiceErrorRef.current = false;
+          return;
+        }
+
+        if (finalText) {
+          setInput('');
+
+          // 等待识别回调结束后发送，避免状态更新竞争。
+          void send(finalText);
+        }
+      };
+
+      recognitionRef.current = recognition;
+
+      // start() 在部分浏览器中可能因权限或设备状态抛出异常。
+      recognition.start();
+    } catch (error: unknown) {
+      recognitionRef.current = null;
+      voiceAutoSendRef.current = false;
+      voiceFinalTextRef.current = '';
+      voiceErrorRef.current = false;
+
+      setListening(false);
+
+      const message =
+        error instanceof Error ? error.message : '';
+
+      addTextMessage(
+        'assistant',
+        `语音识别启动失败${message ? `：${message}` : '，请检查麦克风权限并重试。'}`,
+      );
+    }
+  }, [busy, addTextMessage, send]);
+
   const handlePointerDown = (
-    event: React.MouseEvent | React.TouchEvent,
+    event: MouseEvent<HTMLButtonElement> |
+      TouchEvent<HTMLButtonElement>,
   ) => {
     if (active) return;
 
@@ -836,7 +1044,9 @@ export default function AIFloatingBall() {
           ? moveEvent.touches[0]?.clientY
           : moveEvent.clientY;
 
-      if (typeof mx !== 'number' || typeof my !== 'number') return;
+      if (typeof mx !== 'number' || typeof my !== 'number') {
+        return;
+      }
 
       const dx = mx - dragStart.current.x;
       const dy = my - dragStart.current.y;
@@ -862,15 +1072,15 @@ export default function AIFloatingBall() {
     };
 
     const handleUp = () => {
-      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mousemove', handleMove as EventListener);
       window.removeEventListener('mouseup', handleUp);
-      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchmove', handleMove as EventListener);
       window.removeEventListener('touchend', handleUp);
     };
 
-    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mousemove', handleMove as EventListener);
     window.addEventListener('mouseup', handleUp);
-    window.addEventListener('touchmove', handleMove, {
+    window.addEventListener('touchmove', handleMove as EventListener, {
       passive: true,
     });
     window.addEventListener('touchend', handleUp);
@@ -899,13 +1109,16 @@ export default function AIFloatingBall() {
             onMouseDown={handlePointerDown}
             onTouchStart={handlePointerDown}
             onClick={() => {
-              if (!isDragging.current) setActive(true);
+              if (!isDragging.current) {
+                setActive(true);
+              }
             }}
             className="w-[84px] h-[50px] rounded-full shadow-2xl flex items-center justify-center overflow-hidden"
             style={{
               background:
                 'linear-gradient(180deg, #050505 0%, #1a1a1a 35%, #d9d9d9 52%, #ffffff 100%)',
             }}
+            aria-label="打开 Friday 助手"
           >
             <span className="text-black/40 text-2xl relative z-10">
               ✦
@@ -925,6 +1138,7 @@ export default function AIFloatingBall() {
                   onClick={() => setVoiceEnabled(value => !value)}
                   className="p-1.5 text-white/70"
                   aria-label="切换语音播报"
+                  title="切换语音播报"
                 >
                   {voiceEnabled ? '🔊' : '🔇'}
                 </button>
@@ -934,7 +1148,7 @@ export default function AIFloatingBall() {
                     onClick={stopRequest}
                     className="text-xs text-red-400"
                   >
-                    取消
+                    取消请求
                   </button>
                 )}
 
@@ -1023,40 +1237,59 @@ export default function AIFloatingBall() {
               )}
             </div>
 
-            <div className="p-3 border-t border-white/10 flex gap-2">
+            <div className="p-3 border-t border-white/10 flex gap-2 items-center">
               <button
-                onClick={listening ? stopRequest : startVoice}
+                type="button"
+                onClick={listening ? stopVoice : startVoice}
                 disabled={busy}
-                className={`w-8 h-8 rounded-full text-white ${
+                className={`w-9 h-9 shrink-0 rounded-full text-white ${
                   listening ? 'bg-red-600' : 'bg-white/10'
                 } disabled:opacity-40`}
-                aria-label="语音输入"
+                aria-label={listening ? '结束录音并发送' : '开始语音输入'}
+                title={
+                  listening
+                    ? '结束录音并自动发送识别内容'
+                    : '开始语音输入'
+                }
               >
-                🎙
+                {listening ? '■' : '🎙'}
               </button>
 
               <input
                 value={input}
                 onChange={event => setInput(event.target.value)}
                 onKeyDown={event => {
-                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                    send();
+                  if (
+                    event.key === 'Enter' &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    void send();
                   }
                 }}
-                placeholder="找电影…"
+                placeholder={
+                  listening
+                    ? '正在识别，说完会自动发送…'
+                    : '找电影…'
+                }
                 disabled={busy}
                 className="flex-1 min-w-0 bg-transparent text-white outline-none px-2 disabled:opacity-50"
               />
 
               <button
-                onClick={() => send()}
+                onClick={() => void send()}
                 disabled={busy || !input.trim()}
-                className="bg-blue-600 rounded-full w-8 h-8 text-white disabled:opacity-40"
+                className="bg-blue-600 rounded-full w-9 h-9 shrink-0 text-white disabled:opacity-40"
                 aria-label="发送"
               >
                 ↑
               </button>
             </div>
+
+            {listening && (
+              <div className="px-4 pb-2 text-[11px] text-white/50">
+                正在录音，点击红色按钮结束并自动发送；识别失败时可重新尝试。
+              </div>
+            )}
           </div>
         )}
       </div>
