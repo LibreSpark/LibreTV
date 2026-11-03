@@ -85,7 +85,13 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard
+              key={item.id}
+              item={item}
+              isTv={type === 'tv'}
+              enableTmdbFallback
+              onClick={() => onPick(item.title)}
+            />
           ))}
         </div>
       )}
@@ -129,7 +135,13 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard
+              key={item.id}
+              item={item}
+              isTv={item.isTv ?? true}
+              enableTmdbFallback
+              onClick={() => onPick(item.title)}
+            />
           ))}
         </div>
       )}
