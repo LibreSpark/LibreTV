@@ -7,7 +7,6 @@ on:
       - ".gitmodules"
       - "workers/60s"
       - "workers/60s/**"
-      - ".github/workflows/deploy-60s.yml"
 
 permissions:
   contents: read
