@@ -8,5 +8,5 @@ assets = { directory = ".open-next/assets" }
 # 注意：PASSWORD 写在此处会随公开仓库暴露，请勿用于敏感或复用密码。
 PASSWORD = "12345"
 CMS_SEARCH_API = "https://caiji.dyttzyapi.com/api.php/provide/vod"
-60S_API_BASE = "https://60s.bggdbh.workers.dev"
+API_60S_BASE = "https://60s.bggdbh.workers.dev"
 LLM_MODEL = "glm-4-flash"
