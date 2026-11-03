@@ -72,22 +72,11 @@ export function buildImageCandidates(
         url.replace(/img\d+\.doubanio\.com/g, 'img.doubanio.cmliussss.com'),
       ]
     : [];
-  const isDoubanImage =
-    /^https?:\/\/(?:[^/]+\.)?doubanio\.com(?:\/|$)/i.test(url)
-    || /^https?:\/\/(?:[^/]+\.)?doubanio\.viki\.moe(?:\/|$)/i.test(url);
-  const internalProxy = `/api/proxy?url=${encodeURIComponent(url)}`;
-
   if (mode === 'proxy') {
     return [...new Set([built, ...mirrors, url])];
   }
   if (mode !== 'direct') return [built];
-
-  // 豆瓣图片经常拒绝浏览器直连或无 Referer 请求；优先走本站代理，
-  // 由服务端补充豆瓣 Referer，再依次回退公共镜像和原图。
-  if (isDoubanImage) {
-    return [...new Set([internalProxy, ...mirrors, built])];
-  }
-  return [built, internalProxy];
+  return [...new Set([built, ...mirrors, `/api/proxy?url=${encodeURIComponent(url)}`)]];
 }
 
 export function validateSourceUrl(url: string): boolean {
