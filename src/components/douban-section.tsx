@@ -77,7 +77,7 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试或在设置中关闭</p>
+        <QueryError error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : items.length === 0 ? (
@@ -129,7 +129,7 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试或在设置中关闭</p>
+        <QueryError error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
@@ -191,6 +191,22 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
         </div>
       )}
     </section>
+  );
+}
+
+function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const message = error instanceof Error ? error.message.slice(0, 180) : '未知错误';
+  return (
+    <div className="flex flex-col items-center gap-2 text-center py-8">
+      <p className="text-sm text-faint">推荐内容加载失败：{message}</p>
+      <button
+        type="button"
+        className="px-3 py-1.5 rounded-md text-sm bg-chip text-content hover:bg-hover"
+        onClick={onRetry}
+      >
+        重试
+      </button>
+    </div>
   );
 }
 
