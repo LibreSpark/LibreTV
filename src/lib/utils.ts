@@ -72,8 +72,9 @@ export function buildImageCandidates(
         url.replace(/img\d+\.doubanio\.com/g, 'img.doubanio.cmliussss.com'),
       ]
     : [];
-  const isDoubanImage = /(^|\.)doubanio\.com$/i.test(new URL(url).hostname)
-    || /(^|\.)doubanio\.viki\.moe$/i.test(new URL(url).hostname);
+  const isDoubanImage =
+    /^https?:\/\/(?:[^/]+\.)?doubanio\.com(?:\/|$)/i.test(url)
+    || /^https?:\/\/(?:[^/]+\.)?doubanio\.viki\.moe(?:\/|$)/i.test(url);
   const internalProxy = `/api/proxy?url=${encodeURIComponent(url)}`;
 
   if (mode === 'proxy') {
