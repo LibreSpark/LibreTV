@@ -28,7 +28,9 @@ const sourceSchema = z.array(
     key: z.string().min(1).max(100),
     name: z.string().min(1).max(100),
     url: z.string().url().max(2048),
-  }).strict()
+    detail: z.string().max(2048).optional(),
+    isAdult: z.boolean().optional(),
+  })
 ).max(MAX_SOURCES);
 
 const modelProvider = createOpenAICompatible({
@@ -62,54 +64,92 @@ const SYSTEM_PROMPT = `
 `;
 
 function jsonError(message: string, status: number) {
-  return Response.json({ error: message }, { status });
+  return Response.json(
+    { error: message },
+    { status }
+  );
 }
 
 export async function POST(req: Request) {
   try {
+    // 1. 检查 API Key
     if (!process.env.ZHIPU_API_KEY) {
-      return jsonError("服务器未配置 ZHIPU_API_KEY", 500);
+      return jsonError(
+        "服务器未配置 ZHIPU_API_KEY",
+        500
+      );
     }
 
+    // 2. 解析请求
     const body = await req.json();
 
     if (!Array.isArray(body.messages)) {
-      return jsonError("消息格式不正确", 400);
+      return jsonError(
+        "消息格式不正确",
+        400
+      );
     }
 
     if (body.messages.length > MAX_MESSAGES) {
-      return jsonError("消息数量超出限制", 400);
+      return jsonError(
+        "消息数量超出限制",
+        400
+      );
     }
 
-    const parsedSources = sourceSchema.safeParse(body.sources);
+    // 3. 校验视频源
+    // 兼容 detail、isAdult 等前端字段
+    const parsedSources = sourceSchema.safeParse(
+      body.sources
+    );
 
     if (!parsedSources.success) {
-      return jsonError("视频源配置格式不正确", 400);
+      console.error(
+        "[Friday Sources Validation]",
+        parsedSources.error.flatten()
+      );
+
+      return jsonError(
+        "视频源配置格式不正确",
+        400
+      );
     }
 
     const sources = parsedSources.data as SourceConfig[];
 
     if (sources.length === 0) {
-      return jsonError("请先启用至少一个视频源", 400);
+      return jsonError(
+        "请先启用至少一个视频源",
+        400
+      );
     }
 
-    const messages = await convertToModelMessages(body.messages);
+    // 4. 转换消息格式
+    const messages = await convertToModelMessages(
+      body.messages
+    );
 
     const filterAdult = body.filterAdult !== false;
 
+    // 5. 创建流式 AI 响应
     const result = streamText({
       model,
+
       system: SYSTEM_PROMPT,
+
       messages,
 
       temperature: 0.3,
+
       maxOutputTokens: 1024,
 
       abortSignal: req.signal,
 
+      // 允许模型连续执行多轮工具调用
       stopWhen: stepCountIs(5),
 
       tools: {
+        // 影视搜索工具
         search_movie: tool({
           description:
             "搜索电影、电视剧、动漫、综艺等影视资源。用户明确要求搜索或推荐影视时调用。推荐意图使用热门电影、高分电影等关键词。",
@@ -139,6 +179,7 @@ export async function POST(req: Request) {
             }
 
             try {
+              // 6. 调用现有影视搜索链路
               const outcomes = await searchSources(
                 safeKeyword,
                 sources,
@@ -152,10 +193,20 @@ export async function POST(req: Request) {
                 throw new Error("搜索已取消");
               }
 
-              const allMovies = mergeSearchResults(outcomes);
+              // 7. 合并真实搜索结果
+              const allMovies = mergeSearchResults(
+                outcomes
+              );
 
-              const movieData = allMovies
-                .slice(0, MAX_MOVIES);
+              // 8. 限制返回数量
+              const movieData = allMovies.slice(
+                0,
+                MAX_MOVIES
+              );
+
+              console.log(
+                `[Friday Search] ${safeKeyword}: ${allMovies.length} results`
+              );
 
               return {
                 success: true,
@@ -167,19 +218,24 @@ export async function POST(req: Request) {
                     ? `找到 ${allMovies.length} 条影视资源`
                     : "没有找到相关影视资源",
               };
+
             } catch (error) {
               if (req.signal.aborted) {
                 throw error;
               }
 
-              console.error("[Friday Search]", error);
+              console.error(
+                "[Friday Search Error]",
+                error
+              );
 
               return {
                 success: false,
                 keyword: safeKeyword,
                 total: 0,
                 movieData: [],
-                message: "影视搜索失败，请检查视频源后重试",
+                message:
+                  "影视搜索失败，请检查视频源后重试",
               };
             }
           },
@@ -187,10 +243,14 @@ export async function POST(req: Request) {
       },
     });
 
+    // 9. 返回 AI SDK 流式响应
     return result.toUIMessageStreamResponse();
 
   } catch (error) {
-    console.error("[Friday API]", error);
+    console.error(
+      "[Friday API Error]",
+      error
+    );
 
     return jsonError(
       "Friday 服务暂时不可用，请稍后重试",
