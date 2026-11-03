@@ -5,17 +5,17 @@ import { fetchUpstream, getCache, setCache } from './fetch-utils';
  * 影视热榜聚合（经 60s API，免 key，https://github.com/vikiboss/60s）。
  * 豆瓣周榜走其 rexxar 移动端接口（需伪装 iPhone UA），百度热播剧榜解析 top.baidu.com，
  * 均由 60s 代为抓取；这里只做服务端转发 + 内存缓存 + 字段归一。
- * 默认走社区实例 crystelf.top，失败自动回退官方公共实例（每日额度有限，
- * 数据中心出口 IP 常被限流，Vercel 上不可依赖）；可用 60S_API_BASE 指向自部署实例。
+ * 默认优先使用已验证可返回数据的 60s.viki.moe，失败后回退 60s.crystelf.top；
+ * 可用 60S_API_BASE 指向自部署实例。
  */
 
 const CACHE_TTL = 60 * 60 * 1000;
 const UA = 'LibreTV (+https://github.com/LibreSpark/LibreTV)';
 
-const FALLBACK_BASE = 'https://60s.viki.moe';
+const FALLBACK_BASE = 'https://60s.crystelf.top';
 
 function apiBase(): string {
-  return (process.env['60S_API_BASE'] || 'https://60s.crystelf.top').replace(/\/+$/, '');
+  return (process.env['60S_API_BASE'] || 'https://60s.viki.moe').replace(/\/+$/, '');
 }
 
 /** 榜单标识：豆瓣五个周榜 + 百度热播剧榜 */
