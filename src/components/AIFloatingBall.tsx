@@ -1,1298 +1,1236 @@
-'use client';
+"use client";
 
-import {
+import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
-  type MouseEvent,
-  type TouchEvent,
-} from 'react';
-import { useRouter } from 'next/navigation';
-import { useAppStore, resolveSource } from '@/lib/store';
-import type { SearchResultItem } from '@/lib/types';
+} from "react";
+import { createPortal } from "react-dom";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 
-type UIMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  type: 'text' | 'movie_list';
-  content: string;
-  items?: SearchResultItem[];
+type SourceConfig = {
+  key: string;
+  name: string;
+  url: string;
+  detail?: string;
+  isAdult?: boolean;
 };
 
-type ToolCall = {
-  id: string;
-  type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
+type MovieItem = {
+  sourceKey?: string;
+  sourceName?: string;
+  vodId?: string | number;
+  name?: string;
+  pic?: string;
+  typeName?: string;
+  year?: string | number;
+  area?: string;
+  remarks?: string;
+  sourceUrl?: string;
+  isAdult?: boolean;
 };
 
-type HistoryMessage = {
-  role: 'user' | 'assistant' | 'tool';
-  content?: string | null;
-  tool_call_id?: string;
-  tool_calls?: ToolCall[];
+type MovieData = {
+  searchId: string;
+  keyword: string;
+  total: number;
+  outcomes: Array<{
+    sourceKey: string;
+    ok: boolean;
+    list: MovieItem[];
+    error?: string;
+    timedOut?: boolean;
+    ms?: number;
+  }>;
+  results: MovieItem[];
+  createdAt: number;
 };
 
-type ApiResponse = {
-  type: 'final' | 'tool_calls';
-  text?: string;
-  searchText?: string;
-  movieData?: unknown;
-  assistantMessage?: HistoryMessage;
-  serverToolMessages?: HistoryMessage[];
-  uiToolCalls?: ToolCall[];
-  error?: string;
+type FridayProps = {
+  /**
+   * 当前 LibreTV 启用的视频源。
+   * 请由挂载 AIFloatingBall 的页面传入真实启用源。
+   */
+  sources?: SourceConfig[];
+  filterAdult?: boolean;
+};
+
+type SpeechRecognitionAlternativeLike = {
+  transcript: string;
+};
+
+type SpeechRecognitionResultLike = {
+  0: SpeechRecognitionAlternativeLike;
+  isFinal: boolean;
+};
+
+type SpeechRecognitionEventLike = Event & {
+  results: ArrayLike<SpeechRecognitionResultLike>;
 };
 
 type SpeechRecognitionLike = {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
-  onstart: (() => void) | null;
-  onresult: ((event: any) => void) | null;
-  onerror: ((event: any) => void) | null;
+  onresult:
+    | ((event: SpeechRecognitionEventLike) => void)
+    | null;
+  onerror: ((event: Event) => void) | null;
   onend: (() => void) | null;
+  onstart: (() => void) | null;
   start: () => void;
   stop: () => void;
   abort: () => void;
 };
 
-const MAX_HISTORY = 45;
-const MAX_TOOL_ROUNDS = 5;
-const MAX_UI_TOOL_CALLS = 8;
-const MAX_TOOL_ARGUMENTS = 4000;
-const ALLOWED_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
-const uid = () =>
-  Math.random().toString(36).slice(2) + Date.now().toString(36);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isSearchResultItem(value: unknown): value is SearchResultItem {
-  if (!isRecord(value)) return false;
-
-  return (
-    typeof value.sourceKey === 'string' &&
-    typeof value.sourceName === 'string' &&
-    typeof value.vodId === 'string' &&
-    typeof value.name === 'string'
-  );
-}
-
-function isToolCall(value: unknown): value is ToolCall {
-  if (!isRecord(value) || !isRecord(value.function)) return false;
-
-  if (
-    typeof value.id !== 'string' ||
-    value.id.length < 1 ||
-    value.id.length > 128 ||
-    value.type !== 'function' ||
-    typeof value.function.name !== 'string' ||
-    typeof value.function.arguments !== 'string' ||
-    value.function.arguments.length > MAX_TOOL_ARGUMENTS
-  ) {
-    return false;
-  }
-
-  if (
-    value.function.name !== 'control_player' &&
-    value.function.name !== 'page_control'
-  ) {
-    return false;
-  }
-
-  try {
-    const args: unknown = JSON.parse(value.function.arguments || '{}');
-    return isRecord(args);
-  } catch {
-    return false;
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
   }
 }
 
-function isHistoryMessage(value: unknown): value is HistoryMessage {
-  if (!isRecord(value)) return false;
+const MAX_INPUT_LENGTH = 1000;
+const MAX_MOVIE_CARDS = 60;
 
-  if (value.role === 'user') {
-    return typeof value.content === 'string';
-  }
+function getPartText(message: any): string {
+  if (!message || !Array.isArray(message.parts)) return "";
 
-  if (value.role === 'assistant') {
-    if (
-      value.content !== undefined &&
-      value.content !== null &&
-      typeof value.content !== 'string'
-    ) {
-      return false;
+  return message.parts
+    .filter((part: any) => part?.type === "text")
+    .map((part: any) => String(part.text || ""))
+    .join("");
+}
+
+function getMovieDataParts(messages: any[]): MovieData[] {
+  const output: MovieData[] = [];
+  const seen = new Set<string>();
+
+  for (const message of messages) {
+    if (message?.role !== "assistant" || !Array.isArray(message.parts)) {
+      continue;
     }
 
-    if (value.tool_calls !== undefined) {
+    for (const part of message.parts) {
+      if (part?.type !== "data-movies") continue;
+
+      const data = part.data as MovieData | undefined;
+
       if (
-        !Array.isArray(value.tool_calls) ||
-        value.tool_calls.length === 0 ||
-        value.tool_calls.length > MAX_UI_TOOL_CALLS ||
-        !value.tool_calls.every(isToolCall)
+        !data ||
+        typeof data.searchId !== "string" ||
+        !Array.isArray(data.results)
       ) {
-        return false;
+        continue;
       }
-    }
 
-    return true;
-  }
+      if (seen.has(data.searchId)) continue;
+      seen.add(data.searchId);
 
-  if (value.role === 'tool') {
-    return (
-      typeof value.tool_call_id === 'string' &&
-      typeof value.content === 'string'
-    );
-  }
-
-  return false;
-}
-
-/**
- * 按完整对话轮次压缩历史。
- * 不会从中间截断 assistant tool_calls 与 tool 结果。
- */
-function compactHistory(history: HistoryMessage[]): HistoryMessage[] {
-  const groups: HistoryMessage[][] = [];
-  let current: HistoryMessage[] = [];
-
-  for (const message of history) {
-    if (message.role === 'user' && current.length > 0) {
-      groups.push(current);
-      current = [];
-    }
-
-    current.push(message);
-  }
-
-  if (current.length > 0) {
-    groups.push(current);
-  }
-
-  const selected: HistoryMessage[][] = [];
-  let count = 0;
-
-  for (let i = groups.length - 1; i >= 0; i--) {
-    const group = groups[i];
-
-    if (selected.length > 0 && count + group.length > MAX_HISTORY) {
-      break;
-    }
-
-    selected.unshift(group);
-    count += group.length;
-  }
-
-  return selected.flat();
-}
-
-function validateToolPairing(
-  assistantMessage: unknown,
-  uiToolCalls: unknown,
-): assistantMessage is HistoryMessage {
-  if (!isHistoryMessage(assistantMessage)) return false;
-  if (assistantMessage.role !== 'assistant') return false;
-  if (!Array.isArray(assistantMessage.tool_calls)) return false;
-  if (!Array.isArray(uiToolCalls)) return false;
-
-  if (
-    uiToolCalls.length === 0 ||
-    uiToolCalls.length > MAX_UI_TOOL_CALLS
-  ) {
-    return false;
-  }
-
-  const assistantCalls = assistantMessage.tool_calls;
-
-  if (assistantCalls.length !== uiToolCalls.length) {
-    return false;
-  }
-
-  const assistantIds = new Set<string>();
-
-  for (const call of assistantCalls) {
-    if (!isToolCall(call) || assistantIds.has(call.id)) {
-      return false;
-    }
-
-    assistantIds.add(call.id);
-  }
-
-  const uiIds = new Set<string>();
-
-  for (const rawCall of uiToolCalls) {
-    if (!isToolCall(rawCall) || uiIds.has(rawCall.id)) {
-      return false;
-    }
-
-    uiIds.add(rawCall.id);
-  }
-
-  if (assistantIds.size !== uiIds.size) return false;
-
-  for (const id of assistantIds) {
-    if (!uiIds.has(id)) return false;
-  }
-
-  return true;
-}
-
-function getSafeInternalPath(path: string): string | null {
-  const value = path.trim();
-
-  if (!value || value.length > 500) return null;
-  if (!value.startsWith('/') || value.startsWith('//')) return null;
-  if (value.includes('\\')) return null;
-
-  try {
-    const url = new URL(value, window.location.origin);
-
-    if (url.origin !== window.location.origin) return null;
-    if (url.protocol !== window.location.protocol) return null;
-
-    return `${url.pathname}${url.search}${url.hash}`;
-  } catch {
-    return null;
-  }
-}
-
-async function readApiResponse(response: Response): Promise<ApiResponse> {
-  const contentType = response.headers.get('content-type') || '';
-
-  if (!contentType.toLowerCase().includes('application/json')) {
-    const detail = await response.text().catch(() => '');
-
-    throw new Error(
-      `服务器返回的不是 JSON 数据（HTTP ${response.status}）${
-        detail ? `：${detail.slice(0, 120)}` : ''
-      }`,
-    );
-  }
-
-  let data: unknown;
-
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error(`服务器响应无法解析（HTTP ${response.status}）`);
-  }
-
-  if (!isRecord(data)) {
-    throw new Error('服务器返回的数据格式无效');
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      typeof data.error === 'string'
-        ? data.error
-        : `请求失败：HTTP ${response.status}`,
-    );
-  }
-
-  if (data.type !== 'final' && data.type !== 'tool_calls') {
-    throw new Error(
-      typeof data.error === 'string'
-        ? data.error
-        : '服务器返回了未知响应类型',
-    );
-  }
-
-  return data as unknown as ApiResponse;
-}
-
-export default function AIFloatingBall() {
-  const router = useRouter();
-
-  const [active, setActive] = useState(false);
-  const [messages, setMessages] = useState<UIMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [pos, setPos] = useState({ x: 24, y: 24 });
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [listening, setListening] = useState(false);
-
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const sendLock = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const apiHistoryRef = useRef<HistoryMessage[]>([]);
-
-  // 语音识别独立管理，不与网络请求取消共用状态。
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const voiceFinalTextRef = useRef('');
-  const voiceAutoSendRef = useRef(false);
-  const voiceErrorRef = useRef(false);
-
-  const dragStart = useRef({
-    x: 0,
-    y: 0,
-    ballX: 0,
-    ballY: 0,
-  });
-
-  const isDragging = useRef(false);
-
-  useEffect(() => {
-    const el = listRef.current;
-
-    if (el) {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: 'smooth',
+      output.push({
+        ...data,
+        results: data.results
+          .filter((item) => item && typeof item === "object")
+          .slice(0, MAX_MOVIE_CARDS),
       });
     }
-  }, [messages, busy, active]);
+  }
 
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
+  return output;
+}
 
-      voiceAutoSendRef.current = false;
+function stopSpeech() {
+  if (typeof window === "undefined") return;
 
-      try {
-        recognitionRef.current?.abort();
-      } catch {
-        // 组件卸载时忽略语音识别清理异常。
-      }
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {
+    // iOS Safari 某些状态下 cancel 可能抛错。
+  }
+}
 
-      if (
-        typeof window !== 'undefined' &&
-        window.speechSynthesis
-      ) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
+function MovieCards({
+  data,
+  onOpen,
+}: {
+  data: MovieData;
+  onOpen: (movie: MovieItem) => void;
+}) {
+  if (!data.results.length) {
+    return (
+      <div className="friday-empty-result">
+        没有找到相关影片，可以换个关键词试试。
+      </div>
+    );
+  }
 
-  const speak = useCallback(
-    (text: string) => {
-      if (
-        !voiceEnabled ||
-        !text ||
-        typeof window === 'undefined' ||
-        !window.speechSynthesis
-      ) {
-        return;
-      }
+  return (
+    <div className="friday-movie-section">
+      <div className="friday-result-heading">
+        <span>搜索结果</span>
+        <span className="friday-result-count">
+          {data.total} 条
+        </span>
+      </div>
 
-      window.speechSynthesis.cancel();
+      <div className="friday-movie-grid">
+        {data.results.map((movie, index) => {
+          const key = [
+            movie.sourceKey || "",
+            movie.vodId || "",
+            movie.name || "",
+            index,
+          ].join("-");
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'zh-CN';
+          return (
+            <button
+              type="button"
+              key={key}
+              className="friday-movie-card"
+              onClick={() => onOpen(movie)}
+            >
+              <div className="friday-poster">
+                {movie.pic ? (
+                  <img
+                    src={movie.pic}
+                    alt={movie.name || "影片海报"}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : null}
 
-      window.speechSynthesis.speak(utterance);
-    },
-    [voiceEnabled],
+                <div className="friday-poster-fallback">
+                  <span>▶</span>
+                </div>
+
+                {movie.remarks ? (
+                  <span className="friday-poster-remark">
+                    {movie.remarks}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="friday-movie-info">
+                <div className="friday-movie-name">
+                  {movie.name || "未命名影片"}
+                </div>
+
+                <div className="friday-movie-meta">
+                  {[movie.year, movie.typeName, movie.area]
+                    .filter(Boolean)
+                    .join(" · ") || "影视资源"}
+                </div>
+
+                <div className="friday-movie-source">
+                  {movie.sourceName || movie.sourceKey || "未知来源"}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
+}
 
-  const addTextMessage = useCallback(
-    (role: 'user' | 'assistant', content: string) => {
-      setMessages(prev => [
-        ...prev,
-        {
-          id: uid(),
-          role,
-          type: 'text',
-          content,
-        },
-      ]);
+export default function AIFloatingBall({
+  sources = [],
+  filterAdult = true,
+}: FridayProps) {
+  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [listening, setListening] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
-      if (role === 'assistant') {
-        speak(content);
-      }
-    },
-    [speak],
-  );
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const voiceTextRef = useRef("");
+  const lastSpokenMessageRef = useRef("");
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const addMovieList = useCallback((items: SearchResultItem[]) => {
-    if (!items.length) return;
-
-    setMessages(prev => [
-      ...prev,
-      {
-        id: uid(),
-        role: 'assistant',
-        type: 'movie_list',
-        content: '为你找到以下资源：',
-        items,
-      },
-    ]);
-  }, []);
-
-  const openNativeDetail = useCallback((item: SearchResultItem) => {
-    window.dispatchEvent(
-      new CustomEvent('friday-open-detail', {
-        detail: {
-          sourceKey: item.sourceKey,
-          sourceName: item.sourceName,
-          sourceUrl: item.sourceUrl,
-          vodId: item.vodId,
-          name: item.name,
-          pic: item.pic,
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: {
+          sources,
+          filterAdult,
         },
       }),
-    );
-  }, []);
-
-  const executeUiTool = useCallback(
-    async (call: ToolCall): Promise<string> => {
-      try {
-        if (!isToolCall(call)) {
-          return '工具调用格式无效';
-        }
-
-        const args: unknown = JSON.parse(
-          call.function.arguments || '{}',
-        );
-
-        if (!isRecord(args)) {
-          return '工具参数格式无效';
-        }
-
-        if (call.function.name === 'control_player') {
-          const video = document.getElementById(
-            'libretv-main-video',
-          ) as HTMLVideoElement | null;
-
-          if (!video) return '找不到播放器';
-
-          switch (args.action) {
-            case 'play': {
-              try {
-                await video.play();
-                return '已成功开始播放';
-              } catch {
-                return '播放失败：浏览器可能阻止了自动播放，或视频尚未准备好';
-              }
-            }
-
-            case 'pause': {
-              video.pause();
-              return '已暂停播放';
-            }
-
-            case 'seek_to': {
-              if (
-                typeof args.time !== 'number' ||
-                !Number.isFinite(args.time) ||
-                args.time < 0
-              ) {
-                return '跳转失败：时间参数无效';
-              }
-
-              if (
-                Number.isFinite(video.duration) &&
-                args.time > video.duration
-              ) {
-                return '跳转失败：目标时间超过视频时长';
-              }
-
-              try {
-                video.currentTime = args.time;
-                return `已尝试跳转到 ${args.time} 秒`;
-              } catch {
-                return '跳转失败：播放器当前无法定位到该时间';
-              }
-            }
-
-            case 'set_rate': {
-              if (
-                typeof args.rate !== 'number' ||
-                !ALLOWED_RATES.includes(args.rate)
-              ) {
-                return '倍速设置失败：不支持该倍速';
-              }
-
-              try {
-                video.playbackRate = args.rate;
-                return `已设置为 ${args.rate} 倍速`;
-              } catch {
-                return '倍速设置失败';
-              }
-            }
-
-            default:
-              return '不支持的播放器操作';
-          }
-        }
-
-        if (call.function.name === 'page_control') {
-          if (args.action === 'navigate') {
-            if (typeof args.path !== 'string') {
-              return '页面跳转失败：路径无效';
-            }
-
-            const safePath = getSafeInternalPath(args.path);
-
-            if (!safePath) {
-              return '页面跳转失败：只允许站内地址';
-            }
-
-            router.push(safePath);
-            return '已提交站内页面跳转';
-          }
-
-          if (args.action === 'site_search') {
-            if (
-              typeof args.keyword !== 'string' ||
-              !args.keyword.trim() ||
-              args.keyword.length > 100
-            ) {
-              return '站内搜索失败：关键词无效';
-            }
-
-            router.push(
-              `/search?wd=${encodeURIComponent(args.keyword.trim())}`,
-            );
-
-            return '已提交站内搜索';
-          }
-
-          if (args.action === 'toggle_theme') {
-            document.documentElement.classList.toggle('dark');
-            return '已切换主题';
-          }
-
-          return '不支持的页面操作';
-        }
-
-        return '未知工具';
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : '未知异常';
-
-        return `工具执行异常：${message}`;
-      }
-    },
-    [router],
+    [sources, filterAdult],
   );
 
-  const send = useCallback(
-    async (overrideText?: string) => {
-      if (sendLock.current) return;
-
-      const text = (
-        overrideText !== undefined ? overrideText : input
-      ).trim();
-
-      if (!text) return;
-
-      sendLock.current = true;
-      setInput('');
-
-      setBusy(true);
-
-      addTextMessage('user', text);
-
-      apiHistoryRef.current.push({
-        role: 'user',
-        content: text,
-      });
-
-      const state = useAppStore.getState();
-
-      const selectedSources = state.selectedKeys
-        .map((key: string) => resolveSource(state, key))
-        .filter(
-          (source): source is NonNullable<typeof source> =>
-            source !== undefined,
-        )
-        .map(source => ({
-          key: source.key,
-          name: source.name,
-          url: source.url,
-          isAdult: source.isAdult,
-        }));
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      let completed = false;
-
-      try {
-        for (let step = 0; step < MAX_TOOL_ROUNDS; step++) {
-          if (controller.signal.aborted) break;
-
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messages: apiHistoryRef.current,
-              sources: selectedSources,
-              filterAdult: state.yellowFilter === true,
-            }),
-            signal: controller.signal,
-          });
-
-          const data = await readApiResponse(response);
-
-          if (controller.signal.aborted) break;
-
-          if (Array.isArray(data.movieData)) {
-            const validItems = data.movieData
-              .filter(isSearchResultItem)
-              .slice(0, 100);
-
-            if (validItems.length > 0) {
-              addMovieList(validItems);
-            }
-          }
-
-          if (data.type === 'final') {
-            if (typeof data.text === 'string' && data.text.trim()) {
-              apiHistoryRef.current.push({
-                role: 'assistant',
-                content: data.text,
-              });
-
-              addTextMessage('assistant', data.text);
-            }
-
-            completed = true;
-            break;
-          }
-
-          if (data.type === 'tool_calls') {
-            const uiCalls = data.uiToolCalls;
-
-            if (
-              !Array.isArray(uiCalls) ||
-              uiCalls.length === 0 ||
-              uiCalls.length > MAX_UI_TOOL_CALLS
-            ) {
-              throw new Error('服务器返回的前端工具列表无效');
-            }
-
-            if (
-              !validateToolPairing(
-                data.assistantMessage,
-                uiCalls,
-              )
-            ) {
-              throw new Error('工具调用记录与执行列表不匹配');
-            }
-
-            if (
-              typeof data.searchText === 'string' &&
-              data.searchText.trim()
-            ) {
-              apiHistoryRef.current.push({
-                role: 'assistant',
-                content: data.searchText,
-              });
-
-              addTextMessage('assistant', data.searchText);
-            }
-
-            apiHistoryRef.current.push(data.assistantMessage!);
-
-            if (data.serverToolMessages !== undefined) {
-              if (!Array.isArray(data.serverToolMessages)) {
-                throw new Error('服务器工具结果格式无效');
-              }
-
-              for (const message of data.serverToolMessages) {
-                if (
-                  !isHistoryMessage(message) ||
-                  message.role !== 'tool'
-                ) {
-                  throw new Error('服务器工具结果内容无效');
-                }
-
-                apiHistoryRef.current.push(message);
-              }
-            }
-
-            for (const call of uiCalls) {
-              if (controller.signal.aborted) break;
-
-              const result = await executeUiTool(call);
-
-              apiHistoryRef.current.push({
-                role: 'tool',
-                tool_call_id: call.id,
-                content: result,
-              });
-            }
-
-            if (controller.signal.aborted) break;
-
-            continue;
-          }
-
-          throw new Error('服务器返回了未知响应类型');
-        }
-
-        if (!completed && !controller.signal.aborted) {
-          addTextMessage(
-            'assistant',
-            '本次任务的工具调用次数已达到上限，请简化需求后重试。',
-          );
-        }
-      } catch (error: unknown) {
-        const aborted =
-          controller.signal.aborted ||
-          (error instanceof Error && error.name === 'AbortError');
-
-        if (aborted) {
-          addTextMessage('assistant', '已取消本次请求。');
-        } else {
-          const message =
-            error instanceof Error ? error.message : '未知错误';
-
-          addTextMessage('assistant', `请求异常：${message}`);
-        }
-
-        // 回退当前未完成轮次，保留此前完整对话。
-        let lastUserIndex = apiHistoryRef.current.length - 1;
-
-        while (
-          lastUserIndex >= 0 &&
-          apiHistoryRef.current[lastUserIndex].role !== 'user'
-        ) {
-          lastUserIndex--;
-        }
-
-        if (lastUserIndex >= 0) {
-          apiHistoryRef.current = apiHistoryRef.current.slice(
-            0,
-            lastUserIndex + 1,
-          );
-        }
-      } finally {
-        apiHistoryRef.current = compactHistory(
-          apiHistoryRef.current,
-        );
-
-        setBusy(false);
-        sendLock.current = false;
-
-        if (abortRef.current === controller) {
-          abortRef.current = null;
-        }
-      }
+  const {
+    messages,
+    sendMessage,
+    status,
+    error,
+    stop,
+    setMessages,
+  } = useChat({
+    transport,
+    onError: (chatError) => {
+      console.error("[Friday] Chat error:", chatError);
     },
-    [
-      input,
-      addTextMessage,
-      addMovieList,
-      executeUiTool,
-    ],
+  });
+
+  const busy = status === "submitted" || status === "streaming";
+
+  const movieData = useMemo(
+    () => getMovieDataParts(messages as any[]),
+    [messages],
   );
 
-  /**
-   * 结束录音：
-   * 只停止语音识别，不取消网络请求。
-   * 已识别的最终文本会在 onend 中自动发送。
-   */
-  const stopVoice = useCallback(() => {
-    const recognition = recognitionRef.current;
-
-    if (!recognition) {
-      setListening(false);
-      return;
-    }
-
+  const stopAllVoice = useCallback(() => {
     try {
-      recognition.stop();
+      recognitionRef.current?.abort();
     } catch {
-      setListening(false);
+      // ignore
     }
-  }, []);
 
-  /**
-   * 取消语音识别：
-   * 放弃本次识别内容，不发送。
-   */
-  const cancelVoice = useCallback(() => {
-    voiceAutoSendRef.current = false;
-    voiceFinalTextRef.current = '';
-    voiceErrorRef.current = true;
-
-    const recognition = recognitionRef.current;
     recognitionRef.current = null;
-
-    try {
-      recognition?.abort();
-    } catch {
-      // 忽略浏览器识别取消异常。
-    }
-
     setListening(false);
+
+    stopSpeech();
+    setSpeaking(false);
   }, []);
 
-  /**
-   * 取消当前网络请求。
-   * 不负责停止语音识别，两个流程相互独立。
-   */
-  const stopRequest = useCallback(() => {
-    abortRef.current?.abort();
+  const openPanel = useCallback(() => {
+    setOpen(true);
 
-    if (
-      typeof window !== 'undefined' &&
-      window.speechSynthesis
-    ) {
-      window.speechSynthesis.cancel();
+    if (typeof document !== "undefined") {
+      document.body.classList.add("friday-popup-lock");
     }
   }, []);
 
-  /**
-   * 开始语音识别。
-   * 识别结束后，自动将最终识别文本交给 send()。
-   */
-  const startVoice = useCallback(() => {
-    if (typeof window === 'undefined') return;
+  const closePanel = useCallback(() => {
+    stopAllVoice();
+    setOpen(false);
 
-    if (!window.isSecureContext) {
-      addTextMessage(
-        'assistant',
-        '语音识别需要 HTTPS 安全连接，请通过 HTTPS 网站访问。',
-      );
-      return;
+    if (typeof document !== "undefined") {
+      document.body.classList.remove("friday-popup-lock");
     }
+  }, [stopAllVoice]);
 
-    if (busy || sendLock.current) {
-      addTextMessage(
-        'assistant',
-        '当前请求尚未结束，请稍后再使用语音输入。',
-      );
-      return;
+  const interrupt = useCallback(() => {
+    stopAllVoice();
+
+    if (busy) {
+      stop();
     }
+  }, [busy, stop, stopAllVoice, stop]);
 
-    const SpeechRecognitionConstructor =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+  const handleSend = useCallback(
+    async (text?: string) => {
+      const content = (text ?? input).trim();
 
-    if (!SpeechRecognitionConstructor) {
-      addTextMessage(
-        'assistant',
-        '当前浏览器不支持语音识别。请尝试使用支持 Web Speech API 的浏览器。',
-      );
-      return;
-    }
+      if (!content || busy) return;
 
-    if (recognitionRef.current) {
-      return;
-    }
-
-    voiceFinalTextRef.current = '';
-    voiceAutoSendRef.current = true;
-    voiceErrorRef.current = false;
-
-    try {
-      const recognition: SpeechRecognitionLike =
-        new SpeechRecognitionConstructor();
-
-      recognition.lang = 'zh-CN';
-
-      // 单句识别，浏览器在一句话结束后触发 onend。
-      recognition.continuous = false;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        setListening(true);
-      };
-
-      recognition.onresult = (event: any) => {
-        let interimText = '';
-
-        for (
-          let i = event.resultIndex;
-          i < event.results.length;
-          i++
-        ) {
-          const result = event.results[i];
-          const transcript =
-            result?.[0]?.transcript || '';
-
-          if (result.isFinal) {
-            voiceFinalTextRef.current += transcript;
-          } else {
-            interimText += transcript;
-          }
-        }
-
-        const finalText = voiceFinalTextRef.current.trim();
-
-        // 输入框显示识别过程，但自动发送只使用最终识别文本。
-        setInput(finalText || interimText);
-      };
-
-      recognition.onerror = (event: any) => {
-        const error = event?.error || 'unknown';
-
-        if (
-          error === 'not-allowed' ||
-          error === 'service-not-allowed' ||
-          error === 'audio-capture' ||
-          error === 'aborted'
-        ) {
-          voiceAutoSendRef.current = false;
-          voiceErrorRef.current = true;
-        }
-
-        if (error === 'not-allowed' || error === 'service-not-allowed') {
-          addTextMessage(
-            'assistant',
-            '麦克风权限未获准。请在浏览器设置中允许此网站使用麦克风。',
-          );
-        } else if (error === 'audio-capture') {
-          addTextMessage(
-            'assistant',
-            '没有检测到可用麦克风，请检查设备的麦克风设置。',
-          );
-        } else if (error === 'network') {
-          addTextMessage(
-            'assistant',
-            '语音识别网络连接失败，请检查网络后重试。',
-          );
-        } else if (error === 'no-speech') {
-          // 没有检测到语音，不自动发送空内容。
-          voiceFinalTextRef.current = '';
-        }
-      };
-
-      recognition.onend = () => {
-        setListening(false);
-
-        if (recognitionRef.current === recognition) {
-          recognitionRef.current = null;
-        }
-
-        const shouldSend = voiceAutoSendRef.current;
-        const finalText = voiceFinalTextRef.current.trim();
-
-        voiceAutoSendRef.current = false;
-        voiceFinalTextRef.current = '';
-
-        if (!shouldSend || voiceErrorRef.current) {
-          voiceErrorRef.current = false;
-          return;
-        }
-
-        if (finalText) {
-          setInput('');
-
-          // 等待识别回调结束后发送，避免状态更新竞争。
-          void send(finalText);
-        }
-      };
-
-      recognitionRef.current = recognition;
-
-      // start() 在部分浏览器中可能因权限或设备状态抛出异常。
-      recognition.start();
-    } catch (error: unknown) {
-      recognitionRef.current = null;
-      voiceAutoSendRef.current = false;
-      voiceFinalTextRef.current = '';
-      voiceErrorRef.current = false;
-
-      setListening(false);
-
-      const message =
-        error instanceof Error ? error.message : '';
-
-      addTextMessage(
-        'assistant',
-        `语音识别启动失败${message ? `：${message}` : '，请检查麦克风权限并重试。'}`,
-      );
-    }
-  }, [busy, addTextMessage, send]);
-
-  const handlePointerDown = (
-    event: MouseEvent<HTMLButtonElement> |
-      TouchEvent<HTMLButtonElement>,
-  ) => {
-    if (active) return;
-
-    isDragging.current = false;
-
-    const clientX =
-      'touches' in event
-        ? event.touches[0].clientX
-        : event.clientX;
-
-    const clientY =
-      'touches' in event
-        ? event.touches[0].clientY
-        : event.clientY;
-
-    dragStart.current = {
-      x: clientX,
-      y: clientY,
-      ballX: pos.x,
-      ballY: pos.y,
-    };
-
-    const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
-      const mx =
-        'touches' in moveEvent
-          ? moveEvent.touches[0]?.clientX
-          : moveEvent.clientX;
-
-      const my =
-        'touches' in moveEvent
-          ? moveEvent.touches[0]?.clientY
-          : moveEvent.clientY;
-
-      if (typeof mx !== 'number' || typeof my !== 'number') {
+      if (content.length > MAX_INPUT_LENGTH) {
         return;
       }
 
-      const dx = mx - dragStart.current.x;
-      const dy = my - dragStart.current.y;
+      stopAllVoice();
+      setInput("");
 
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        isDragging.current = true;
+      try {
+        await sendMessage({
+          text: content,
+        });
+      } catch (sendError) {
+        console.error("[Friday] Send failed:", sendError);
+      }
+    },
+    [input, busy, sendMessage, stopAllVoice],
+  );
+
+  const handleOpenMovie = useCallback((movie: MovieItem) => {
+    if (typeof window === "undefined") return;
+
+    stopAllVoice();
+
+    window.dispatchEvent(
+      new CustomEvent("friday-open-detail", {
+        detail: movie,
+      }),
+    );
+  }, [stopAllVoice]);
+
+  const startListening = useCallback(() => {
+    if (busy || listening) return;
+
+    const SpeechRecognitionClass =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionClass) {
+      alert("当前浏览器暂不支持语音识别，请使用键盘输入。");
+      return;
+    }
+
+    stopSpeech();
+    setSpeaking(false);
+
+    try {
+      recognitionRef.current?.abort();
+    } catch {
+      // ignore
+    }
+
+    const recognition = new SpeechRecognitionClass();
+
+    recognition.lang = "zh-CN";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interimText = "";
+
+      for (let index = 0; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const text = result?.[0]?.transcript || "";
+
+        if (result.isFinal) {
+          finalText += text;
+        } else {
+          interimText += text;
+        }
       }
 
-      const newX = Math.min(
-        Math.max(0, dragStart.current.ballX - dx),
-        Math.max(0, window.innerWidth - 90),
-      );
-
-      const newY = Math.min(
-        Math.max(0, dragStart.current.ballY - dy),
-        Math.max(0, window.innerHeight - 60),
-      );
-
-      setPos({
-        x: newX,
-        y: newY,
-      });
+      voiceTextRef.current = finalText || interimText;
+      setInput(voiceTextRef.current.slice(0, MAX_INPUT_LENGTH));
     };
 
-    const handleUp = () => {
-      window.removeEventListener('mousemove', handleMove as EventListener);
-      window.removeEventListener('mouseup', handleUp);
-      window.removeEventListener('touchmove', handleMove as EventListener);
-      window.removeEventListener('touchend', handleUp);
+    recognition.onerror = () => {
+      setListening(false);
+      recognitionRef.current = null;
     };
 
-    window.addEventListener('mousemove', handleMove as EventListener);
-    window.addEventListener('mouseup', handleUp);
-    window.addEventListener('touchmove', handleMove as EventListener, {
-      passive: true,
-    });
-    window.addEventListener('touchend', handleUp);
-  };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
 
-  return (
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+    } catch (recognitionError) {
+      console.error("[Friday] Speech recognition start failed:", recognitionError);
+      setListening(false);
+      recognitionRef.current = null;
+    }
+  }, [busy, listening]);
+
+  const speakText = useCallback((text: string, messageId: string) => {
+    if (!voiceEnabled || !text.trim()) return;
+    if (!("speechSynthesis" in window)) return;
+
+    stopSpeech();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "zh-CN";
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    utterance.onstart = () => {
+      setSpeaking(true);
+    };
+
+    utterance.onend = () => {
+      setSpeaking(false);
+    };
+
+    utterance.onerror = () => {
+      setSpeaking(false);
+    };
+
+    lastSpokenMessageRef.current = messageId;
+
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (speechError) {
+      console.error("[Friday] Speech synthesis failed:", speechError);
+      setSpeaking(false);
+    }
+  }, [voiceEnabled]);
+
+  // 只在一轮回复结束后播报，避免每个流式 token 都重新朗读。
+  useEffect(() => {
+    if (status !== "ready" || !voiceEnabled || !open) return;
+
+    const lastAssistant = [...(messages as any[])]
+      .reverse()
+      .find((message) => message?.role === "assistant");
+
+    if (!lastAssistant?.id) return;
+    if (lastSpokenMessageRef.current === lastAssistant.id) return;
+
+    const text = getPartText(lastAssistant);
+
+    if (text.trim()) {
+      speakText(text, lastAssistant.id);
+    }
+  }, [messages, status, voiceEnabled, open, speakText]);
+
+  useEffect(() => {
+    setMounted(true);
+
+    return () => {
+      stopAllVoice();
+
+      if (typeof document !== "undefined") {
+        document.body.classList.remove("friday-popup-lock");
+      }
+    };
+  }, [stopAllVoice]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePanel();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, closePanel]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [open]);
+
+  const clearConversation = useCallback(() => {
+    interrupt();
+    setMessages([]);
+    lastSpokenMessageRef.current = "";
+    setInput("");
+  }, [interrupt, setMessages]);
+
+  if (!mounted) return null;
+
+  const content = (
     <>
-      <div
-        className={`fixed inset-0 z-40 bg-black/20 backdrop-blur-sm transition-opacity ${
-          active
-            ? 'opacity-100 pointer-events-auto'
-            : 'opacity-0 pointer-events-none'
-        }`}
-        onClick={() => setActive(false)}
-      />
+      <style jsx global>{`
+        .friday-popup-lock {
+          overflow: hidden !important;
+        }
 
-      <div
-        className="fixed z-50"
-        style={{
-          bottom: `${pos.y}px`,
-          right: `${pos.x}px`,
-        }}
-      >
-        {!active && (
+        .friday-root {
+          position: fixed;
+          z-index: 99999;
+          right: 20px;
+          bottom: max(22px, env(safe-area-inset-bottom));
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+            "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        .friday-fab {
+          width: 58px;
+          height: 58px;
+          border: 1px solid rgba(255,255,255,.28);
+          border-radius: 50%;
+          color: white;
+          cursor: pointer;
+          background:
+            radial-gradient(circle at 30% 25%, #ff9bd8, transparent 40%),
+            linear-gradient(135deg, #ec4899, #7c3aed 58%, #2563eb);
+          box-shadow: 0 8px 30px rgba(124,58,237,.42);
+          font-size: 25px;
+          font-weight: 800;
+          transition: transform .2s ease, box-shadow .2s ease;
+        }
+
+        .friday-fab:active {
+          transform: scale(.93);
+        }
+
+        .friday-panel {
+          position: fixed;
+          right: 14px;
+          bottom: calc(92px + env(safe-area-inset-bottom));
+          width: min(430px, calc(100vw - 28px));
+          height: min(680px, calc(100dvh - 125px));
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,.14);
+          border-radius: 22px;
+          background: #10101a;
+          color: #f8fafc;
+          box-shadow: 0 20px 70px rgba(0,0,0,.55);
+          animation: friday-in .18s ease-out;
+        }
+
+        .friday-panel.friday-expanded {
+          right: 8px;
+          bottom: 8px;
+          width: calc(100vw - 16px);
+          height: calc(100dvh - 16px);
+          max-height: calc(100dvh - 16px);
+          border-radius: 18px;
+        }
+
+        @keyframes friday-in {
+          from { opacity: 0; transform: translateY(12px) scale(.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .friday-header {
+          min-height: 64px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 16px;
+          border-bottom: 1px solid rgba(255,255,255,.08);
+          background: linear-gradient(110deg, #21152f, #15172c);
+        }
+
+        .friday-brand {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+        }
+
+        .friday-avatar {
+          width: 38px;
+          height: 38px;
+          flex: 0 0 38px;
+          display: grid;
+          place-items: center;
+          border-radius: 13px;
+          background: linear-gradient(135deg, #ec4899, #7c3aed);
+          font-weight: 900;
+          box-shadow: 0 4px 16px rgba(236,72,153,.25);
+        }
+
+        .friday-brand-name {
+          font-size: 15px;
+          font-weight: 800;
+        }
+
+        .friday-brand-sub {
+          margin-top: 3px;
+          color: #a5a3b8;
+          font-size: 11px;
+        }
+
+        .friday-header-actions {
+          display: flex;
+          gap: 7px;
+        }
+
+        .friday-icon-btn {
+          width: 34px;
+          height: 34px;
+          border: 0;
+          border-radius: 10px;
+          background: rgba(255,255,255,.08);
+          color: #eee;
+          cursor: pointer;
+          font-size: 15px;
+        }
+
+        .friday-messages {
+          flex: 1;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          padding: 16px 13px 20px;
+          scroll-behavior: smooth;
+        }
+
+        .friday-welcome {
+          padding: 25px 15px;
+          text-align: center;
+          color: #d6d3e2;
+        }
+
+        .friday-welcome-icon {
+          width: 54px;
+          height: 54px;
+          display: grid;
+          place-items: center;
+          margin: 0 auto 14px;
+          border-radius: 18px;
+          background: linear-gradient(135deg, #ec4899, #6d28d9);
+          font-size: 24px;
+          font-weight: 900;
+        }
+
+        .friday-welcome-title {
+          margin-bottom: 8px;
+          font-size: 18px;
+          font-weight: 800;
+          color: white;
+        }
+
+        .friday-welcome-text {
+          color: #aaa8ba;
+          font-size: 13px;
+          line-height: 1.7;
+        }
+
+        .friday-message {
+          display: flex;
+          margin: 0 0 15px;
+          gap: 8px;
+          align-items: flex-start;
+        }
+
+        .friday-message-user {
+          flex-direction: row-reverse;
+        }
+
+        .friday-message-avatar {
+          width: 28px;
+          height: 28px;
+          flex: 0 0 28px;
+          display: grid;
+          place-items: center;
+          border-radius: 10px;
+          background: #29243c;
+          color: #e9d5ff;
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .friday-message-user .friday-message-avatar {
+          background: #433078;
+          color: white;
+        }
+
+        .friday-bubble {
+          max-width: calc(100% - 38px);
+          padding: 10px 12px;
+          border: 1px solid rgba(255,255,255,.07);
+          border-radius: 13px;
+          background: #1b1b29;
+          color: #eceaf4;
+          font-size: 13px;
+          line-height: 1.7;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+        }
+
+        .friday-message-user .friday-bubble {
+          background: #49317c;
+          border-color: rgba(196,181,253,.12);
+          color: white;
+        }
+
+        .friday-status {
+          margin: 0 0 12px 37px;
+          color: #a78bfa;
+          font-size: 12px;
+        }
+
+        .friday-error {
+          margin: 8px 0;
+          padding: 9px 11px;
+          border: 1px solid rgba(248,113,113,.25);
+          border-radius: 10px;
+          background: rgba(127,29,29,.2);
+          color: #fca5a5;
+          font-size: 12px;
+        }
+
+        .friday-input-area {
+          padding: 12px;
+          border-top: 1px solid rgba(255,255,255,.08);
+          background: #141421;
+        }
+
+        .friday-input-box {
+          display: flex;
+          align-items: flex-end;
+          gap: 8px;
+          padding: 8px;
+          border: 1px solid rgba(255,255,255,.12);
+          border-radius: 15px;
+          background: #202031;
+        }
+
+        .friday-textarea {
+          flex: 1;
+          min-width: 0;
+          max-height: 110px;
+          resize: none;
+          border: 0;
+          outline: 0;
+          background: transparent;
+          color: white;
+          font-size: 14px;
+          line-height: 1.5;
+          padding: 6px 4px;
+        }
+
+        .friday-textarea::placeholder {
+          color: #77758a;
+        }
+
+        .friday-send-btn {
+          width: 38px;
+          height: 38px;
+          flex: 0 0 38px;
+          border: 0;
+          border-radius: 12px;
+          background: linear-gradient(135deg, #ec4899, #7c3aed);
+          color: white;
+          font-size: 17px;
+          cursor: pointer;
+        }
+
+        .friday-send-btn:disabled {
+          opacity: .35;
+          cursor: not-allowed;
+        }
+
+        .friday-tools {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-top: 9px;
+          color: #89869d;
+          font-size: 11px;
+        }
+
+        .friday-tool-group {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+        }
+
+        .friday-tool-btn {
+          border: 0;
+          border-radius: 8px;
+          padding: 6px 9px;
+          background: rgba(255,255,255,.07);
+          color: #c4bfd5;
+          cursor: pointer;
+          font-size: 11px;
+        }
+
+        .friday-tool-btn.active {
+          background: rgba(168,85,247,.22);
+          color: #d8b4fe;
+        }
+
+        .friday-movie-section {
+          margin: 4px 0 17px 36px;
+        }
+
+        .friday-result-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 9px;
+          color: #e9d5ff;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .friday-result-count {
+          color: #a78bfa;
+          font-weight: 500;
+        }
+
+        .friday-movie-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 9px;
+        }
+
+        .friday-movie-card {
+          min-width: 0;
+          display: flex;
+          gap: 8px;
+          padding: 7px;
+          border: 1px solid rgba(255,255,255,.08);
+          border-radius: 11px;
+          background: #1b1b29;
+          color: white;
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .friday-movie-card:active {
+          background: #29243b;
+        }
+
+        .friday-poster {
+          position: relative;
+          width: 56px;
+          height: 78px;
+          flex: 0 0 56px;
+          overflow: hidden;
+          border-radius: 6px;
+          background: #302b43;
+        }
+
+        .friday-poster img {
+          position: absolute;
+          z-index: 1;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .friday-poster-fallback {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          color: #c4b5fd;
+        }
+
+        .friday-poster-remark {
+          position: absolute;
+          z-index: 2;
+          right: 2px;
+          bottom: 2px;
+          left: 2px;
+          overflow: hidden;
+          padding: 2px 3px;
+          border-radius: 3px;
+          background: rgba(0,0,0,.7);
+          color: white;
+          font-size: 9px;
+          text-align: center;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .friday-movie-info {
+          min-width: 0;
+          flex: 1;
+          padding: 3px 0;
+        }
+
+        .friday-movie-name {
+          display: -webkit-box;
+          overflow: hidden;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          color: #f5f3ff;
+          font-size: 12px;
+          font-weight: 700;
+          line-height: 1.5;
+        }
+
+        .friday-movie-meta {
+          margin-top: 5px;
+          overflow: hidden;
+          color: #a5a3b8;
+          font-size: 10px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .friday-movie-source {
+          margin-top: 5px;
+          overflow: hidden;
+          color: #a78bfa;
+          font-size: 10px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .friday-empty-result {
+          margin: 4px 0 14px 36px;
+          color: #aaa8ba;
+          font-size: 12px;
+        }
+
+        @media (max-width: 380px) {
+          .friday-panel {
+            right: 8px;
+            width: calc(100vw - 16px);
+          }
+
+          .friday-movie-card {
+            gap: 6px;
+            padding: 6px;
+          }
+
+          .friday-poster {
+            width: 48px;
+            height: 70px;
+            flex-basis: 48px;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .friday-panel {
+            animation: none;
+          }
+
+          .friday-fab {
+            transition: none;
+          }
+        }
+      `}</style>
+
+      <div className="friday-root">
+        {!open ? (
           <button
-            onMouseDown={handlePointerDown}
-            onTouchStart={handlePointerDown}
-            onClick={() => {
-              if (!isDragging.current) {
-                setActive(true);
-              }
-            }}
-            className="w-[84px] h-[50px] rounded-full shadow-2xl flex items-center justify-center overflow-hidden"
-            style={{
-              background:
-                'linear-gradient(180deg, #050505 0%, #1a1a1a 35%, #d9d9d9 52%, #ffffff 100%)',
-            }}
-            aria-label="打开 Friday 助手"
+            type="button"
+            className="friday-fab"
+            aria-label="打开 Friday AI 助手"
+            onClick={openPanel}
           >
-            <span className="text-black/40 text-2xl relative z-10">
-              ✦
-            </span>
+            F
           </button>
-        )}
+        ) : null}
 
-        {active && (
-          <div className="w-[350px] h-[500px] rounded-[32px] flex flex-col shadow-2xl bg-[rgba(20,20,25,0.85)] backdrop-blur-xl border border-white/15">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-              <span className="text-white/90 text-sm font-semibold">
-                ✦ Friday AI
-              </span>
+        {open ? (
+          <section
+            ref={panelRef}
+            className={`friday-panel ${expanded ? "friday-expanded" : ""}`}
+            aria-label="Friday AI 助手"
+          >
+            <header className="friday-header">
+              <div className="friday-brand">
+                <div className="friday-avatar">F</div>
+                <div>
+                  <div className="friday-brand-name">Friday</div>
+                  <div className="friday-brand-sub">
+                    {busy ? "正在思考…" : "LibreTV 智能影视助手"}
+                  </div>
+                </div>
+              </div>
 
-              <div className="flex items-center gap-2">
+              <div className="friday-header-actions">
                 <button
-                  onClick={() => setVoiceEnabled(value => !value)}
-                  className="p-1.5 text-white/70"
-                  aria-label="切换语音播报"
-                  title="切换语音播报"
+                  type="button"
+                  className="friday-icon-btn"
+                  title="新对话"
+                  aria-label="新对话"
+                  onClick={clearConversation}
                 >
-                  {voiceEnabled ? '🔊' : '🔇'}
+                  ↻
                 </button>
 
-                {busy && (
-                  <button
-                    onClick={stopRequest}
-                    className="text-xs text-red-400"
-                  >
-                    取消请求
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="friday-icon-btn"
+                  title={expanded ? "缩小窗口" : "展开窗口"}
+                  aria-label={expanded ? "缩小窗口" : "展开窗口"}
+                  onClick={() => setExpanded((value) => !value)}
+                >
+                  {expanded ? "↙" : "↗"}
+                </button>
 
                 <button
-                  onClick={() => setActive(false)}
-                  className="text-white/70"
-                  aria-label="关闭 Friday"
+                  type="button"
+                  className="friday-icon-btn"
+                  title="关闭"
+                  aria-label="关闭"
+                  onClick={closePanel}
                 >
-                  ✕
+                  ×
                 </button>
               </div>
-            </div>
+            </header>
 
-            <div
-              className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-              ref={listRef}
-            >
-              {messages.map(message => (
-                <div
-                  key={message.id}
-                  className={`flex ${
-                    message.role === 'user'
-                      ? 'justify-end'
-                      : 'justify-start'
-                  }`}
-                >
+            <div className="friday-messages">
+              {messages.length === 0 ? (
+                <div className="friday-welcome">
+                  <div className="friday-welcome-icon">F</div>
+                  <div className="friday-welcome-title">
+                    你好，我是 Friday
+                  </div>
+                  <div className="friday-welcome-text">
+                    想看什么电影、电视剧或动漫？
+                    <br />
+                    也可以让我帮你查找 LibreTV 的影视资源。
+                  </div>
+                </div>
+              ) : null}
+
+              {(messages as any[]).map((message) => {
+                const isUser = message.role === "user";
+                const text = getPartText(message);
+
+                return (
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
-                      message.role === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white/5 text-white'
+                    key={message.id}
+                    className={`friday-message ${
+                      isUser ? "friday-message-user" : ""
                     }`}
                   >
-                    {message.type === 'text' && message.content}
+                    <div className="friday-message-avatar">
+                      {isUser ? "你" : "F"}
+                    </div>
 
-                    {message.type === 'movie_list' && (
-                      <div className="grid grid-cols-2 gap-3 mt-2">
-                        {message.items?.map((item, index) => (
-                          <button
-                            type="button"
-                            key={`${item.sourceKey}-${item.vodId}-${index}`}
-                            onClick={() => openNativeDetail(item)}
-                            className="bg-[#1c1c1e] rounded-xl overflow-hidden cursor-pointer text-left"
-                          >
-                            <div className="aspect-[2/3] w-full bg-[#2a2a2c] relative flex flex-col items-center justify-center">
-                              <span className="text-white/20 text-3xl mb-1">
-                                🎬
-                              </span>
-
-                              <span className="text-[10px] text-white/20">
-                                暂无海报
-                              </span>
-
-                              {item.pic && (
-                                <img
-                                  src={item.pic}
-                                  alt={item.name}
-                                  referrerPolicy="no-referrer"
-                                  className="absolute inset-0 w-full h-full object-cover z-10"
-                                  onError={event => {
-                                    event.currentTarget.style.display = 'none';
-                                  }}
-                                />
-                              )}
-                            </div>
-
-                            <div className="p-2 text-[13px] font-bold text-white truncate">
-                              {item.name}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {text ? (
+                      <div className="friday-bubble">{text}</div>
+                    ) : null}
                   </div>
-                </div>
+                );
+              })}
+
+              {movieData.map((data) => (
+                <MovieCards
+                  key={data.searchId}
+                  data={data}
+                  onOpen={handleOpenMovie}
+                />
               ))}
 
-              {busy && (
-                <div className="flex justify-start">
-                  <div className="bg-white/5 border border-white/5 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" />
-                    <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce delay-100" />
-                    <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce delay-200" />
-                  </div>
+              {busy ? (
+                <div className="friday-status">
+                  {status === "submitted"
+                    ? "Friday 正在接收消息…"
+                    : "Friday 正在处理，请稍候…"}
                 </div>
-              )}
+              ) : null}
+
+              {error ? (
+                <div className="friday-error">
+                  {error.message || "请求失败，请稍后重试。"}
+                </div>
+              ) : null}
             </div>
 
-            <div className="p-3 border-t border-white/10 flex gap-2 items-center">
-              <button
-                type="button"
-                onClick={listening ? stopVoice : startVoice}
-                disabled={busy}
-                className={`w-9 h-9 shrink-0 rounded-full text-white ${
-                  listening ? 'bg-red-600' : 'bg-white/10'
-                } disabled:opacity-40`}
-                aria-label={listening ? '结束录音并发送' : '开始语音输入'}
-                title={
-                  listening
-                    ? '结束录音并自动发送识别内容'
-                    : '开始语音输入'
-                }
-              >
-                {listening ? '■' : '🎙'}
-              </button>
-
-              <input
-                value={input}
-                onChange={event => setInput(event.target.value)}
-                onKeyDown={event => {
-                  if (
-                    event.key === 'Enter' &&
-                    !event.nativeEvent.isComposing
-                  ) {
-                    void send();
+            <footer className="friday-input-area">
+              <div className="friday-input-box">
+                <textarea
+                  ref={inputRef}
+                  className="friday-textarea"
+                  value={input}
+                  rows={1}
+                  maxLength={MAX_INPUT_LENGTH}
+                  placeholder={
+                    listening
+                      ? "正在听你说话…"
+                      : "输入电影名称或发送消息…"
                   }
-                }}
-                placeholder={
-                  listening
-                    ? '正在识别，说完会自动发送…'
-                    : '找电影…'
-                }
-                disabled={busy}
-                className="flex-1 min-w-0 bg-transparent text-white outline-none px-2 disabled:opacity-50"
-              />
+                  disabled={busy}
+                  onChange={(event) => {
+                    setInput(event.target.value.slice(0, MAX_INPUT_LENGTH));
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey &&
+                      !event.nativeEvent.isComposing
+                    ) {
+                      event.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                />
 
-              <button
-                onClick={() => void send()}
-                disabled={busy || !input.trim()}
-                className="bg-blue-600 rounded-full w-9 h-9 shrink-0 text-white disabled:opacity-40"
-                aria-label="发送"
-              >
-                ↑
-              </button>
-            </div>
-
-            {listening && (
-              <div className="px-4 pb-2 text-[11px] text-white/50">
-                正在录音，点击红色按钮结束并自动发送；识别失败时可重新尝试。
+                <button
+                  type="button"
+                  className="friday-send-btn"
+                  disabled={busy || !input.trim()}
+                  aria-label="发送消息"
+                  onClick={() => void handleSend()}
+                >
+                  ➤
+                </button>
               </div>
-            )}
-          </div>
-        )}
+
+              <div className="friday-tools">
+                <div className="friday-tool-group">
+                  <button
+                    type="button"
+                    className={`friday-tool-btn ${
+                      listening ? "active" : ""
+                    }`}
+                    disabled={busy}
+                    onClick={() => {
+                      if (listening) {
+                        recognitionRef.current?.stop();
+                      } else {
+                        startListening();
+                      }
+                    }}
+                  >
+                    {listening ? "停止听写" : "语音输入"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`friday-tool-btn ${
+                      voiceEnabled ? "active" : ""
+                    }`}
+                    onClick={() => {
+                      if (voiceEnabled) {
+                        stopSpeech();
+                        setSpeaking(false);
+                      }
+
+                      setVoiceEnabled((value) => !value);
+                    }}
+                  >
+                    {voiceEnabled ? "语音播报开" : "语音播报关"}
+                  </button>
+                </div>
+
+                <div className="friday-tool-group">
+                  {speaking ? (
+                    <button
+                      type="button"
+                      className="friday-tool-btn active"
+                      onClick={() => {
+                        stopSpeech();
+                        setSpeaking(false);
+                      }}
+                    >
+                      停止播报
+                    </button>
+                  ) : null}
+
+                  {busy ? (
+                    <button
+                      type="button"
+                      className="friday-tool-btn active"
+                      onClick={interrupt}
+                    >
+                      中断
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </footer>
+          </section>
+        ) : null}
       </div>
     </>
   );
+
+  return createPortal(content, document.body);
 }
