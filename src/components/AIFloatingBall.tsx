@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, {
@@ -132,10 +131,6 @@ function getPartText(message: any): string {
     .join("");
 }
 
-/**
- * 影片数据按消息归属提取。
- * 避免所有搜索结果统一堆在消息列表末尾。
- */
 function getMovieDataForMessage(message: any): MovieData[] {
   if (!message || !Array.isArray(message.parts)) {
     return [];
@@ -145,9 +140,7 @@ function getMovieDataForMessage(message: any): MovieData[] {
   const seen = new Set<string>();
 
   for (const part of message.parts) {
-    if (part?.type !== "data-movies") {
-      continue;
-    }
+    if (part?.type !== "data-movies") continue;
 
     const data = part.data as MovieData | undefined;
 
@@ -177,14 +170,12 @@ function getMovieDataForMessage(message: any): MovieData[] {
 }
 
 function cancelBrowserSpeech(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
+  if (typeof window === "undefined") return;
 
   try {
     window.speechSynthesis?.cancel();
   } catch {
-    // iOS Safari 某些状态下 cancel 可能抛错。
+    // 忽略浏览器语音取消异常。
   }
 }
 
@@ -247,7 +238,7 @@ function MovieCards({
                 ) : null}
 
                 <div className="friday-poster-fallback">
-                  <span>▶</span>
+                  ▶
                 </div>
 
                 {movie.remarks ? (
@@ -319,9 +310,7 @@ export default function AIFloatingBall({
   const suppressClickRef = useRef(false);
   const dragResetTimerRef = useRef<number | null>(null);
 
-  /**
-   * 从 Store 中获取真正启用的来源。
-   */
+  // Store 片源筛选逻辑保持原样。
   const storeSources = useMemo<SourceConfig[]>(() => {
     const selectedKeys = Array.isArray(appStore.selectedKeys)
       ? appStore.selectedKeys
@@ -385,9 +374,7 @@ export default function AIFloatingBall({
     status === "submitted" ||
     status === "streaming";
 
-  /**
-   * Friday 的视觉状态机。
-   */
+  // 视觉状态优先级。
   const auroraState: AuroraState = speaking
     ? "speaking"
     : listening
@@ -406,7 +393,6 @@ export default function AIFloatingBall({
 
   const stopAllVoice = useCallback(() => {
     const recognition = recognitionRef.current;
-
     recognitionRef.current = null;
 
     if (recognition) {
@@ -486,10 +472,7 @@ export default function AIFloatingBall({
     [stopAllVoice],
   );
 
-  /**
-   * 语音识别。
-   * 每个回调均校验实例身份，防止旧实例污染新状态。
-   */
+  // 语音识别。
   const startListening = useCallback(() => {
     if (busy || listening) return;
 
@@ -592,9 +575,7 @@ export default function AIFloatingBall({
     }
   }, [busy, listening, stopSpeech]);
 
-  /**
-   * 使用系统语音播报。
-   */
+  // 系统 TTS。
   const speakText = useCallback(
     (text: string, messageId: string) => {
       if (!voiceEnabled || !text.trim()) return;
@@ -657,9 +638,7 @@ export default function AIFloatingBall({
     [voiceEnabled, stopSpeech],
   );
 
-  /**
-   * 回复结束后只播报一次。
-   */
+  // 回复结束后只播报一次。
   useEffect(() => {
     if (status !== "ready" || !open) return;
 
@@ -697,9 +676,7 @@ export default function AIFloatingBall({
     speakText,
   ]);
 
-  /**
-   * 完成状态短暂展示，然后回到待机。
-   */
+  // 完成状态短暂展示。
   useEffect(() => {
     if (!completed) return;
 
@@ -707,19 +684,14 @@ export default function AIFloatingBall({
       setCompleted(false);
     }, 1800);
 
-    return () => {
-      window.clearTimeout(timer);
-    };
+    return () => window.clearTimeout(timer);
   }, [completed]);
 
-  /**
-   * 新消息、影片卡片或加载状态变化时滚动到底部。
-   */
+  // 消息自动滚动。
   useEffect(() => {
     if (!open) return;
 
     const container = messagesRef.current;
-
     if (!container) return;
 
     container.scrollTo({
@@ -739,9 +711,7 @@ export default function AIFloatingBall({
       }
 
       if (typeof document !== "undefined") {
-        document.body.classList.remove(
-          "friday-popup-lock",
-        );
+        document.body.classList.remove("friday-popup-lock");
       }
     };
   }, [stopAllVoice]);
@@ -769,9 +739,7 @@ export default function AIFloatingBall({
       inputRef.current?.focus();
     }, 180);
 
-    return () => {
-      window.clearTimeout(timer);
-    };
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   const clearConversation = useCallback(() => {
@@ -783,9 +751,7 @@ export default function AIFloatingBall({
     setInput("");
   }, [interrupt, setMessages]);
 
-  /**
-   * 悬浮球拖拽。
-   */
+  // 悬浮球拖拽。
   const handleFabPointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       if (open) return;
@@ -888,9 +854,18 @@ export default function AIFloatingBall({
     openPanel();
   }, [openPanel]);
 
-  if (!mounted) {
-    return null;
-  }
+  if (!mounted) return null;
+
+  const stateLabel =
+    auroraState === "listening"
+      ? "Listening..."
+      : auroraState === "thinking"
+        ? "Thinking..."
+        : auroraState === "speaking"
+          ? "Speaking..."
+          : auroraState === "completed"
+            ? "Completed"
+            : "";
 
   const content = (
     <>
@@ -910,12 +885,11 @@ export default function AIFloatingBall({
             "SF Pro Display",
             "SF Pro Text",
             "PingFang SC",
-            "Microsoft YaHei",
             sans-serif;
         }
 
         /* =========================================
-           01. 液态金属球体
+           01. 液态玻璃球体
         ========================================= */
 
         .friday-fab {
@@ -925,154 +899,141 @@ export default function AIFloatingBall({
           place-items: center;
           width: 72px;
           height: 72px;
+          padding: 0;
           overflow: hidden;
-          border: 1px solid rgba(255,255,255,.42);
-          border-radius: 43% 57% 54% 46% / 48% 42% 58% 52%;
-          color: #fff;
+          border: 1px solid rgba(255,255,255,.65);
+          border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
+          background:
+            radial-gradient(
+              ellipse at 28% 16%,
+              rgba(255,255,255,.95) 0,
+              rgba(255,255,255,.48) 4%,
+              transparent 19%
+            ),
+            radial-gradient(
+              ellipse at 76% 27%,
+              rgba(255,153,112,.65),
+              transparent 30%
+            ),
+            radial-gradient(
+              ellipse at 25% 76%,
+              rgba(72,159,255,.72),
+              transparent 35%
+            ),
+            radial-gradient(
+              ellipse at 70% 80%,
+              rgba(170,105,255,.66),
+              transparent 34%
+            ),
+            radial-gradient(
+              ellipse at 50% 50%,
+              #05060a 25%,
+              #15151e 58%,
+              #030409 100%
+            );
+          box-shadow:
+            0 10px 32px rgba(0,0,0,.48),
+            0 0 24px rgba(119,133,255,.25),
+            inset 0 2px 5px rgba(255,255,255,.8),
+            inset 0 -8px 15px rgba(0,0,0,.8);
           cursor: grab;
           touch-action: none;
           user-select: none;
           -webkit-user-select: none;
-          background:
-            radial-gradient(
-              ellipse at 28% 19%,
-              rgba(255,255,255,.98) 0,
-              rgba(255,255,255,.7) 5%,
-              transparent 24%
-            ),
-            radial-gradient(
-              ellipse at 70% 78%,
-              rgba(255,184,107,.7) 0,
-              transparent 29%
-            ),
-            radial-gradient(
-              ellipse at 28% 78%,
-              rgba(111,128,255,.72) 0,
-              transparent 38%
-            ),
-            radial-gradient(
-              ellipse at 75% 25%,
-              rgba(190,119,255,.6) 0,
-              transparent 35%
-            ),
-            linear-gradient(
-              145deg,
-              #f5f7fa 0%,
-              #697080 19%,
-              #151820 42%,
-              #a6aab5 58%,
-              #292d38 78%,
-              #07090e 100%
-            );
-          box-shadow:
-            0 12px 34px rgba(0,0,0,.48),
-            0 0 25px rgba(177,165,255,.18),
-            inset 0 2px 5px rgba(255,255,255,.8),
-            inset 0 -7px 14px rgba(0,0,0,.8);
-          font-size: 20px;
-          font-weight: 700;
-          letter-spacing: -1px;
-          text-shadow: 0 2px 8px rgba(0,0,0,.7);
-          animation:
-            friday-orb-morph 8s ease-in-out infinite,
-            friday-orb-float 5s ease-in-out infinite;
-          transition:
-            transform .25s ease,
-            filter .25s ease,
-            box-shadow .25s ease;
           -webkit-tap-highlight-color: transparent;
+          animation:
+            friday-orb-morph 9s ease-in-out infinite,
+            friday-orb-breathe 4.8s ease-in-out infinite;
+          transition:
+            filter .3s ease,
+            box-shadow .3s ease;
         }
 
         .friday-fab::before {
           position: absolute;
           z-index: -1;
-          inset: -20%;
+          inset: -24%;
           border-radius: 50%;
           background:
             conic-gradient(
               from 0deg,
-              rgba(105,140,255,.05),
-              rgba(183,120,255,.75),
-              rgba(255,164,112,.78),
-              rgba(255,221,151,.72),
-              rgba(102,224,201,.48),
-              rgba(105,140,255,.05)
+              rgba(92,148,255,.05),
+              rgba(132,111,255,.8),
+              rgba(255,165,119,.85),
+              rgba(255,222,171,.7),
+              rgba(97,224,218,.65),
+              rgba(92,148,255,.05)
             );
-          filter: blur(9px);
-          opacity: .76;
+          filter: blur(8px);
+          opacity: .85;
           content: "";
-          animation: friday-orb-spectrum 13s linear infinite;
+          animation: friday-orb-spectrum 12s linear infinite;
         }
 
         .friday-fab::after {
           position: absolute;
           top: -45%;
-          left: -65%;
-          width: 62%;
+          left: -70%;
+          width: 65%;
           height: 190%;
           transform: rotate(35deg);
           background: linear-gradient(
             90deg,
             transparent,
-            rgba(255,255,255,.82),
-            rgba(177,220,255,.24),
+            rgba(255,255,255,.92),
+            rgba(177,220,255,.3),
             transparent
           );
           content: "";
-          animation: friday-orb-shine 7s ease-in-out infinite;
+          animation: friday-orb-shine 6s ease-in-out infinite;
         }
 
         .friday-fab:active {
           cursor: grabbing;
-          transform: scale(.94);
         }
 
         @keyframes friday-orb-morph {
           0%, 100% {
-            border-radius: 43% 57% 54% 46% / 48% 42% 58% 52%;
+            border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
           }
           35% {
-            border-radius: 54% 46% 43% 57% / 44% 57% 43% 56%;
+            border-radius: 55% 45% 44% 56% / 44% 56% 44% 56%;
           }
-          68% {
-            border-radius: 47% 53% 58% 42% / 57% 45% 55% 43%;
+          70% {
+            border-radius: 43% 57% 58% 42% / 55% 45% 55% 45%;
           }
         }
 
-        @keyframes friday-orb-float {
+        @keyframes friday-orb-breathe {
           0%, 100% {
-            transform: translate3d(0,0,0);
+            transform: scale(.96) translateY(0);
+            filter: brightness(.95);
           }
           50% {
-            transform: translate3d(0,-5px,0);
+            transform: scale(1.045) translateY(-3px);
+            filter: brightness(1.14);
           }
         }
 
         @keyframes friday-orb-spectrum {
-          from {
-            transform: rotate(0deg) scale(1);
-          }
-          to {
-            transform: rotate(360deg) scale(1.04);
-          }
+          from { transform: rotate(0deg) scale(1); }
+          to { transform: rotate(360deg) scale(1.05); }
         }
 
         @keyframes friday-orb-shine {
-          0%, 66% {
+          0%, 65% {
             left: -75%;
             opacity: 0;
           }
-          73% {
-            opacity: .9;
-          }
-          90%, 100% {
-            left: 135%;
+          74% { opacity: .9; }
+          92%, 100% {
+            left: 140%;
             opacity: 0;
           }
         }
 
         /* =========================================
-           02. Spatial Ambient Canvas
+           02. 透明玻璃空间画布
         ========================================= */
 
         .friday-panel {
@@ -1086,26 +1047,52 @@ export default function AIFloatingBall({
           min-height: 380px;
           overflow: hidden;
           isolation: isolate;
-          border: 1px solid rgba(255,255,255,.055);
-          border-radius: 38px;
-          color: #f8f8f5;
+          border: 1px solid rgba(255,255,255,.19);
+          border-radius: 36px;
+          color: #fff;
+
+          /* 真正的透明毛玻璃，不使用不透明黑色面板。 */
+          background:
+            linear-gradient(
+              145deg,
+              rgba(255,255,255,.105),
+              rgba(255,255,255,.025) 42%,
+              rgba(255,255,255,.055)
+            ),
+            rgba(9,11,17,.32);
+
+          -webkit-backdrop-filter: blur(32px) saturate(165%);
+          backdrop-filter: blur(32px) saturate(165%);
+
+          box-shadow:
+            0 30px 100px rgba(0,0,0,.42),
+            inset 0 1px 0 rgba(255,255,255,.2),
+            inset 0 -1px 0 rgba(255,255,255,.055);
+
+          transform-origin: bottom right;
+          animation: friday-canvas-open .5s cubic-bezier(.2,.8,.2,1);
+        }
+
+        .friday-panel::before {
+          position: absolute;
+          z-index: -1;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
           background:
             radial-gradient(
-              ellipse at 50% 110%,
-              rgba(80,90,72,.1),
-              transparent 52%
+              ellipse at 50% 100%,
+              rgba(255,215,145,.1),
+              transparent 55%
             ),
             linear-gradient(
-              155deg,
-              #090b0c 0%,
-              #050707 58%,
-              #080a09 100%
+              120deg,
+              rgba(255,255,255,.07),
+              transparent 30%,
+              transparent 70%,
+              rgba(255,255,255,.045)
             );
-          box-shadow:
-            0 30px 100px rgba(0,0,0,.68),
-            0 0 1px rgba(255,255,255,.25);
-          transform-origin: bottom right;
-          animation: friday-canvas-open .52s cubic-bezier(.2,.8,.2,1);
+          content: "";
         }
 
         .friday-panel.friday-expanded {
@@ -1114,32 +1101,22 @@ export default function AIFloatingBall({
           width: calc(100vw - 16px);
           height: calc(100dvh - 16px);
           max-height: calc(100dvh - 16px);
-          border-radius: 34px;
+          border-radius: 32px;
         }
 
         @keyframes friday-canvas-open {
           from {
             opacity: 0;
-            transform: translate3d(22px,30px,0) scale(.72);
-            border-radius: 50%;
+            transform: translate3d(22px,30px,0) scale(.78);
           }
           to {
             opacity: 1;
             transform: translate3d(0,0,0) scale(1);
-            border-radius: 38px;
           }
         }
 
-        /* SVG 流体扰动的降级基础效果 */
-        .friday-filter-defs {
-          position: absolute;
-          width: 0;
-          height: 0;
-          pointer-events: none;
-        }
-
         /* =========================================
-           03. Aurora Engine
+           03. 底部动态极光
         ========================================= */
 
         .friday-aurora {
@@ -1152,31 +1129,29 @@ export default function AIFloatingBall({
           pointer-events: none;
           opacity: .8;
           filter: blur(25px);
-          transform: translateZ(0);
           transform-origin: center bottom;
           transition:
-            opacity 1.2s ease,
-            height 1.2s ease,
-            filter 1.2s ease,
-            transform 1.2s ease;
+            opacity 1s ease,
+            height 1s ease,
+            filter 1s ease;
         }
 
         .friday-aurora::before,
         .friday-aurora::after {
           position: absolute;
           inset: 0;
-          content: "";
           pointer-events: none;
+          content: "";
         }
 
         .friday-aurora::before {
           background:
             radial-gradient(
               ellipse 52% 72% at 50% 100%,
-              rgba(255,255,255,.98) 0%,
-              rgba(255,246,211,.92) 12%,
-              rgba(255,207,94,.78) 29%,
-              rgba(255,190,80,.36) 47%,
+              rgba(255,255,255,.95),
+              rgba(255,246,211,.85) 13%,
+              rgba(255,207,94,.72) 30%,
+              rgba(255,190,80,.25) 52%,
               transparent 76%
             );
           animation: friday-aurora-white 6s ease-in-out infinite;
@@ -1187,20 +1162,20 @@ export default function AIFloatingBall({
           background:
             radial-gradient(
               ellipse 48% 72% at 22% 100%,
-              rgba(124,224,190,.42),
+              rgba(124,224,190,.4),
               transparent 72%
             ),
             radial-gradient(
               ellipse 48% 72% at 80% 100%,
-              rgba(135,226,199,.36),
+              rgba(135,226,199,.35),
               transparent 72%
             ),
             radial-gradient(
               ellipse 60% 72% at 53% 100%,
-              rgba(255,196,94,.38),
+              rgba(255,196,94,.34),
               transparent 76%
             );
-          animation: friday-aurora-color 10s ease-in-out infinite alternate;
+          animation: friday-aurora-color 9s ease-in-out infinite alternate;
         }
 
         .friday-aurora-core {
@@ -1213,8 +1188,8 @@ export default function AIFloatingBall({
           background:
             radial-gradient(
               ellipse at 50% 100%,
-              rgba(255,255,255,.9),
-              rgba(255,220,128,.55) 28%,
+              rgba(255,255,255,.85),
+              rgba(255,220,128,.5) 28%,
               rgba(255,220,128,.08) 66%,
               transparent 78%
             );
@@ -1225,25 +1200,19 @@ export default function AIFloatingBall({
 
         @keyframes friday-aurora-white {
           0%, 100% {
-            transform: translate3d(0,0,0) scaleX(1);
+            transform: translateY(0) scaleX(1);
             opacity: .78;
           }
           50% {
-            transform: translate3d(0,-5%,0) scaleX(1.13);
+            transform: translateY(-5%) scaleX(1.13);
             opacity: 1;
           }
         }
 
         @keyframes friday-aurora-color {
-          0% {
-            transform: translate3d(-3%,0,0) scaleX(.94);
-          }
-          50% {
-            transform: translate3d(2%,-4%,0) scaleX(1.08);
-          }
-          100% {
-            transform: translate3d(-1%,0,0) scaleX(1.02);
-          }
+          0% { transform: translateX(-3%) scaleX(.94); }
+          50% { transform: translate(2%,-4%) scaleX(1.08); }
+          100% { transform: translateX(-1%) scaleX(1.02); }
         }
 
         @keyframes friday-aurora-core {
@@ -1257,41 +1226,28 @@ export default function AIFloatingBall({
           }
         }
 
-        /* 待机：缓慢呼吸 */
         .friday-panel[data-state="standby"] .friday-aurora {
           height: 42%;
           opacity: .65;
-          filter: blur(29px);
           animation: friday-aurora-breathe 7s ease-in-out infinite;
         }
 
         @keyframes friday-aurora-breathe {
-          0%, 100% {
-            transform: scaleX(.94) scaleY(.92);
-          }
-          50% {
-            transform: scaleX(1.08) scaleY(1.08);
-          }
+          0%, 100% { transform: scaleX(.94) scaleY(.92); }
+          50% { transform: scaleX(1.08) scaleY(1.08); }
         }
 
-        /* 聆听：轻微波动 */
         .friday-panel[data-state="listening"] .friday-aurora {
           height: 47%;
           opacity: .83;
-          filter: blur(23px);
           animation: friday-aurora-listen 2.8s ease-in-out infinite;
         }
 
         @keyframes friday-aurora-listen {
-          0%, 100% {
-            transform: scaleX(.98) scaleY(.96);
-          }
-          50% {
-            transform: scaleX(1.08) scaleY(1.05);
-          }
+          0%, 100% { transform: scaleX(.98) scaleY(.96); }
+          50% { transform: scaleX(1.08) scaleY(1.05); }
         }
 
-        /* 思考：向中心聚拢 */
         .friday-panel[data-state="thinking"] .friday-aurora {
           height: 54%;
           opacity: .96;
@@ -1299,26 +1255,11 @@ export default function AIFloatingBall({
           animation: friday-aurora-thinking 2.2s ease-in-out infinite;
         }
 
-        .friday-panel[data-state="thinking"] .friday-aurora::before {
-          animation-duration: 2.2s;
-        }
-
-        .friday-panel[data-state="thinking"] .friday-aurora::after {
-          animation-duration: 3s;
-        }
-
         @keyframes friday-aurora-thinking {
-          0%, 100% {
-            transform: scaleX(1.15) scaleY(.88);
-          }
-          50% {
-            transform: scaleX(.78) scaleY(1.12);
-          }
+          0%, 100% { transform: scaleX(1.15) scaleY(.88); }
+          50% { transform: scaleX(.78) scaleY(1.12); }
         }
 
-        /* 播报：语音活动脉冲。
-           当前 speechSynthesis 不暴露真实音频振幅，
-           此处是语音活动状态动画，不代表真实波形分析。 */
         .friday-panel[data-state="speaking"] .friday-aurora {
           height: 59%;
           opacity: 1;
@@ -1326,24 +1267,14 @@ export default function AIFloatingBall({
           animation: friday-aurora-speaking .72s ease-in-out infinite alternate;
         }
 
-        .friday-panel[data-state="speaking"] .friday-aurora-core {
-          animation-duration: .72s;
-        }
-
         @keyframes friday-aurora-speaking {
-          from {
-            transform: scaleX(.91) scaleY(.91);
-          }
-          to {
-            transform: scaleX(1.13) scaleY(1.12);
-          }
+          from { transform: scaleX(.91) scaleY(.91); }
+          to { transform: scaleX(1.13) scaleY(1.12); }
         }
 
-        /* 完成：舒展后回归平静 */
         .friday-panel[data-state="completed"] .friday-aurora {
           height: 47%;
           opacity: .86;
-          filter: blur(25px);
           animation: friday-aurora-completed 1.8s ease-out both;
         }
 
@@ -1357,40 +1288,45 @@ export default function AIFloatingBall({
             opacity: .9;
           }
           100% {
-            transform: scaleX(1) scaleY(1);
+            transform: scale(1);
             opacity: .65;
           }
         }
 
         /* =========================================
-           04. Canvas 内容与排版
+           04. 顶部品牌与状态
         ========================================= */
 
         .friday-canvas-top {
           position: relative;
-          z-index: 2;
+          z-index: 3;
           display: flex;
           align-items: center;
           justify-content: space-between;
           flex: 0 0 auto;
-          min-height: 54px;
-          padding: 17px 22px 8px;
+          min-height: 60px;
+          padding: 18px 23px 8px;
         }
 
         .friday-wordmark {
-          color: rgba(255,255,255,.42);
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 4px;
+          color: rgba(255,255,255,.92);
+          font-family:
+            Georgia,
+            "Times New Roman",
+            serif;
+          font-size: 25px;
+          font-weight: 400;
+          letter-spacing: -1px;
+          text-shadow: 0 1px 12px rgba(255,255,255,.12);
         }
 
         .friday-state-wrap {
           display: flex;
           align-items: center;
-          gap: 8px;
-          color: rgba(255,255,255,.5);
+          gap: 9px;
+          color: rgba(255,255,255,.58);
           font-size: 10px;
-          letter-spacing: .5px;
+          letter-spacing: 1.2px;
         }
 
         .friday-status-dot {
@@ -1419,6 +1355,10 @@ export default function AIFloatingBall({
           }
         }
 
+        /* =========================================
+           05. 消息区域
+        ========================================= */
+
         .friday-messages {
           position: relative;
           z-index: 1;
@@ -1426,7 +1366,7 @@ export default function AIFloatingBall({
           min-height: 0;
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 22px 27px 150px;
+          padding: 22px 27px 190px;
           scroll-behavior: smooth;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
@@ -1462,9 +1402,8 @@ export default function AIFloatingBall({
 
         .friday-welcome-text {
           max-width: 370px;
-          color: rgba(255,255,255,.64);
+          color: rgba(255,255,255,.68);
           font-size: 15px;
-          font-weight: 400;
           line-height: 1.85;
         }
 
@@ -1493,9 +1432,8 @@ export default function AIFloatingBall({
 
         .friday-message-content {
           max-width: 94%;
-          color: rgba(255,255,255,.9);
+          color: rgba(255,255,255,.94);
           font-size: 16px;
-          font-weight: 400;
           line-height: 1.85;
           white-space: pre-wrap;
           overflow-wrap: anywhere;
@@ -1503,13 +1441,13 @@ export default function AIFloatingBall({
 
         .friday-message-user .friday-message-content {
           max-width: 86%;
-          color: rgba(255,255,255,.62);
+          color: rgba(255,255,255,.72);
           text-align: right;
         }
 
         .friday-status {
           margin: 14px 0 18px;
-          color: rgba(255,224,160,.78);
+          color: rgba(255,224,160,.86);
           font-size: 12px;
           letter-spacing: .4px;
           animation: friday-status-breathe 1.8s ease-in-out infinite;
@@ -1518,16 +1456,151 @@ export default function AIFloatingBall({
         .friday-error {
           margin: 12px 0;
           padding: 12px 14px;
-          border: 1px solid rgba(248,113,113,.18);
+          border: 1px solid rgba(248,113,113,.2);
           border-radius: 16px;
-          background: rgba(127,29,29,.12);
+          background: rgba(127,29,29,.14);
           color: #fca5a5;
           font-size: 13px;
           line-height: 1.7;
         }
 
         /* =========================================
-           05. 极简输入区
+           06. 右下角球体与状态
+        ========================================= */
+
+        .friday-orb-stage {
+          position: absolute;
+          z-index: 3;
+          right: 22px;
+          bottom: 112px;
+          display: flex;
+          align-items: flex-end;
+          gap: 12px;
+          pointer-events: none;
+        }
+
+        .friday-orb-status {
+          padding-bottom: 15px;
+          color: rgba(255,255,255,.6);
+          font-size: 11px;
+          font-weight: 300;
+          letter-spacing: .6px;
+          text-shadow: 0 1px 10px rgba(0,0,0,.35);
+        }
+
+        .friday-orb {
+          position: relative;
+          isolation: isolate;
+          width: 86px;
+          height: 86px;
+          flex: 0 0 86px;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,.58);
+          border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
+          background:
+            radial-gradient(
+              ellipse at 25% 15%,
+              rgba(255,255,255,.95),
+              transparent 17%
+            ),
+            radial-gradient(
+              ellipse at 78% 26%,
+              rgba(255,157,119,.72),
+              transparent 30%
+            ),
+            radial-gradient(
+              ellipse at 24% 77%,
+              rgba(87,160,255,.68),
+              transparent 35%
+            ),
+            radial-gradient(
+              ellipse at 75% 80%,
+              rgba(175,112,255,.66),
+              transparent 35%
+            ),
+            radial-gradient(
+              ellipse at 50% 50%,
+              #03040a 22%,
+              #12131d 62%,
+              #03040a 100%
+            );
+          box-shadow:
+            0 0 35px rgba(110,132,255,.18),
+            0 12px 35px rgba(0,0,0,.3),
+            inset 0 2px 5px rgba(255,255,255,.7),
+            inset 0 -8px 15px rgba(0,0,0,.8);
+          animation:
+            friday-orb-morph 9s ease-in-out infinite,
+            friday-orb-breathe 4.8s ease-in-out infinite;
+        }
+
+        .friday-orb::before {
+          position: absolute;
+          z-index: -1;
+          inset: -25%;
+          border-radius: 50%;
+          background:
+            conic-gradient(
+              from 0deg,
+              rgba(92,148,255,.05),
+              rgba(132,111,255,.8),
+              rgba(255,165,119,.85),
+              rgba(255,222,171,.7),
+              rgba(97,224,218,.65),
+              rgba(92,148,255,.05)
+            );
+          filter: blur(10px);
+          opacity: .9;
+          content: "";
+          animation: friday-orb-spectrum 12s linear infinite;
+        }
+
+        .friday-orb::after {
+          position: absolute;
+          top: -45%;
+          left: -70%;
+          width: 65%;
+          height: 190%;
+          transform: rotate(35deg);
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255,255,255,.88),
+            rgba(177,220,255,.28),
+            transparent
+          );
+          content: "";
+          animation: friday-orb-shine 6s ease-in-out infinite;
+        }
+
+        .friday-panel[data-state="listening"] .friday-orb {
+          animation:
+            friday-orb-morph 4s ease-in-out infinite,
+            friday-orb-breathe 2.3s ease-in-out infinite;
+          filter: brightness(1.15);
+        }
+
+        .friday-panel[data-state="thinking"] .friday-orb {
+          animation:
+            friday-orb-morph 3s ease-in-out infinite,
+            friday-orb-breathe 1.7s ease-in-out infinite;
+          filter: brightness(1.2) saturate(1.25);
+        }
+
+        .friday-panel[data-state="speaking"] .friday-orb {
+          animation:
+            friday-orb-morph 2.4s ease-in-out infinite,
+            friday-orb-speaking .72s ease-in-out infinite alternate;
+          filter: brightness(1.24);
+        }
+
+        @keyframes friday-orb-speaking {
+          from { transform: scale(.94); }
+          to { transform: scale(1.09); }
+        }
+
+        /* =========================================
+           07. 单条玻璃胶囊输入框
         ========================================= */
 
         .friday-input-area {
@@ -1536,30 +1609,60 @@ export default function AIFloatingBall({
           right: 0;
           bottom: 0;
           left: 0;
-          padding: 18px 21px max(19px, env(safe-area-inset-bottom));
-          background:
-            linear-gradient(
-              to bottom,
-              rgba(5,7,7,0),
-              rgba(5,7,7,.78) 24%,
-              rgba(5,7,7,.94)
-            );
+          padding: 18px 21px max(18px, env(safe-area-inset-bottom));
+          background: linear-gradient(
+            to bottom,
+            rgba(5,7,10,0),
+            rgba(5,7,10,.12) 30%,
+            rgba(5,7,10,.32)
+          );
+          pointer-events: none;
         }
 
         .friday-input-box {
           display: flex;
           align-items: flex-end;
           gap: 10px;
-          min-height: 54px;
-          padding: 9px 11px 9px 17px;
-          border: 1px solid rgba(255,255,255,.11);
-          border-radius: 22px;
-          background: rgba(255,255,255,.055);
-          -webkit-backdrop-filter: blur(22px);
-          backdrop-filter: blur(22px);
+          min-height: 57px;
+          padding: 9px 10px 9px 15px;
+          border: 1px solid rgba(255,255,255,.24);
+          border-radius: 999px;
+          background:
+            linear-gradient(
+              145deg,
+              rgba(255,255,255,.13),
+              rgba(255,255,255,.045)
+            ),
+            rgba(22,23,29,.32);
+          -webkit-backdrop-filter: blur(28px) saturate(160%);
+          backdrop-filter: blur(28px) saturate(160%);
           box-shadow:
-            0 8px 30px rgba(0,0,0,.2),
-            inset 0 1px 0 rgba(255,255,255,.045);
+            0 12px 35px rgba(0,0,0,.25),
+            inset 0 1px 0 rgba(255,255,255,.2);
+          pointer-events: auto;
+        }
+
+        .friday-plus-btn {
+          display: grid;
+          place-items: center;
+          width: 34px;
+          height: 37px;
+          flex: 0 0 34px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: rgba(255,255,255,.78);
+          font-size: 27px;
+          font-weight: 200;
+          cursor: pointer;
+        }
+
+        .friday-input-divider {
+          width: 1px;
+          height: 26px;
+          flex: 0 0 1px;
+          margin: 5px 1px;
+          background: rgba(255,255,255,.19);
         }
 
         .friday-textarea {
@@ -1574,11 +1677,11 @@ export default function AIFloatingBall({
           font-family: inherit;
           font-size: 14px;
           line-height: 1.65;
-          padding: 6px 0;
+          padding: 7px 0;
         }
 
         .friday-textarea::placeholder {
-          color: rgba(255,255,255,.37);
+          color: rgba(255,255,255,.54);
         }
 
         .friday-textarea:disabled {
@@ -1587,39 +1690,47 @@ export default function AIFloatingBall({
 
         .friday-send-btn,
         .friday-mic-btn {
-          width: 37px;
-          height: 37px;
-          flex: 0 0 37px;
           display: grid;
           place-items: center;
-          border: 1px solid rgba(255,255,255,.12);
+          width: 39px;
+          height: 39px;
+          flex: 0 0 39px;
+          padding: 0;
+          border: 1px solid rgba(255,255,255,.2);
           border-radius: 50%;
           background: rgba(255,255,255,.1);
-          color: rgba(255,255,255,.88);
+          color: rgba(255,255,255,.92);
           cursor: pointer;
-          font-size: 15px;
+          font-size: 18px;
           transition:
             background .2s ease,
             transform .2s ease;
           -webkit-tap-highlight-color: transparent;
         }
 
-        .friday-send-btn:active,
-        .friday-mic-btn:active {
-          transform: scale(.92);
-          background: rgba(255,255,255,.2);
+        .friday-send-btn {
+          border-color: rgba(255,255,255,.85);
+          background: #f5f5f5;
+          color: #151515;
+          font-size: 21px;
+          font-weight: 500;
         }
 
         .friday-send-btn:disabled {
-          opacity: .3;
+          opacity: .42;
           cursor: not-allowed;
         }
 
         .friday-mic-btn.active {
-          border-color: rgba(255,192,104,.45);
-          background: rgba(255,175,75,.16);
+          border-color: rgba(255,192,104,.6);
+          background: rgba(255,175,75,.2);
           color: #ffd18b;
           animation: friday-status-breathe 1.5s ease-in-out infinite;
+        }
+
+        .friday-send-btn:active,
+        .friday-mic-btn:active {
+          transform: scale(.92);
         }
 
         .friday-tools {
@@ -1627,24 +1738,23 @@ export default function AIFloatingBall({
           align-items: center;
           justify-content: space-between;
           gap: 10px;
-          min-height: 28px;
-          margin-top: 9px;
-          padding: 0 5px;
-          color: rgba(255,255,255,.36);
-          font-size: 10px;
+          min-height: 24px;
+          margin-top: 8px;
+          padding: 0 8px;
+          pointer-events: auto;
         }
 
         .friday-tool-group {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
         }
 
         .friday-tool-btn {
           padding: 4px 2px;
           border: 0;
           background: transparent;
-          color: rgba(255,255,255,.48);
+          color: rgba(255,255,255,.47);
           cursor: pointer;
           font-family: inherit;
           font-size: 10px;
@@ -1660,7 +1770,7 @@ export default function AIFloatingBall({
         }
 
         /* =========================================
-           06. 影片卡片
+           08. 电影卡片
         ========================================= */
 
         .friday-movie-section {
@@ -1673,13 +1783,13 @@ export default function AIFloatingBall({
           align-items: center;
           gap: 8px;
           margin-bottom: 12px;
-          color: rgba(255,255,255,.86);
+          color: rgba(255,255,255,.92);
           font-size: 12px;
           font-weight: 600;
         }
 
         .friday-result-count {
-          color: rgba(255,255,255,.46);
+          color: rgba(255,255,255,.55);
           font-weight: 400;
         }
 
@@ -1694,20 +1804,21 @@ export default function AIFloatingBall({
           display: flex;
           gap: 9px;
           padding: 8px;
-          border: 1px solid rgba(255,255,255,.075);
+          border: 1px solid rgba(255,255,255,.13);
           border-radius: 16px;
-          background: rgba(255,255,255,.045);
+          background: rgba(255,255,255,.075);
+          -webkit-backdrop-filter: blur(15px);
+          backdrop-filter: blur(15px);
           color: white;
           text-align: left;
           cursor: pointer;
           transition:
             background .2s ease,
             transform .2s ease;
-          -webkit-tap-highlight-color: transparent;
         }
 
         .friday-movie-card:active {
-          background: rgba(255,255,255,.1);
+          background: rgba(255,255,255,.14);
           transform: scale(.985);
         }
 
@@ -1718,7 +1829,7 @@ export default function AIFloatingBall({
           flex: 0 0 55px;
           overflow: hidden;
           border-radius: 9px;
-          background: #202321;
+          background: rgba(20,22,27,.8);
         }
 
         .friday-poster img {
@@ -1767,7 +1878,7 @@ export default function AIFloatingBall({
           overflow: hidden;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
-          color: rgba(255,255,255,.92);
+          color: rgba(255,255,255,.96);
           font-size: 12px;
           font-weight: 600;
           line-height: 1.5;
@@ -1776,7 +1887,7 @@ export default function AIFloatingBall({
         .friday-movie-meta {
           margin-top: 5px;
           overflow: hidden;
-          color: rgba(255,255,255,.45);
+          color: rgba(255,255,255,.55);
           font-size: 10px;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1785,7 +1896,7 @@ export default function AIFloatingBall({
         .friday-movie-source {
           margin-top: 5px;
           overflow: hidden;
-          color: rgba(218,205,169,.78);
+          color: rgba(255,220,160,.85);
           font-size: 10px;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1793,12 +1904,12 @@ export default function AIFloatingBall({
 
         .friday-empty-result {
           margin: 12px 0;
-          color: rgba(255,255,255,.52);
+          color: rgba(255,255,255,.65);
           font-size: 13px;
         }
 
         /* =========================================
-           07. 移动端适配
+           09. 移动端适配
         ========================================= */
 
         @media (max-width: 600px) {
@@ -1806,9 +1917,12 @@ export default function AIFloatingBall({
             right: 8px;
             bottom: max(8px, env(safe-area-inset-bottom));
             width: calc(100vw - 16px);
-            height: min(760px, calc(100dvh - 16px - env(safe-area-inset-top)));
+            height: min(
+              760px,
+              calc(100dvh - 16px - env(safe-area-inset-top))
+            );
             min-height: 320px;
-            border-radius: 32px;
+            border-radius: 30px;
           }
 
           .friday-panel.friday-expanded {
@@ -1816,15 +1930,15 @@ export default function AIFloatingBall({
             bottom: 4px;
             width: calc(100vw - 8px);
             height: calc(100dvh - 8px);
-            border-radius: 30px;
+            border-radius: 28px;
           }
 
           .friday-canvas-top {
-            padding: 17px 19px 6px;
+            padding: 16px 19px 6px;
           }
 
           .friday-messages {
-            padding: 19px 21px 145px;
+            padding: 19px 21px 185px;
           }
 
           .friday-welcome {
@@ -1836,8 +1950,23 @@ export default function AIFloatingBall({
           }
 
           .friday-input-area {
-            padding-right: 14px;
-            padding-left: 14px;
+            padding-right: 12px;
+            padding-left: 12px;
+          }
+
+          .friday-orb-stage {
+            right: 17px;
+            bottom: 108px;
+          }
+
+          .friday-orb {
+            width: 72px;
+            height: 72px;
+            flex-basis: 72px;
+          }
+
+          .friday-orb-status {
+            padding-bottom: 12px;
           }
 
           .friday-movie-card {
@@ -1860,7 +1989,7 @@ export default function AIFloatingBall({
           }
 
           .friday-canvas-top {
-            min-height: 40px;
+            min-height: 42px;
             padding-top: 9px;
           }
 
@@ -1881,10 +2010,14 @@ export default function AIFloatingBall({
           .friday-tools {
             margin-top: 4px;
           }
+
+          .friday-orb-stage {
+            bottom: 100px;
+          }
         }
 
         /* =========================================
-           08. 减少动态效果
+           10. 减少动态效果
         ========================================= */
 
         @media (prefers-reduced-motion: reduce) {
@@ -1896,6 +2029,9 @@ export default function AIFloatingBall({
           .friday-aurora::before,
           .friday-aurora::after,
           .friday-aurora-core,
+          .friday-orb,
+          .friday-orb::before,
+          .friday-orb::after,
           .friday-status-dot,
           .friday-message {
             animation: none !important;
@@ -1908,38 +2044,22 @@ export default function AIFloatingBall({
             transition: none !important;
           }
         }
-      `}</style>
 
-      {/* SVG 流体滤镜定义，浏览器不支持时仍有渐变降级 */}
-      <svg
-        className="friday-filter-defs"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <filter id="friday-aurora-distortion">
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.012 0.025"
-            numOctaves="2"
-            seed="8"
-            result="noise"
-          >
-            <animate
-              attributeName="baseFrequency"
-              values="0.012 0.025;0.018 0.035;0.012 0.025"
-              dur="12s"
-              repeatCount="indefinite"
-            />
-          </feTurbulence>
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="noise"
-            scale="13"
-            xChannelSelector="R"
-            yChannelSelector="G"
-          />
-        </filter>
-      </svg>
+        /* 不支持 backdrop-filter 的浏览器降级 */
+        @supports not (
+          (backdrop-filter: blur(1px)) or
+          (-webkit-backdrop-filter: blur(1px))
+        ) {
+          .friday-panel {
+            background: rgba(12,14,20,.88);
+          }
+
+          .friday-input-box,
+          .friday-movie-card {
+            background: rgba(35,37,44,.9);
+          }
+        }
+      `}</style>
 
       <div className="friday-root">
         {!open ? (
@@ -1963,9 +2083,7 @@ export default function AIFloatingBall({
             onPointerUp={handleFabPointerUp}
             onPointerCancel={handleFabPointerUp}
             onClick={handleFabClick}
-          >
-            F
-          </button>
+          />
         ) : null}
 
         {open ? (
@@ -1976,27 +2094,19 @@ export default function AIFloatingBall({
             data-state={auroraState}
             aria-label="Friday 空间式 AI 助手"
           >
+            {/* 底部极光 */}
             <div className="friday-aurora" aria-hidden="true">
               <div className="friday-aurora-core" />
             </div>
 
+            {/* 左上品牌和右上状态点 */}
             <div className="friday-canvas-top">
               <div className="friday-wordmark">
-                FRIDAY
+                Friday
               </div>
 
               <div className="friday-state-wrap">
-                <span>
-                  {auroraState === "listening"
-                    ? "LISTENING"
-                    : auroraState === "thinking"
-                      ? "THINKING"
-                      : auroraState === "speaking"
-                        ? "SPEAKING"
-                        : auroraState === "completed"
-                          ? "COMPLETED"
-                          : "READY"}
-                </span>
+                <span>{stateLabel || " "}</span>
 
                 <button
                   type="button"
@@ -2008,6 +2118,7 @@ export default function AIFloatingBall({
               </div>
             </div>
 
+            {/* 对话区域 */}
             <div
               ref={messagesRef}
               className="friday-messages"
@@ -2074,8 +2185,32 @@ export default function AIFloatingBall({
               ) : null}
             </div>
 
+            {/* 右下角液态玻璃球 */}
+            <div className="friday-orb-stage">
+              <span className="friday-orb-status">
+                {stateLabel}
+              </span>
+              <div
+                className="friday-orb"
+                aria-hidden="true"
+              />
+            </div>
+
+            {/* 底部单条胶囊输入框 */}
             <footer className="friday-input-area">
               <div className="friday-input-box">
+                <button
+                  type="button"
+                  className="friday-plus-btn"
+                  aria-label="附加功能"
+                  title="附加功能暂未接入"
+                  disabled
+                >
+                  +
+                </button>
+
+                <div className="friday-input-divider" />
+
                 <textarea
                   ref={inputRef}
                   className="friday-textarea"
@@ -2085,7 +2220,7 @@ export default function AIFloatingBall({
                   placeholder={
                     listening
                       ? "正在聆听…"
-                      : "向 Friday 说点什么…"
+                      : "询问 Friday..."
                   }
                   disabled={busy}
                   onChange={(event) => {
@@ -2125,7 +2260,7 @@ export default function AIFloatingBall({
                     }
                   }}
                 >
-                  {listening ? "Ⅱ" : "◉"}
+                  {listening ? "Ⅱ" : "♩"}
                 </button>
 
                 <button
@@ -2139,6 +2274,7 @@ export default function AIFloatingBall({
                 </button>
               </div>
 
+              {/* 弱化的辅助操作，不再堆叠主按钮 */}
               <div className="friday-tools">
                 <div className="friday-tool-group">
                   <button
@@ -2154,7 +2290,7 @@ export default function AIFloatingBall({
                       setVoiceEnabled((value) => !value);
                     }}
                   >
-                    {voiceEnabled ? "语音播报开启" : "语音播报关闭"}
+                    {voiceEnabled ? "语音开启" : "语音关闭"}
                   </button>
 
                   <button
@@ -2192,7 +2328,7 @@ export default function AIFloatingBall({
                     className="friday-tool-btn"
                     onClick={() => setExpanded((value) => !value)}
                   >
-                    {expanded ? "收缩画布" : "展开画布"}
+                    {expanded ? "收缩" : "展开"}
                   </button>
                 </div>
               </div>
