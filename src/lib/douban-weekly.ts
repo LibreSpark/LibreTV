@@ -107,9 +107,16 @@ async function fetchJson(path: string): Promise<unknown> {
     });
 
     if (!res.ok) {
+      const body = await res.clone().text().catch(() => '');
       const reason = `HTTP ${res.status}`;
       console.warn(`[hot-list] ${apiUrl} 请求失败：${reason}`);
-      throw new Error(`60s API 请求失败：主接口(${new URL(base).host}) ${reason}`);
+      throw new Error(
+        `60s API 请求失败\\n` +
+        `请求地址: ${apiUrl}\\n` +
+        `状态码: ${res.status}\\n` +
+        `响应地址: ${res.url}\\n` +
+        `响应内容: ${body.slice(0, 1000)}`
+      );
     }
 
     try {
