@@ -65,6 +65,18 @@ type FridayProps = {
   filterAdult?: boolean;
 };
 
+type MessagePartLike = {
+  type?: string;
+  text?: string;
+  data?: unknown;
+};
+
+type MessageLike = {
+  id: string;
+  role: string;
+  parts?: MessagePartLike[];
+};
+
 type SpeechRecognitionAlternativeLike = {
   transcript: string;
 };
@@ -127,17 +139,17 @@ const FAB_SIZE = 72;
 const DRAG_THRESHOLD = 6;
 const MOVIE_CLOSE_DELAY = 250;
 
-function getPartText(message: any): string {
-  if (!message || !Array.isArray(message.parts)) return "";
+function getPartText(message: MessageLike): string {
+  if (!Array.isArray(message.parts)) return "";
 
   return message.parts
-    .filter((part: any) => part?.type === "text")
-    .map((part: any) => String(part.text || ""))
+    .filter((part) => part?.type === "text")
+    .map((part) => String(part.text || ""))
     .join("");
 }
 
-function getMovieDataForMessage(message: any): MovieData[] {
-  if (!message || !Array.isArray(message.parts)) return [];
+function getMovieDataForMessage(message: MessageLike): MovieData[] {
+  if (!Array.isArray(message.parts)) return [];
 
   const output: MovieData[] = [];
   const seen = new Set<string>();
@@ -230,9 +242,9 @@ function MovieCards({
         {data.results.map((movie, index) => {
           const key = [
             movie.sourceKey || "",
-            movie.vodId || "",
+            movie.vodId ?? "",
             movie.name || "",
-            index,
+            movie.vodId == null ? index : "",
           ].join("-");
 
           return (
@@ -290,9 +302,11 @@ function MovieCards({
 function OrbVisual() {
   return (
     <div className="friday-orb-visual" aria-hidden="true">
-      <div className="friday-orb-core" />
-      <div className="friday-orb-refraction" />
-      <div className="friday-orb-highlight" />
+      <div className="friday-orb-inner" />
+      <div className="friday-orb-fluid" />
+      <div className="friday-orb-rim" />
+      <div className="friday-orb-glint" />
+      <div className="friday-orb-glint-small" />
     </div>
   );
 }
@@ -313,7 +327,6 @@ export default function AIFloatingBall({
   const [completed, setCompleted] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [voiceError, setVoiceError] = useState("");
-
   const [fabPosition, setFabPosition] = useState<{
     left: number;
     top: number;
@@ -324,6 +337,10 @@ export default function AIFloatingBall({
 
   const lastSpokenMessageRef = useRef("");
   const lastCompletedMessageRef = useRef("");
+  const pendingVoiceTextRef = useRef("");
+  const handleSendRef = useRef<(text?: string) => Promise<void>>(
+    async () => {},
+  );
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -393,6 +410,7 @@ export default function AIFloatingBall({
     },
   });
 
+  const typedMessages = messages as unknown as MessageLike[];
   const busy = status === "submitted" || status === "streaming";
 
   const auroraState: AuroraState = speaking
@@ -407,14 +425,14 @@ export default function AIFloatingBall({
 
   const stateLabel =
     auroraState === "listening"
-      ? "Listening..."
+      ? "正在聆听"
       : auroraState === "thinking"
-        ? "Thinking..."
+        ? "正在寻找合适的影视资源"
         : auroraState === "speaking"
-          ? "Speaking..."
+          ? "Friday 正在回复"
           : auroraState === "completed"
-            ? "Completed"
-            : "";
+            ? "已完成"
+            : "随时为你服务";
 
   const stopSpeech = useCallback(() => {
     utteranceRef.current = null;
@@ -425,12 +443,13 @@ export default function AIFloatingBall({
   const stopAllVoice = useCallback(() => {
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
+    pendingVoiceTextRef.current = "";
 
     if (recognition) {
       try {
         recognition.abort();
       } catch {
-        // 忽略 iOS Safari abort 异常。
+        // 忽略浏览器 abort 异常。
       }
     }
 
@@ -470,6 +489,168 @@ export default function AIFloatingBall({
     );
   }, [clearMovieCloseTimer]);
 
+  const handleSend = useCallback(
+    async (text?: string) => {
+      const content = (text ?? input).trim();
+
+      if (!content || busy || closing) return;
+      if (content.length > MAX_INPUT_LENGTH) return;
+
+      stopAllVoice();
+      setVoiceError("");
+      setCompleted(false);
+      setInput("");
+
+      if (inputRef.current) {
+        inputRef.current.style.height = "auto";
+      }
+
+      try {
+        await sendMessage({ text: content });
+      } catch (sendError) {
+        console.error("[Friday] Send failed:", sendError);
+      }
+    },
+    [input, busy, closing, sendMessage, stopAllVoice],
+  );
+
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
+
+  const startListening = useCallback(() => {
+    if (busy || listening || closing) return;
+
+    setVoiceError("");
+
+    if (
+      typeof window === "undefined" ||
+      !window.isSecureContext
+    ) {
+      setVoiceError(
+        "语音识别需要安全连接，请使用 HTTPS 网站或 localhost。",
+      );
+      return;
+    }
+
+    const SpeechRecognitionClass =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionClass) {
+      setVoiceError(
+        "当前浏览器暂不支持语音识别，请使用键盘输入。",
+      );
+      return;
+    }
+
+    stopSpeech();
+
+    const previousRecognition = recognitionRef.current;
+    recognitionRef.current = null;
+
+    if (previousRecognition) {
+      try {
+        previousRecognition.abort();
+      } catch {
+        // 忽略旧实例异常。
+      }
+    }
+
+    pendingVoiceTextRef.current = "";
+
+    const recognition = new SpeechRecognitionClass();
+
+    recognition.lang = "zh-CN";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      if (recognitionRef.current !== recognition) return;
+
+      setListening(true);
+      setVoiceError("");
+    };
+
+    recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
+
+      let finalText = "";
+      let interimText = "";
+
+      for (let index = 0; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript || "";
+
+        if (result.isFinal) {
+          finalText += transcript;
+        } else {
+          interimText += transcript;
+        }
+      }
+
+      const recognizedText = (finalText || interimText)
+        .trim()
+        .slice(0, MAX_INPUT_LENGTH);
+
+      if (recognizedText) {
+        setInput(recognizedText);
+      }
+
+      if (finalText.trim()) {
+        pendingVoiceTextRef.current = finalText
+          .trim()
+          .slice(0, MAX_INPUT_LENGTH);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+
+      recognitionRef.current = null;
+      setListening(false);
+
+      const message = getSpeechErrorMessage(event.error);
+
+      if (message) {
+        setVoiceError(message);
+      }
+    };
+
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+
+      recognitionRef.current = null;
+      setListening(false);
+
+      const finalText = pendingVoiceTextRef.current.trim();
+      pendingVoiceTextRef.current = "";
+
+      if (finalText && !busy) {
+        setInput("");
+        void handleSendRef.current(finalText);
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    try {
+      // 必须在用户点击事件的同步调用链内启动。
+      recognition.start();
+    } catch (recognitionError) {
+      console.error(
+        "[Friday] Speech recognition start failed:",
+        recognitionError,
+      );
+
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
+
+      setListening(false);
+      setVoiceError("语音识别启动失败，请检查麦克风权限后重试。");
+    }
+  }, [busy, listening, closing, stopSpeech]);
+
   const openPanel = useCallback(() => {
     clearMovieCloseTimer();
 
@@ -478,12 +659,20 @@ export default function AIFloatingBall({
 
     setClosing(false);
     setOpen(true);
+    setExpanded(false);
     setVoiceError("");
 
     if (typeof document !== "undefined") {
       document.body.classList.add("friday-popup-lock");
     }
   }, [clearMovieCloseTimer]);
+
+  const openAndListen = useCallback(() => {
+    openPanel();
+
+    // 不放进 useEffect 或 setTimeout，尽量保留点击手势授权。
+    startListening();
+  }, [openPanel, startListening]);
 
   const closePanel = useCallback(() => {
     clearMovieCloseTimer();
@@ -525,12 +714,7 @@ export default function AIFloatingBall({
         finalizeMovieOpen();
       }, MOVIE_CLOSE_DELAY);
     },
-    [
-      closing,
-      stopAllVoice,
-      clearMovieCloseTimer,
-      finalizeMovieOpen,
-    ],
+    [closing, stopAllVoice, clearMovieCloseTimer, finalizeMovieOpen],
   );
 
   const handlePanelAnimationEnd = useCallback(
@@ -549,157 +733,6 @@ export default function AIFloatingBall({
       stop();
     }
   }, [busy, stop, stopAllVoice]);
-
-  const handleSend = useCallback(
-    async (text?: string) => {
-      const content = (text ?? input).trim();
-
-      if (!content || busy) return;
-      if (content.length > MAX_INPUT_LENGTH) return;
-
-      stopAllVoice();
-      setVoiceError("");
-      setCompleted(false);
-      setInput("");
-
-      if (inputRef.current) {
-        inputRef.current.style.height = "auto";
-      }
-
-      try {
-        await sendMessage({ text: content });
-      } catch (sendError) {
-        console.error("[Friday] Send failed:", sendError);
-      }
-    },
-    [input, busy, sendMessage, stopAllVoice],
-  );
-
-  const resizeTextarea = useCallback(() => {
-    const element = inputRef.current;
-    if (!element) return;
-
-    element.style.height = "auto";
-
-    const nextHeight = Math.min(element.scrollHeight, 110);
-    element.style.height = `${nextHeight}px`;
-  }, []);
-
-  useEffect(() => {
-    resizeTextarea();
-  }, [input, resizeTextarea]);
-
-  const startListening = useCallback(() => {
-    if (busy || listening || closing) return;
-
-    setVoiceError("");
-
-    if (
-      typeof window === "undefined" ||
-      !window.isSecureContext
-    ) {
-      setVoiceError(
-        "语音识别需要安全连接，请使用 HTTPS 网站或 localhost。",
-      );
-      return;
-    }
-
-    const SpeechRecognitionClass =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionClass) {
-      setVoiceError(
-        "当前浏览器暂不支持语音识别，请使用键盘输入，或尝试更新浏览器。",
-      );
-      return;
-    }
-
-    stopSpeech();
-
-    const previousRecognition = recognitionRef.current;
-    recognitionRef.current = null;
-
-    if (previousRecognition) {
-      try {
-        previousRecognition.abort();
-      } catch {
-        // 忽略旧识别实例异常。
-      }
-    }
-
-    const recognition = new SpeechRecognitionClass();
-
-    recognition.lang = "zh-CN";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-
-    recognition.onstart = () => {
-      if (recognitionRef.current !== recognition) return;
-
-      setListening(true);
-      setVoiceError("");
-    };
-
-    recognition.onresult = (event) => {
-      if (recognitionRef.current !== recognition) return;
-
-      let finalText = "";
-      let interimText = "";
-
-      for (let index = 0; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        const transcript = result?.[0]?.transcript || "";
-
-        if (result.isFinal) {
-          finalText += transcript;
-        } else {
-          interimText += transcript;
-        }
-      }
-
-      const recognizedText = finalText || interimText;
-
-      setInput(recognizedText.slice(0, MAX_INPUT_LENGTH));
-    };
-
-    recognition.onerror = (event) => {
-      if (recognitionRef.current !== recognition) return;
-
-      recognitionRef.current = null;
-      setListening(false);
-
-      const message = getSpeechErrorMessage(event.error);
-
-      if (message) {
-        setVoiceError(message);
-      }
-    };
-
-    recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-
-      recognitionRef.current = null;
-      setListening(false);
-    };
-
-    recognitionRef.current = recognition;
-
-    try {
-      recognition.start();
-    } catch (recognitionError) {
-      console.error(
-        "[Friday] Speech recognition start failed:",
-        recognitionError,
-      );
-
-      if (recognitionRef.current === recognition) {
-        recognitionRef.current = null;
-      }
-
-      setListening(false);
-      setVoiceError("语音识别启动失败，请检查麦克风权限后重试。");
-    }
-  }, [busy, listening, closing, stopSpeech]);
 
   const speakText = useCallback(
     (text: string, messageId: string) => {
@@ -763,13 +796,14 @@ export default function AIFloatingBall({
   useEffect(() => {
     if (status !== "ready" || !open) return;
 
-    const lastAssistant = [...(messages as any[])]
+    const lastAssistant = [...typedMessages]
       .reverse()
       .find((message) => message?.role === "assistant");
 
     if (!lastAssistant?.id) return;
 
     const text = getPartText(lastAssistant);
+
     if (!text.trim()) return;
 
     if (lastCompletedMessageRef.current === lastAssistant.id) {
@@ -786,7 +820,7 @@ export default function AIFloatingBall({
     } else if (!voiceEnabled) {
       setCompleted(true);
     }
-  }, [messages, status, voiceEnabled, open, speakText]);
+  }, [typedMessages, status, voiceEnabled, open, speakText]);
 
   useEffect(() => {
     if (!completed) return;
@@ -843,16 +877,6 @@ export default function AIFloatingBall({
     };
   }, [open, closePanel]);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const timer = window.setTimeout(() => {
-      inputRef.current?.focus();
-    }, 180);
-
-    return () => window.clearTimeout(timer);
-  }, [open]);
-
   const clearConversation = useCallback(() => {
     interrupt();
     setMessages([]);
@@ -866,6 +890,18 @@ export default function AIFloatingBall({
       inputRef.current.style.height = "auto";
     }
   }, [interrupt, setMessages]);
+
+  const resizeTextarea = useCallback(() => {
+    const element = inputRef.current;
+    if (!element) return;
+
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, 110)}px`;
+  }, []);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, [input, resizeTextarea]);
 
   const clampFabPosition = useCallback(
     (position: { left: number; top: number }) => {
@@ -890,8 +926,6 @@ export default function AIFloatingBall({
   );
 
   useEffect(() => {
-    if (!fabPosition) return;
-
     const handleResize = () => {
       setFabPosition((current) =>
         current ? clampFabPosition(current) : current,
@@ -903,7 +937,7 @@ export default function AIFloatingBall({
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, [fabPosition, clampFabPosition]);
+  }, [clampFabPosition]);
 
   const handleFabPointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -923,7 +957,7 @@ export default function AIFloatingBall({
       try {
         event.currentTarget.setPointerCapture(event.pointerId);
       } catch {
-        // 部分浏览器不支持 pointer capture。
+        // 某些浏览器不支持 pointer capture。
       }
     },
     [open, closing],
@@ -948,12 +982,12 @@ export default function AIFloatingBall({
       drag.moved = true;
       suppressClickRef.current = true;
 
-      const nextPosition = clampFabPosition({
-        left: event.clientX - drag.offsetX,
-        top: event.clientY - drag.offsetY,
-      });
-
-      setFabPosition(nextPosition);
+      setFabPosition(
+        clampFabPosition({
+          left: event.clientX - drag.offsetX,
+          top: event.clientY - drag.offsetY,
+        }),
+      );
     },
     [clampFabPosition],
   );
@@ -978,7 +1012,7 @@ export default function AIFloatingBall({
       dragResetTimerRef.current = window.setTimeout(() => {
         suppressClickRef.current = false;
         dragResetTimerRef.current = null;
-      }, 250);
+      }, 350);
     },
     [],
   );
@@ -989,8 +1023,20 @@ export default function AIFloatingBall({
       return;
     }
 
-    openPanel();
-  }, [openPanel]);
+    openAndListen();
+  }, [openAndListen]);
+
+  const lastAssistantMessage = [...typedMessages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+
+  const latestAssistantText = lastAssistantMessage
+    ? getPartText(lastAssistantMessage)
+    : "";
+
+  const latestMovieData = lastAssistantMessage
+    ? getMovieDataForMessage(lastAssistantMessage)
+    : [];
 
   if (!mounted) return null;
 
@@ -1009,9 +1055,20 @@ export default function AIFloatingBall({
           bottom: max(24px, env(safe-area-inset-bottom, 0px));
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
             "SF Pro Text", "PingFang SC", sans-serif;
+          color: #fff;
+          pointer-events: none;
         }
 
-        /* 悬浮球按钮 */
+        .friday-root button,
+        .friday-root textarea,
+        .friday-root section {
+          pointer-events: auto;
+        }
+
+        /* ================================
+           V2.1 液态玻璃球
+        ================================= */
+
         .friday-fab {
           position: relative;
           display: grid;
@@ -1028,72 +1085,118 @@ export default function AIFloatingBall({
           user-select: none;
           -webkit-user-select: none;
           -webkit-tap-highlight-color: transparent;
+          filter: drop-shadow(0 9px 18px rgba(0,0,0,.25));
         }
 
         .friday-fab:active {
           cursor: grabbing;
         }
 
-        /* 球体统一视觉结构 */
         .friday-orb-visual {
           position: relative;
           isolation: isolate;
           width: 100%;
           height: 100%;
           overflow: hidden;
-          border: 1px solid rgba(255,255,255,.36);
+          border: 1px solid rgba(255,255,255,.48);
           border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
-          background: #080a12;
+          background:
+            radial-gradient(
+              ellipse at 28% 17%,
+              rgba(255,255,255,.22),
+              transparent 24%
+            ),
+            radial-gradient(
+              ellipse at 75% 80%,
+              rgba(92,95,160,.14),
+              transparent 46%
+            ),
+            rgba(15,18,29,.19);
           box-shadow:
-            0 10px 32px rgba(0,0,0,.38),
-            0 0 24px rgba(119,133,255,.2),
-            inset 0 1px 2px rgba(255,255,255,.25),
-            inset 0 -8px 15px rgba(0,0,0,.7);
-          animation: friday-orb-morph 9s ease-in-out infinite,
+            0 0 0 1px rgba(255,255,255,.08),
+            0 0 19px rgba(111,194,255,.15),
+            0 0 32px rgba(190,117,255,.13),
+            inset 0 1px 2px rgba(255,255,255,.48),
+            inset 0 -2px 7px rgba(0,0,0,.19);
+          -webkit-backdrop-filter: blur(2px) saturate(175%);
+          backdrop-filter: blur(2px) saturate(175%);
+          animation:
+            friday-orb-morph 9s ease-in-out infinite,
             friday-orb-breathe 4.8s ease-in-out infinite;
+          transition:
+            border-radius .45s ease,
+            transform .45s cubic-bezier(.2,.8,.2,1);
         }
 
-        .friday-orb-core {
+        .friday-orb-inner {
           position: absolute;
           z-index: 0;
-          inset: 2px;
+          inset: 3px;
           border-radius: inherit;
           background:
             radial-gradient(
-              ellipse at 28% 18%,
-              rgba(255,255,255,.12),
-              transparent 28%
+              ellipse at 29% 18%,
+              rgba(255,255,255,.17),
+              transparent 25%
             ),
             radial-gradient(
-              ellipse at 75% 76%,
-              rgba(99,83,190,.16),
-              transparent 48%
+              ellipse at 70% 72%,
+              rgba(113,99,183,.13),
+              transparent 43%
             ),
             radial-gradient(
-              ellipse at 50% 50%,
-              #111522 0%,
-              #080a12 65%,
-              #03040a 100%
+              ellipse at 50% 52%,
+              rgba(17,23,38,.18),
+              rgba(9,13,25,.11) 60%,
+              rgba(3,5,12,.24) 100%
             );
           box-shadow:
-            inset 0 0 18px rgba(0,0,0,.85),
-            inset 0 1px 4px rgba(255,255,255,.13);
+            inset 0 0 9px rgba(0,0,0,.18),
+            inset 0 1px 3px rgba(255,255,255,.22);
         }
 
-        .friday-orb-refraction {
+        .friday-orb-fluid {
+          position: absolute;
+          z-index: 1;
+          inset: 8%;
+          border-radius: 48% 52% 57% 43% / 55% 43% 57% 45%;
+          background:
+            radial-gradient(
+              ellipse at 20% 38%,
+              rgba(102,231,255,.27),
+              transparent 39%
+            ),
+            radial-gradient(
+              ellipse at 82% 32%,
+              rgba(183,132,255,.25),
+              transparent 38%
+            ),
+            radial-gradient(
+              ellipse at 55% 90%,
+              rgba(255,180,135,.2),
+              transparent 44%
+            );
+          mix-blend-mode: screen;
+          opacity: .78;
+          animation: friday-fluid-drift 8s ease-in-out infinite alternate;
+          pointer-events: none;
+        }
+
+        .friday-orb-rim {
           position: absolute;
           z-index: 2;
           inset: 0;
-          padding: 1.6px;
+          padding: 1.7px;
           border-radius: inherit;
           background: conic-gradient(
-            from 0deg,
-            rgba(100,158,255,.9),
-            rgba(146,108,255,.95),
-            rgba(255,169,123,.95),
-            rgba(255,225,174,.92),
-            rgba(93,224,214,.88),
-            rgba(100,158,255,.9)
+            from 15deg,
+            rgba(120,220,255,.95),
+            rgba(185,151,255,.92),
+            rgba(255,211,180,.94),
+            rgba(255,255,255,.98),
+            rgba(104,233,221,.94),
+            rgba(115,155,255,.95),
+            rgba(120,220,255,.95)
           );
           -webkit-mask:
             linear-gradient(#fff 0 0) content-box,
@@ -1103,32 +1206,43 @@ export default function AIFloatingBall({
             linear-gradient(#fff 0 0) content-box,
             linear-gradient(#fff 0 0);
           mask-composite: exclude;
+          filter: drop-shadow(0 0 2px rgba(167,220,255,.55));
           pointer-events: none;
           animation: friday-orb-spectrum 12s linear infinite;
         }
 
-        .friday-orb-highlight {
+        .friday-orb-glint {
           position: absolute;
           z-index: 3;
-          top: 11%;
+          top: 10%;
           left: 17%;
-          width: 27%;
-          height: 13%;
+          width: 29%;
+          height: 11%;
           border-radius: 50%;
           transform: rotate(-32deg);
           background: linear-gradient(
             90deg,
-            rgba(255,255,255,.8),
-            rgba(255,255,255,.12)
+            rgba(255,255,255,.94),
+            rgba(255,255,255,.38) 60%,
+            transparent
           );
-          filter: blur(1px);
-          opacity: .78;
+          filter: blur(.25px);
+          opacity: .9;
           pointer-events: none;
         }
 
-        .friday-fab .friday-orb-visual {
-          width: 100%;
-          height: 100%;
+        .friday-orb-glint-small {
+          position: absolute;
+          z-index: 3;
+          top: 23%;
+          left: 13%;
+          width: 8%;
+          height: 4%;
+          border-radius: 50%;
+          background: rgba(255,255,255,.9);
+          box-shadow: 0 0 6px rgba(255,255,255,.65);
+          transform: rotate(-32deg);
+          pointer-events: none;
         }
 
         @keyframes friday-orb-morph {
@@ -1144,14 +1258,8 @@ export default function AIFloatingBall({
         }
 
         @keyframes friday-orb-breathe {
-          0%,100% {
-            scale: .96;
-            filter: brightness(.98);
-          }
-          50% {
-            scale: 1.045;
-            filter: brightness(1.13);
-          }
+          0%,100% { transform: scale(.97); filter: brightness(1); }
+          50% { transform: scale(1.045); filter: brightness(1.16); }
         }
 
         @keyframes friday-orb-spectrum {
@@ -1159,38 +1267,89 @@ export default function AIFloatingBall({
           to { filter: hue-rotate(360deg); }
         }
 
-        /* 面板 */
+        @keyframes friday-fluid-drift {
+          0% { transform: translate(-3%,2%) rotate(-8deg) scale(.94); }
+          50% { transform: translate(3%,-2%) rotate(8deg) scale(1.08); }
+          100% { transform: translate(-1%,3%) rotate(3deg) scale(1.02); }
+        }
+
+        .friday-fab:active .friday-orb-visual {
+          transform: scale(.86);
+          border-radius: 42% 58% 60% 40% / 57% 43% 57% 43%;
+        }
+
+        /* ================================
+           Siri 式胶囊容器
+        ================================= */
+
         .friday-panel {
           position: fixed;
           right: 18px;
-          bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+          bottom: calc(110px + env(safe-area-inset-bottom, 0px));
           display: flex;
           flex-direction: column;
-          width: min(540px, calc(100vw - 28px));
-          height: min(720px, calc(100dvh - 135px));
-          min-height: 380px;
-          min-width: 0;
+          width: min(500px, calc(100vw - 28px));
+          max-height: min(430px, calc(100dvh - 130px));
+          min-height: 176px;
           overflow: hidden;
           isolation: isolate;
-          border: 1px solid rgba(255,255,255,.19);
-          border-radius: 36px;
+          border: 1px solid rgba(255,255,255,.27);
+          border-radius: 29px;
           color: #fff;
           background:
             linear-gradient(
               145deg,
-              rgba(255,255,255,.09),
-              rgba(255,255,255,.018) 42%,
-              rgba(255,255,255,.045)
+              rgba(255,255,255,.16),
+              rgba(255,255,255,.035) 45%,
+              rgba(255,255,255,.075)
             ),
-            rgba(7,9,15,.94);
-          -webkit-backdrop-filter: blur(30px) saturate(155%);
-          backdrop-filter: blur(30px) saturate(155%);
+            rgba(12,15,25,.77);
+          -webkit-backdrop-filter: blur(32px) saturate(165%);
+          backdrop-filter: blur(32px) saturate(165%);
           box-shadow:
-            0 30px 100px rgba(0,0,0,.5),
-            inset 0 1px 0 rgba(255,255,255,.2),
-            inset 0 -1px 0 rgba(255,255,255,.055);
+            0 22px 75px rgba(0,0,0,.36),
+            inset 0 1px 0 rgba(255,255,255,.3),
+            inset 0 -1px 0 rgba(255,255,255,.06);
           transform-origin: bottom right;
-          animation: friday-canvas-open .42s cubic-bezier(.2,.8,.2,1);
+          animation: friday-capsule-in .48s cubic-bezier(.18,.82,.2,1);
+        }
+
+        @keyframes friday-capsule-in {
+          0% {
+            opacity: 0;
+            transform: translate3d(24px,35px,0) scale(.72);
+            border-radius: 50px;
+          }
+          65% {
+            opacity: 1;
+            transform: translate3d(-3px,-3px,0) scale(1.025);
+          }
+          100% {
+            transform: translate3d(0,0,0) scale(1);
+            border-radius: 29px;
+          }
+        }
+
+        .friday-panel.friday-expanded {
+          right: 8px;
+          bottom: 8px;
+          width: min(650px, calc(100vw - 16px));
+          height: min(780px, calc(100dvh - 16px));
+          max-height: calc(100dvh - 16px);
+          min-height: 320px;
+          border-radius: 34px;
+          animation: friday-expanded-in .38s cubic-bezier(.2,.8,.2,1);
+        }
+
+        @keyframes friday-expanded-in {
+          from {
+            opacity: .7;
+            transform: translateY(24px) scale(.97);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
         }
 
         .friday-panel.friday-closing {
@@ -1198,26 +1357,9 @@ export default function AIFloatingBall({
           animation: friday-panel-close .25s ease-in forwards;
         }
 
-        @keyframes friday-canvas-open {
-          from {
-            opacity: 0;
-            transform: translate3d(18px,24px,0) scale(.92);
-          }
-          to {
-            opacity: 1;
-            transform: translate3d(0,0,0) scale(1);
-          }
-        }
-
         @keyframes friday-panel-close {
-          from {
-            opacity: 1;
-            transform: translate3d(0,0,0) scale(1);
-          }
-          to {
-            opacity: 0;
-            transform: translate3d(18px,18px,0) scale(.94);
-          }
+          from { opacity: 1; transform: scale(1); }
+          to { opacity: 0; transform: translate(16px,15px) scale(.94); }
         }
 
         .friday-panel::before {
@@ -1225,181 +1367,23 @@ export default function AIFloatingBall({
           z-index: -1;
           inset: 0;
           border-radius: inherit;
-          pointer-events: none;
           background:
             radial-gradient(
-              ellipse at 50% 100%,
-              rgba(255,215,145,.09),
+              ellipse at 50% 110%,
+              rgba(115,183,255,.19),
               transparent 55%
             ),
-            linear-gradient(
-              120deg,
-              rgba(255,255,255,.06),
-              transparent 30%,
-              transparent 70%,
-              rgba(255,255,255,.035)
+            radial-gradient(
+              ellipse at 90% 0%,
+              rgba(203,143,255,.13),
+              transparent 45%
             );
           content: "";
-        }
-
-        .friday-panel.friday-expanded {
-          right: 8px;
-          bottom: 8px;
-          width: calc(100vw - 16px);
-          height: calc(100dvh - 16px);
-          max-height: calc(100dvh - 16px);
-          border-radius: 32px;
-        }
-
-        /* 极光背景 */
-        .friday-aurora {
-          position: absolute;
-          z-index: -1;
-          right: -24%;
-          bottom: -13%;
-          left: -24%;
-          height: 44%;
           pointer-events: none;
-          opacity: .8;
-          filter: blur(25px);
-          transition: opacity 1s ease, height 1s ease, filter 1s ease;
         }
 
-        .friday-aurora::before,
-        .friday-aurora::after {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          content: "";
-        }
+        /* 胶囊顶部 */
 
-        .friday-aurora::before {
-          background: radial-gradient(
-            ellipse 52% 72% at 50% 100%,
-            rgba(255,255,255,.95),
-            rgba(255,246,211,.85) 13%,
-            rgba(255,207,94,.72) 30%,
-            rgba(255,190,80,.25) 52%,
-            transparent 76%
-          );
-          animation: friday-aurora-white 6s ease-in-out infinite;
-        }
-
-        .friday-aurora::after {
-          inset: -10% -12% 0;
-          background:
-            radial-gradient(
-              ellipse 48% 72% at 22% 100%,
-              rgba(124,224,190,.4),
-              transparent 72%
-            ),
-            radial-gradient(
-              ellipse 48% 72% at 80% 100%,
-              rgba(135,226,199,.35),
-              transparent 72%
-            ),
-            radial-gradient(
-              ellipse 60% 72% at 53% 100%,
-              rgba(255,196,94,.34),
-              transparent 76%
-            );
-          animation: friday-aurora-color 9s ease-in-out infinite alternate;
-        }
-
-        .friday-aurora-core {
-          position: absolute;
-          right: 8%;
-          bottom: -4%;
-          left: 8%;
-          height: 48%;
-          border-radius: 50%;
-          background: radial-gradient(
-            ellipse at 50% 100%,
-            rgba(255,255,255,.85),
-            rgba(255,220,128,.5) 28%,
-            rgba(255,220,128,.08) 66%,
-            transparent 78%
-          );
-          filter: blur(22px);
-          opacity: .75;
-          animation: friday-aurora-core 5.5s ease-in-out infinite;
-        }
-
-        @keyframes friday-aurora-white {
-          0%,100% { transform: translateY(0) scaleX(1); opacity: .78; }
-          50% { transform: translateY(-5%) scaleX(1.13); opacity: 1; }
-        }
-
-        @keyframes friday-aurora-color {
-          0% { transform: translateX(-3%) scaleX(.94); }
-          50% { transform: translate(2%,-4%) scaleX(1.08); }
-          100% { transform: translateX(-1%) scaleX(1.02); }
-        }
-
-        @keyframes friday-aurora-core {
-          0%,100% { transform: scale(.9); opacity: .58; }
-          50% { transform: scale(1.14); opacity: .92; }
-        }
-
-        .friday-panel[data-state="standby"] .friday-aurora {
-          height: 42%;
-          opacity: .65;
-          animation: friday-aurora-breathe 7s ease-in-out infinite;
-        }
-
-        @keyframes friday-aurora-breathe {
-          0%,100% { transform: scaleX(.94) scaleY(.92); }
-          50% { transform: scaleX(1.08) scaleY(1.08); }
-        }
-
-        .friday-panel[data-state="listening"] .friday-aurora {
-          height: 47%;
-          opacity: .83;
-          animation: friday-aurora-listen 2.8s ease-in-out infinite;
-        }
-
-        @keyframes friday-aurora-listen {
-          0%,100% { transform: scaleX(.98) scaleY(.96); }
-          50% { transform: scaleX(1.08) scaleY(1.05); }
-        }
-
-        .friday-panel[data-state="thinking"] .friday-aurora {
-          height: 54%;
-          opacity: .96;
-          filter: blur(19px);
-          animation: friday-aurora-thinking 2.2s ease-in-out infinite;
-        }
-
-        @keyframes friday-aurora-thinking {
-          0%,100% { transform: scaleX(1.15) scaleY(.88); }
-          50% { transform: scaleX(.78) scaleY(1.12); }
-        }
-
-        .friday-panel[data-state="speaking"] .friday-aurora {
-          height: 59%;
-          opacity: 1;
-          filter: blur(17px);
-          animation: friday-aurora-speaking .72s ease-in-out infinite alternate;
-        }
-
-        @keyframes friday-aurora-speaking {
-          from { transform: scaleX(.91) scaleY(.91); }
-          to { transform: scaleX(1.13) scaleY(1.12); }
-        }
-
-        .friday-panel[data-state="completed"] .friday-aurora {
-          height: 47%;
-          opacity: .86;
-          animation: friday-aurora-completed 1.8s ease-out both;
-        }
-
-        @keyframes friday-aurora-completed {
-          0% { transform: scaleX(.72) scaleY(.8); opacity: 1; }
-          65% { transform: scaleX(1.14) scaleY(1.12); opacity: .9; }
-          100% { transform: scale(1); opacity: .65; }
-        }
-
-        /* 顶栏 */
         .friday-canvas-top {
           position: relative;
           z-index: 3;
@@ -1407,49 +1391,47 @@ export default function AIFloatingBall({
           align-items: center;
           justify-content: space-between;
           flex: 0 0 auto;
-          min-height: 60px;
-          padding: 18px 23px 8px;
+          min-height: 48px;
+          padding: 13px 18px 4px;
         }
 
         .friday-wordmark {
-          color: rgba(255,255,255,.94);
+          color: rgba(255,255,255,.96);
           font-family: Georgia, "Times New Roman", serif;
-          font-size: 25px;
+          font-size: 21px;
           font-weight: 400;
-          letter-spacing: -1px;
-          text-shadow: 0 1px 12px rgba(255,255,255,.12);
+          letter-spacing: -.8px;
+          text-shadow: 0 1px 12px rgba(255,255,255,.15);
         }
 
         .friday-state-wrap {
           display: flex;
           align-items: center;
           gap: 9px;
-          color: rgba(255,255,255,.58);
-          font-size: 10px;
-          letter-spacing: 1.2px;
+          color: rgba(255,255,255,.67);
+          font-size: 11px;
         }
 
         .friday-status-dot {
-          width: 8px;
-          height: 8px;
-          flex: 0 0 8px;
+          width: 9px;
+          height: 9px;
+          flex: 0 0 9px;
           padding: 0;
           border: 0;
           border-radius: 50%;
-          background: #f3a34b;
-          box-shadow:
-            0 0 7px rgba(255,170,75,.8),
-            0 0 17px rgba(255,170,75,.36);
+          background: #8de7dc;
+          box-shadow: 0 0 8px rgba(116,239,224,.8);
           cursor: pointer;
-          animation: friday-status-breathe 2.4s ease-in-out infinite;
+          animation: friday-dot-pulse 1.8s ease-in-out infinite;
         }
 
-        @keyframes friday-status-breathe {
-          0%,100% { opacity: .62; transform: scale(.85); }
-          50% { opacity: 1; transform: scale(1.15); }
+        @keyframes friday-dot-pulse {
+          0%,100% { opacity: .6; transform: scale(.85); }
+          50% { opacity: 1; transform: scale(1.18); }
         }
 
-        /* 消息列表 */
+        /* 消息区域 */
+
         .friday-messages {
           position: relative;
           z-index: 1;
@@ -1458,53 +1440,50 @@ export default function AIFloatingBall({
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 22px 27px 24px;
-          scroll-behavior: smooth;
+          padding: 10px 19px 14px;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
-          scrollbar-color: rgba(255,255,255,.15) transparent;
+          scrollbar-color: rgba(255,255,255,.17) transparent;
+        }
+
+        .friday-panel:not(.friday-expanded) .friday-messages {
+          max-height: 180px;
         }
 
         .friday-welcome {
           display: flex;
           flex-direction: column;
           justify-content: center;
-          min-height: 270px;
-          padding: 30px 0 60px;
-          color: #f7f7f2;
-          text-align: left;
+          min-height: 82px;
+          padding: 4px 0 12px;
         }
 
         .friday-welcome-kicker {
-          margin-bottom: 18px;
-          color: rgba(255,255,255,.44);
-          font-size: 10px;
-          letter-spacing: 3px;
+          margin-bottom: 7px;
+          color: rgba(255,255,255,.43);
+          font-size: 9px;
+          letter-spacing: 2px;
         }
 
         .friday-welcome-title {
-          max-width: 390px;
-          margin: 0 0 18px;
+          margin: 0 0 5px;
           color: #fff;
-          font-size: clamp(29px, 6vw, 42px);
+          font-size: 20px;
           font-weight: 500;
-          letter-spacing: -1.8px;
-          line-height: 1.28;
+          letter-spacing: -.6px;
         }
 
         .friday-welcome-text {
-          max-width: 370px;
-          color: rgba(255,255,255,.68);
-          font-size: 15px;
-          line-height: 1.85;
+          color: rgba(255,255,255,.65);
+          font-size: 12px;
+          line-height: 1.7;
         }
 
         .friday-message {
           display: flex;
-          align-items: flex-start;
           justify-content: flex-start;
-          margin: 0 0 27px;
-          animation: friday-message-in .35s ease both;
+          margin: 0 0 12px;
+          animation: friday-message-in .3s ease both;
         }
 
         .friday-message-user {
@@ -1512,157 +1491,166 @@ export default function AIFloatingBall({
         }
 
         @keyframes friday-message-in {
-          from { opacity: 0; transform: translateY(9px); }
+          from { opacity: 0; transform: translateY(7px); }
           to { opacity: 1; transform: translateY(0); }
         }
 
         .friday-message-content {
-          max-width: 94%;
-          color: rgba(255,255,255,.94);
-          font-size: 16px;
-          line-height: 1.85;
+          max-width: 96%;
+          color: rgba(255,255,255,.95);
+          font-size: 13px;
+          line-height: 1.75;
           white-space: pre-wrap;
           overflow-wrap: anywhere;
         }
 
         .friday-message-user .friday-message-content {
           max-width: 86%;
-          color: rgba(255,255,255,.78);
-          text-align: right;
+          padding: 8px 12px;
+          border: 1px solid rgba(255,255,255,.1);
+          border-radius: 16px 16px 4px 16px;
+          background: rgba(255,255,255,.1);
+          color: rgba(255,255,255,.86);
         }
 
         .friday-status {
-          margin: 14px 0 18px;
-          color: rgba(255,224,160,.86);
-          font-size: 12px;
-          letter-spacing: .4px;
-          animation: friday-status-breathe 1.8s ease-in-out infinite;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 7px 0 12px;
+          color: rgba(202,226,255,.88);
+          font-size: 11px;
+          animation: friday-status-pulse 1.8s ease-in-out infinite;
+        }
+
+        .friday-status::before {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #9edfff;
+          box-shadow: 0 0 9px #9edfff;
+          content: "";
+        }
+
+        @keyframes friday-status-pulse {
+          0%,100% { opacity: .6; }
+          50% { opacity: 1; }
         }
 
         .friday-error {
-          margin: 12px 0;
-          padding: 12px 14px;
+          margin: 9px 0;
+          padding: 10px 12px;
           border: 1px solid rgba(248,113,113,.2);
-          border-radius: 16px;
+          border-radius: 14px;
           background: rgba(127,29,29,.18);
           color: #fca5a5;
-          font-size: 13px;
-          line-height: 1.7;
+          font-size: 12px;
+          line-height: 1.6;
         }
 
-        /* 球体区域：正常 Flex 排版，不遮挡消息 */
+        /* 球体与状态波纹 */
+
         .friday-orb-stage {
           position: relative;
           z-index: 2;
           display: flex;
           align-items: center;
-          justify-content: flex-end;
+          justify-content: center;
           flex: 0 0 auto;
-          gap: 12px;
-          min-height: 90px;
-          padding: 0 22px 10px;
+          gap: 10px;
+          min-height: 42px;
+          padding: 0 15px 9px;
           pointer-events: none;
         }
 
-        .friday-orb-status {
-          padding-bottom: 8px;
-          color: rgba(255,255,255,.6);
-          font-size: 11px;
-          font-weight: 300;
-          letter-spacing: .6px;
-          text-shadow: 0 1px 10px rgba(0,0,0,.35);
+        .friday-orb-stage .friday-orb-visual {
+          width: 38px;
+          height: 38px;
+          flex: 0 0 38px;
         }
 
-        .friday-orb-stage .friday-orb-visual {
-          width: 86px;
-          height: 86px;
-          flex: 0 0 86px;
-          box-shadow:
-            0 0 35px rgba(110,132,255,.18),
-            0 12px 35px rgba(0,0,0,.3),
-            inset 0 1px 3px rgba(255,255,255,.2);
+        .friday-orb-status {
+          color: rgba(255,255,255,.69);
+          font-size: 11px;
+          letter-spacing: .3px;
         }
 
         .friday-panel[data-state="listening"] .friday-orb-visual {
-          animation-duration: 4s, 2.3s;
-          filter: brightness(1.15);
+          animation-duration: 5s, 1.5s;
+          filter: brightness(1.22);
         }
 
         .friday-panel[data-state="thinking"] .friday-orb-visual {
-          animation-duration: 3s, 1.7s;
-          filter: brightness(1.2) saturate(1.25);
+          animation-duration: 2.5s, 1.1s;
+          filter: brightness(1.24) saturate(1.3);
         }
 
         .friday-panel[data-state="speaking"] .friday-orb-visual {
-          animation-duration: 2.4s, 1s;
-          filter: brightness(1.24);
+          animation-duration: 2s, .75s;
+          filter: brightness(1.28);
         }
 
         /* 输入栏 */
+
         .friday-input-area {
           position: relative;
           z-index: 4;
           flex: 0 0 auto;
-          margin-top: auto;
-          padding: 14px 21px calc(14px + env(safe-area-inset-bottom, 0px));
-          background: linear-gradient(
-            to bottom,
-            rgba(7,9,15,.84),
-            rgba(7,9,15,.97)
-          );
-          -webkit-backdrop-filter: blur(24px) saturate(150%);
-          backdrop-filter: blur(24px) saturate(150%);
-          border-top: 1px solid rgba(255,255,255,.075);
+          padding: 10px 13px calc(11px + env(safe-area-inset-bottom, 0px));
+          border-top: 1px solid rgba(255,255,255,.1);
+          background: rgba(10,13,22,.27);
+          -webkit-backdrop-filter: blur(18px);
+          backdrop-filter: blur(18px);
         }
 
         .friday-input-box {
           display: flex;
           align-items: flex-end;
-          gap: 10px;
-          min-height: 57px;
-          padding: 9px 10px 9px 15px;
+          gap: 8px;
+          min-height: 47px;
+          padding: 6px 7px 6px 12px;
           border: 1px solid rgba(255,255,255,.24);
-          border-radius: 28px;
+          border-radius: 25px;
           background:
             linear-gradient(
               145deg,
-              rgba(255,255,255,.13),
+              rgba(255,255,255,.15),
               rgba(255,255,255,.045)
             ),
-            rgba(22,23,29,.82);
+            rgba(22,25,35,.48);
           -webkit-backdrop-filter: blur(22px) saturate(160%);
           backdrop-filter: blur(22px) saturate(160%);
           box-shadow:
-            0 12px 35px rgba(0,0,0,.25),
+            0 8px 25px rgba(0,0,0,.16),
             inset 0 1px 0 rgba(255,255,255,.2);
         }
 
         .friday-plus-btn {
           display: grid;
           place-items: center;
-          width: 34px;
-          height: 37px;
-          flex: 0 0 34px;
+          width: 30px;
+          height: 34px;
+          flex: 0 0 30px;
           padding: 0;
           border: 0;
           background: transparent;
-          color: rgba(255,255,255,.78);
-          font-size: 27px;
+          color: rgba(255,255,255,.8);
+          font-size: 24px;
           font-weight: 200;
           cursor: pointer;
         }
 
         .friday-plus-btn:disabled {
-          opacity: .55;
+          opacity: .45;
           cursor: default;
         }
 
         .friday-input-divider {
           width: 1px;
-          height: 26px;
+          height: 23px;
           flex: 0 0 1px;
           margin: 5px 1px;
-          background: rgba(255,255,255,.19);
+          background: rgba(255,255,255,.18);
         }
 
         .friday-textarea {
@@ -1676,13 +1664,13 @@ export default function AIFloatingBall({
           background: transparent;
           color: #fff;
           font-family: inherit;
-          font-size: 14px;
+          font-size: 13px;
           line-height: 1.65;
-          padding: 7px 0;
+          padding: 6px 0;
         }
 
         .friday-textarea::placeholder {
-          color: rgba(255,255,255,.54);
+          color: rgba(255,255,255,.53);
         }
 
         .friday-textarea:disabled {
@@ -1693,73 +1681,72 @@ export default function AIFloatingBall({
         .friday-mic-btn {
           display: grid;
           place-items: center;
-          width: 39px;
-          height: 39px;
-          flex: 0 0 39px;
+          width: 35px;
+          height: 35px;
+          flex: 0 0 35px;
           padding: 0;
           border: 1px solid rgba(255,255,255,.2);
           border-radius: 50%;
           background: rgba(255,255,255,.1);
-          color: rgba(255,255,255,.92);
+          color: rgba(255,255,255,.94);
           cursor: pointer;
-          font-size: 18px;
+          font-size: 17px;
           transition: background .2s ease, transform .2s ease;
           -webkit-tap-highlight-color: transparent;
         }
 
         .friday-send-btn {
-          border-color: rgba(255,255,255,.85);
+          border-color: rgba(255,255,255,.8);
           background: #f5f5f5;
           color: #151515;
-          font-size: 21px;
-          font-weight: 500;
+          font-size: 20px;
         }
 
         .friday-send-btn:disabled {
-          opacity: .42;
+          opacity: .4;
           cursor: not-allowed;
         }
 
         .friday-mic-btn.active {
-          border-color: rgba(255,192,104,.6);
-          background: rgba(255,175,75,.2);
-          color: #ffd18b;
-          animation: friday-status-breathe 1.5s ease-in-out infinite;
+          border-color: rgba(130,221,255,.7);
+          background: rgba(89,185,255,.23);
+          color: #b8eaff;
+          animation: friday-dot-pulse 1.4s ease-in-out infinite;
         }
 
         .friday-send-btn:active,
         .friday-mic-btn:active {
-          transform: scale(.92);
+          transform: scale(.91);
         }
 
         .friday-tools {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
-          min-height: 24px;
-          margin-top: 8px;
-          padding: 0 8px;
+          gap: 8px;
+          min-height: 22px;
+          margin-top: 5px;
+          padding: 0 7px;
         }
 
         .friday-tool-group {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 11px;
         }
 
         .friday-tool-btn {
           padding: 4px 2px;
           border: 0;
           background: transparent;
-          color: rgba(255,255,255,.55);
+          color: rgba(255,255,255,.57);
           cursor: pointer;
           font-family: inherit;
           font-size: 10px;
         }
 
         .friday-tool-btn.active {
-          color: #f5c77d;
+          color: #a9dcff;
         }
 
         .friday-tool-btn:disabled {
@@ -1768,15 +1755,16 @@ export default function AIFloatingBall({
         }
 
         .friday-voice-error {
-          margin: 8px 6px 0;
+          margin: 6px 6px 0;
           color: #ffb4a8;
-          font-size: 11px;
+          font-size: 10px;
           line-height: 1.55;
         }
 
-        /* 电影卡片 */
+        /* 影视结果 */
+
         .friday-movie-section {
-          margin: 12px 0 27px;
+          margin: 10px 0 16px;
         }
 
         .friday-result-heading {
@@ -1784,9 +1772,9 @@ export default function AIFloatingBall({
           justify-content: space-between;
           align-items: center;
           gap: 8px;
-          margin-bottom: 12px;
-          color: rgba(255,255,255,.92);
-          font-size: 12px;
+          margin-bottom: 10px;
+          color: rgba(255,255,255,.93);
+          font-size: 11px;
           font-weight: 600;
         }
 
@@ -1798,19 +1786,17 @@ export default function AIFloatingBall({
         .friday-movie-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
+          gap: 8px;
         }
 
         .friday-movie-card {
-          min-width: 0;
           display: flex;
-          gap: 9px;
-          padding: 8px;
-          border: 1px solid rgba(255,255,255,.13);
-          border-radius: 16px;
+          min-width: 0;
+          gap: 8px;
+          padding: 7px;
+          border: 1px solid rgba(255,255,255,.14);
+          border-radius: 14px;
           background: rgba(255,255,255,.075);
-          -webkit-backdrop-filter: blur(15px);
-          backdrop-filter: blur(15px);
           color: white;
           text-align: left;
           cursor: pointer;
@@ -1818,17 +1804,17 @@ export default function AIFloatingBall({
         }
 
         .friday-movie-card:active {
-          background: rgba(255,255,255,.14);
+          background: rgba(255,255,255,.15);
           transform: scale(.985);
         }
 
         .friday-poster {
           position: relative;
-          width: 55px;
-          height: 78px;
-          flex: 0 0 55px;
+          width: 48px;
+          height: 68px;
+          flex: 0 0 48px;
           overflow: hidden;
-          border-radius: 9px;
+          border-radius: 8px;
           background: rgba(20,22,27,.8);
         }
 
@@ -1861,7 +1847,7 @@ export default function AIFloatingBall({
           border-radius: 3px;
           background: rgba(0,0,0,.72);
           color: white;
-          font-size: 9px;
+          font-size: 8px;
           text-align: center;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1870,7 +1856,7 @@ export default function AIFloatingBall({
         .friday-movie-info {
           min-width: 0;
           flex: 1;
-          padding: 3px 0;
+          padding: 2px 0;
         }
 
         .friday-movie-name {
@@ -1879,45 +1865,78 @@ export default function AIFloatingBall({
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
           color: rgba(255,255,255,.96);
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 600;
           line-height: 1.5;
         }
 
         .friday-movie-meta {
-          margin-top: 5px;
+          margin-top: 4px;
           overflow: hidden;
           color: rgba(255,255,255,.55);
-          font-size: 10px;
+          font-size: 9px;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
 
         .friday-movie-source {
-          margin-top: 5px;
+          margin-top: 4px;
           overflow: hidden;
-          color: rgba(255,220,160,.85);
-          font-size: 10px;
+          color: rgba(190,221,255,.85);
+          font-size: 9px;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
 
         .friday-empty-result {
-          margin: 12px 0;
+          margin: 10px 0;
           color: rgba(255,255,255,.65);
-          font-size: 13px;
+          font-size: 12px;
+        }
+
+        /* 展开模式 */
+
+        .friday-expanded .friday-messages {
+          max-height: none;
+          padding: 20px 24px;
+        }
+
+        .friday-expanded .friday-welcome {
+          min-height: 220px;
+        }
+
+        .friday-expanded .friday-welcome-title {
+          font-size: 34px;
+        }
+
+        .friday-expanded .friday-message-content {
+          font-size: 15px;
+        }
+
+        .friday-expanded .friday-orb-stage {
+          min-height: 62px;
+        }
+
+        .friday-expanded .friday-orb-stage .friday-orb-visual {
+          width: 56px;
+          height: 56px;
+          flex-basis: 56px;
         }
 
         /* 移动端 */
+
         @media (max-width: 600px) {
+          .friday-root {
+            right: 16px;
+            bottom: max(20px, env(safe-area-inset-bottom, 0px));
+          }
+
           .friday-panel {
             right: 8px;
-            bottom: 0;
+            bottom: calc(100px + env(safe-area-inset-bottom, 0px));
             width: calc(100vw - 16px);
-            height: calc(100dvh - 8px);
-            max-height: calc(100dvh - 8px);
-            min-height: 320px;
-            border-radius: 30px 30px 0 0;
+            max-height: min(390px, calc(100dvh - 115px));
+            border-radius: 26px;
           }
 
           .friday-panel.friday-expanded {
@@ -1926,42 +1945,31 @@ export default function AIFloatingBall({
             width: calc(100vw - 8px);
             height: 100dvh;
             max-height: 100dvh;
-            border-radius: 28px 28px 0 0;
+            border-radius: 27px 27px 0 0;
           }
 
           .friday-canvas-top {
             padding:
-              max(16px, env(safe-area-inset-top, 0px))
-              19px 6px;
+              max(13px, env(safe-area-inset-top, 0px))
+              16px 4px;
           }
 
           .friday-messages {
-            padding: 19px 21px 18px;
+            padding-right: 15px;
+            padding-left: 15px;
           }
 
-          .friday-welcome {
-            min-height: 235px;
-          }
-
-          .friday-welcome-title {
-            font-size: clamp(29px, 8vw, 38px);
+          .friday-expanded .friday-messages {
+            padding: 18px 17px;
           }
 
           .friday-input-area {
-            padding-right: 12px;
-            padding-left: 12px;
+            padding-right: 10px;
+            padding-left: 10px;
           }
 
-          .friday-orb-stage {
-            min-height: 78px;
-            padding-right: 17px;
-            padding-bottom: 7px;
-          }
-
-          .friday-orb-stage .friday-orb-visual {
-            width: 72px;
-            height: 72px;
-            flex-basis: 72px;
+          .friday-movie-grid {
+            gap: 7px;
           }
 
           .friday-movie-card {
@@ -1970,63 +1978,56 @@ export default function AIFloatingBall({
           }
 
           .friday-poster {
-            width: 48px;
-            height: 70px;
-            flex-basis: 48px;
+            width: 43px;
+            height: 63px;
+            flex-basis: 43px;
+          }
+
+          .friday-fab {
+            width: 68px;
+            height: 68px;
           }
         }
 
         @media (max-height: 520px) {
-          .friday-panel {
-            bottom: 6px;
-            height: calc(100dvh - 12px);
+          .friday-panel.friday-expanded {
+            bottom: 4px;
+            height: calc(100dvh - 8px);
             min-height: 0;
-            border-radius: 24px;
+            border-radius: 22px;
           }
 
           .friday-canvas-top {
-            min-height: 42px;
-            padding-top: 9px;
-          }
-
-          .friday-welcome {
-            min-height: 150px;
-            padding-top: 12px;
-          }
-
-          .friday-welcome-title {
-            font-size: 26px;
-          }
-
-          .friday-input-area {
+            min-height: 40px;
             padding-top: 8px;
           }
 
-          .friday-tools {
-            margin-top: 4px;
+          .friday-expanded .friday-welcome {
+            min-height: 120px;
           }
 
           .friday-orb-stage {
-            min-height: 64px;
+            min-height: 34px;
           }
 
-          .friday-orb-stage .friday-orb-visual {
-            width: 58px;
-            height: 58px;
-            flex-basis: 58px;
+          .friday-input-area {
+            padding-top: 6px;
+          }
+
+          .friday-tools {
+            margin-top: 2px;
           }
         }
 
         @media (prefers-reduced-motion: reduce) {
           .friday-fab *,
           .friday-panel,
-          .friday-aurora,
-          .friday-aurora::before,
-          .friday-aurora::after,
-          .friday-aurora-core,
           .friday-orb-visual,
+          .friday-orb-fluid,
+          .friday-orb-rim,
           .friday-status-dot,
-          .friday-message {
+          .friday-message,
+          .friday-status {
             animation: none !important;
           }
 
@@ -2043,7 +2044,7 @@ export default function AIFloatingBall({
           (-webkit-backdrop-filter: blur(1px))
         ) {
           .friday-panel {
-            background: rgba(7,9,15,.97);
+            background: rgba(12,15,25,.97);
           }
 
           .friday-input-box,
@@ -2058,7 +2059,7 @@ export default function AIFloatingBall({
           <button
             type="button"
             className="friday-fab"
-            aria-label="打开 Friday AI 助手"
+            aria-label="打开 Friday 并开始语音聆听"
             style={
               fabPosition
                 ? {
@@ -2086,19 +2087,15 @@ export default function AIFloatingBall({
               expanded ? "friday-expanded" : ""
             } ${closing ? "friday-closing" : ""}`}
             data-state={auroraState}
-            aria-label="Friday 空间式 AI 助手"
+            aria-label="Friday AI 助手"
             aria-hidden={closing}
             onAnimationEnd={handlePanelAnimationEnd}
           >
-            <div className="friday-aurora" aria-hidden="true">
-              <div className="friday-aurora-core" />
-            </div>
-
             <div className="friday-canvas-top">
               <div className="friday-wordmark">Friday</div>
 
               <div className="friday-state-wrap">
-                <span>{stateLabel || " "}</span>
+                <span>{stateLabel}</span>
 
                 <button
                   type="button"
@@ -2122,12 +2119,14 @@ export default function AIFloatingBall({
                   </div>
 
                   <div className="friday-welcome-text">
-                    告诉我你想看什么，或者让我帮你寻找更好的影视资源。
+                    {listening
+                      ? "我正在聆听。告诉我你想看什么电影或电视剧。"
+                      : "告诉我你想看什么，或者让我帮你寻找更好的影视资源。"}
                   </div>
                 </div>
               ) : null}
 
-              {(messages as any[]).map((message) => {
+              {typedMessages.map((message) => {
                 const isUser = message.role === "user";
                 const text = getPartText(message);
                 const messageMovies = getMovieDataForMessage(message);
@@ -2161,7 +2160,7 @@ export default function AIFloatingBall({
                 <div className="friday-status">
                   {status === "submitted"
                     ? "Friday 正在接收消息…"
-                    : "Friday 正在思考…"}
+                    : "正在为你寻找合适的影视资源…"}
                 </div>
               ) : null}
 
@@ -2173,7 +2172,17 @@ export default function AIFloatingBall({
             </div>
 
             <div className="friday-orb-stage">
-              <span className="friday-orb-status">{stateLabel}</span>
+              <span className="friday-orb-status">
+                {listening
+                  ? "请说出你想看的影片"
+                  : busy
+                    ? "正在连接影视资源"
+                    : speaking
+                      ? "正在为你播报"
+                      : completed
+                        ? "已经为你准备好了"
+                        : "Friday 随时待命"}
+              </span>
               <OrbVisual />
             </div>
 
@@ -2267,7 +2276,7 @@ export default function AIFloatingBall({
                       setVoiceEnabled((value) => !value);
                     }}
                   >
-                    {voiceEnabled ? "语音开启" : "语音关闭"}
+                    {voiceEnabled ? "语音播报开启" : "语音播报关闭"}
                   </button>
 
                   <button
@@ -2302,10 +2311,10 @@ export default function AIFloatingBall({
 
                   <button
                     type="button"
-                    className="friday-tool-btn"
+                    className="friday-tool-btn active"
                     onClick={() => setExpanded((value) => !value)}
                   >
-                    {expanded ? "收缩" : "展开"}
+                    {expanded ? "收起面板" : "展开对话"}
                   </button>
                 </div>
               </div>
