@@ -5,9 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 assets = { directory = ".open-next/assets" }
 
 [vars]
-# PASSWORD 必须通过 Cloudflare Secret 设置，不要写入仓库：
-# npx wrangler secret put PASSWORD
-# 如旧值曾经公开，请立即轮换密码。
-# 🚨 新增的变量
+# 注意：PASSWORD 写在此处会随公开仓库暴露，请勿用于敏感或复用密码。
+PASSWORD = "12345"
 CMS_SEARCH_API = "https://caiji.dyttzyapi.com/api.php/provide/vod"
 LLM_MODEL = "glm-4-flash"
