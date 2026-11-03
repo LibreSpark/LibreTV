@@ -1,0 +1,102 @@
+name: wrangler-dependency-verify
+
+on:
+  push:
+    branches:
+      - fix/wrangler-peer-dependency-2026-11-03
+    paths:
+      - package.json
+      - .github/workflows/wrangler-dependency-verify.yml
+  workflow_dispatch:
+    branches:
+      - fix/wrangler-peer-dependency-2026-11-03
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wrangler-dependency-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/wrangler-peer-dependency-2026-11-03'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/wrangler-peer-dependency-2026-11-03
+          persist-credentials: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Generate lockfile using repository npm config
+        run: npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org
+
+      - name: Verify Wrangler lock entry
+        run: |
+          node <<'NODE'
+          const lock = require('./package-lock.json');
+          const pkg = require('./package.json');
+          const entry = lock.packages?.['node_modules/wrangler'];
+          if (pkg.dependencies?.wrangler !== '^4.148.0') throw new Error('package.json Wrangler range is not ^4.148.0');
+          if (!entry?.version) throw new Error('package-lock.json has no node_modules/wrangler entry');
+          const [major, minor] = entry.version.split('.').map(Number);
+          if (major !== 4 || minor < 148) throw new Error('Locked Wrangler version does not satisfy the expected 4.148+ range: ' + entry.version);
+          console.log('lockfileVersion:', lock.lockfileVersion);
+          console.log('locked Wrangler:', entry.version);
+          NODE
+          git diff --exit-code -- package.json .npmrc
+
+      - name: Clean install from committed lockfile
+        run: npm ci --registry=https://registry.npmjs.org
+
+      - name: Verify Wrangler resolution
+        run: |
+          node -e "console.log('Wrangler path:', require.resolve('wrangler'))"
+          npx wrangler --version
+
+      - name: OpenNext Cloudflare build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npx opennextjs-cloudflare build
+
+      - name: Verify Wrangler is present without dev dependencies
+        run: |
+          rm -rf node_modules
+          npm ci --omit=dev --registry=https://registry.npmjs.org
+          node -e "console.log('Production Wrangler path:', require.resolve('wrangler'))"
+
+      - name: Restore complete dependency tree
+        run: npm ci --registry=https://registry.npmjs.org
+
+      - name: Commit generated lockfile to this branch
+        id: lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "No package-lock changes to commit."
+            echo "push_failed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "build: update lockfile for Wrangler dependency"
+          if git push origin HEAD:fix/wrangler-peer-dependency-2026-11-03; then
+            echo "push_failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not push generated lockfile; publishing it as an artifact instead."
+            echo "push_failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload lockfile if branch write is unavailable
+        if: steps.lockfile.outputs.push_failed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: wrangler-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 7
