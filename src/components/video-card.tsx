@@ -439,6 +439,12 @@ export function DoubanCard({
     setImgFailed(true);
   };
 
+  // 原始数据本身没有封面时也直接尝试 TMDB；有封面时仍严格等原图候选链失败后再兜底
+  useEffect(() => {
+    if (!item.cover && enableTmdbFallback) void loadTmdbFallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.cover, item.title, isTv, enableTmdbFallback]);
+
   return (
     <div
       className="card cursor-pointer hover:scale-[1.03] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
