@@ -68,15 +68,15 @@ export function buildImageCandidates(
   if (!built || !url) return [];
   const mirrors = url.includes('doubanio.com')
     ? [
-        url.replace(/img\\d+\\.doubanio\\.com/g, 'img.doubanio.cmliussss.net'),
-        url.replace(/img\\d+\\.doubanio\\.com/g, 'img.doubanio.cmliussss.com'),
+        url.replace(/img\d+\.doubanio\.com/g, 'img.doubanio.cmliussss.net'),
+        url.replace(/img\d+\.doubanio\.com/g, 'img.doubanio.cmliussss.com'),
       ]
     : [];
   if (mode === 'proxy') {
     return [...new Set([built, ...mirrors, url])];
   }
   if (mode !== 'direct') return [built];
-  return [...new Set([built, ...mirrors, `/api/proxy?url=${encodeURIComponent(url)}`])];
+  return [...new Set([built, ...mirrors, \`/api/proxy?url=\${encodeURIComponent(url)}\`])];
 }
 export function validateSourceUrl(url: string): boolean {
   return /^https?:\/\/.+/.test(url);
