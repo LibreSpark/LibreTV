@@ -394,11 +394,50 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 }
 
 /** 豆瓣推荐卡片（无来源徽章，点击直接搜索） */
-export function DoubanCard({ item, onClick }: { item: { title: string; cover: string; rating?: string }; onClick: () => void }) {
+export function DoubanCard({
+  item,
+  onClick,
+  enableTmdbFallback = false,
+  isTv = false,
+}: {
+  item: { title: string; cover: string; rating?: string };
+  onClick: () => void;
+  /** 仅豆瓣热门与影视热榜启用，Bangumi 等其它入口保持原行为 */
+  enableTmdbFallback?: boolean;
+  isTv?: boolean;
+}) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
-  useEffect(() => setImgFailed(false), [item.cover]);
+  const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
+  const [tmdbFailed, setTmdbFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+    setTmdbPoster(null);
+    setTmdbFailed(false);
+  }, [item.cover, item.title, isTv]);
+
+  const loadTmdbFallback = async () => {
+    if (!enableTmdbFallback || tmdbPoster || tmdbFailed) {
+      setImgFailed(true);
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ title: item.title, type: isTv ? 'tv' : 'movie' });
+      const response = await fetch(`/api/poster-fallback?${params.toString()}`);
+      if (!response.ok) throw new Error('TMDB fallback unavailable');
+      const data = (await response.json()) as { poster?: string | null };
+      if (data.poster) {
+        setTmdbPoster(data.poster);
+        return;
+      }
+    } catch {
+      // TMDB 不可用时回到原占位图，不影响列表和点击播放
+    }
+    setTmdbFailed(true);
+    setImgFailed(true);
+  };
 
   return (
     <div
@@ -415,14 +454,18 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
       }}
     >
       <div className="relative aspect-[2/3] bg-chip">
-        {item.cover && !imgFailed ? (
+        {tmdbPoster ? (
+          // TMDB 图片为 HTTPS 静态 CDN 地址；只在豆瓣原图候选链耗尽后显示
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={tmdbPoster} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+        ) : item.cover && !imgFailed ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
             className="w-full h-full object-cover"
-            onExhausted={() => setImgFailed(true)}
+            onExhausted={loadTmdbFallback}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-chip">
