@@ -38,7 +38,7 @@ export async function GET(req: Request) {
   let programMap: Map<string, EpgProgram[]> | undefined = force ? undefined : getLiveCache(key);
   if (!programMap) {
     try {
-      const res = await fetchUpstream(url, { timeoutMs: FETCH_TIMEOUT_MS, retries: 0, allowPrivate: true });
+      const res = await fetchUpstream(url, { timeoutMs: FETCH_TIMEOUT_MS, retries: 0, allowPrivate: true, signal: req.signal });
       if (!res.ok) {
         return jsonError(`节目单地址请求失败: ${res.status}`, 502);
       }

@@ -77,7 +77,7 @@ export async function runChat(message: string, history: ChatHistoryMessage[], re
         }, HEARTBEAT_INTERVAL_MS);
 
         const trimmedHistory = history.slice(-HISTORY_LIMITS.maxMessages).map(m => ({ ...m, content: m.content.slice(0, HISTORY_LIMITS.maxContentChars) }));
-        let currentMessages: any[] = [
+        const currentMessages: any[] = [
           { role: 'system', content: '你是电影助手。提取用户想看的电影关键词，调用 search_movies 工具进行搜索。如果没找到具体电影，可以说几句简短的推荐语。绝对不要废话。' },
           ...trimmedHistory.map(m => ({ role: m.role, content: m.content + (m.cards?.length ? ` [历史卡片: ${m.cards.map(c => c.title).join(',')}]` : '') })),
           { role: 'user', content: message }

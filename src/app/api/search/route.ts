@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import {
   searchSources,
   mergeSearchResults,
 } from '@/lib/search';
-import type { SourceConfig } from '@/lib/types';
+import type { SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
+import { guardRequest } from '@/lib/api-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,7 @@ function jsonError(
  * 导致超大请求体被完整载入内存。
  */
 async function readLimitedBody(
-  req: NextRequest,
+  req: Request,
 ): Promise<string> {
   const contentLength = req.headers.get('content-length');
 
@@ -210,48 +211,157 @@ function validateSources(
   return sources;
 }
 
-export async function POST(req: NextRequest) {
+const SEARCH_CACHE_TTL_MS = 30_000;
+const SEARCH_CACHE_MAX_ENTRIES = 100;
+const searchCache = new Map<string, { expiresAt: number; outcomes: SourceSearchOutcome[] }>();
+
+function makeCacheKey(keyword: string, sources: SourceConfig[], filterAdult: boolean): string {
+  return JSON.stringify([keyword, filterAdult, sources]);
+}
+
+function getCachedOutcomes(key: string): SourceSearchOutcome[] | undefined {
+  const entry = searchCache.get(key);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    searchCache.delete(key);
+    return undefined;
+  }
+  return entry.outcomes;
+}
+
+function setCachedOutcomes(key: string, outcomes: SourceSearchOutcome[]): void {
+  if (searchCache.size >= SEARCH_CACHE_MAX_ENTRIES) {
+    const oldestKey = searchCache.keys().next().value;
+    if (oldestKey) searchCache.delete(oldestKey);
+  }
+  searchCache.set(key, {
+    expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+    outcomes,
+  });
+}
+
+function toSearchResponse(outcomes: SourceSearchOutcome[]): SearchResponse {
+  return {
+    list: mergeSearchResults(outcomes),
+    failures: outcomes
+      .filter((outcome) => !outcome.ok)
+      .map((outcome) => ({
+        sourceKey: outcome.sourceKey,
+        error: outcome.error || '请求失败',
+        timedOut: outcome.timedOut,
+      })),
+  };
+}
+
+function ndjsonResponse(
+  req: Request,
+  keyword: string,
+  sources: SourceConfig[],
+  filterAdult: boolean,
+  cacheKey: string,
+  cached: SourceSearchOutcome[] | undefined,
+): Response {
+  const abortController = new AbortController();
+  let cancelled = false;
+  const abortFromRequest = () => abortController.abort(req.signal.reason);
+
+  if (req.signal.aborted) abortFromRequest();
+  else req.signal.addEventListener('abort', abortFromRequest, { once: true });
+
+  const body = new ReadableStream<Uint8Array>({
+    start(streamController) {
+      const encoder = new TextEncoder();
+
+      const send = (event: SearchStreamEvent) => {
+        if (cancelled || abortController.signal.aborted) return;
+        try {
+          streamController.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        } catch {
+          cancelled = true;
+          abortController.abort();
+        }
+      };
+
+      void (async () => {
+        try {
+          const outcomes = cached ?? await searchSources(keyword, sources, {
+            filterAdult,
+            signal: abortController.signal,
+            onOutcome: (outcome) => send({ type: 'source', ...outcome }),
+          });
+
+          if (!cached && !abortController.signal.aborted) {
+            setCachedOutcomes(cacheKey, outcomes);
+          }
+
+          if (!abortController.signal.aborted) {
+            const result = toSearchResponse(outcomes);
+            send({ type: 'done', ...result });
+          }
+        } catch {
+          if (!abortController.signal.aborted) {
+            send({
+              type: 'done',
+              list: [],
+              failures: [{ sourceKey: '__search__', error: '搜索服务暂时不可用' }],
+            });
+          }
+        } finally {
+          req.signal.removeEventListener('abort', abortFromRequest);
+          if (!cancelled) {
+            try {
+              streamController.close();
+            } catch {
+              // 客户端可能已关闭流。
+            }
+          }
+        }
+      })();
+    },
+    cancel(reason) {
+      cancelled = true;
+      abortController.abort(reason);
+      req.signal.removeEventListener('abort', abortFromRequest);
+    },
+  });
+
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+}
+
+export async function POST(req: Request) {
+  const guarded = guardRequest(req);
+  if (guarded) return guarded;
+
   try {
     if (req.signal.aborted) {
       return jsonError('请求已取消', 400);
     }
 
     let rawBody: string;
-
     try {
       rawBody = await readLimitedBody(req);
     } catch (error) {
-      const code =
-        error instanceof Error ? error.message : '';
-
-      if (code === 'BODY_TOO_LARGE') {
-        return jsonError('请求体不能超过 64 KB', 413);
-      }
-
-      if (code === 'REQUEST_ABORTED') {
-        return jsonError('请求已取消', 400);
-      }
-
-      if (code === 'EMPTY_BODY') {
-        return jsonError('请求内容为空', 400);
-      }
-
+      const code = error instanceof Error ? error.message : '';
+      if (code === 'BODY_TOO_LARGE') return jsonError('请求体不能超过 64 KB', 413);
+      if (code === 'REQUEST_ABORTED') return jsonError('请求已取消', 400);
+      if (code === 'EMPTY_BODY') return jsonError('请求内容为空', 400);
       return jsonError('请求内容格式无效', 400);
     }
 
     let body: SearchRequestBody;
-
     try {
       body = JSON.parse(rawBody) as SearchRequestBody;
     } catch {
       return jsonError('JSON 格式错误', 400);
     }
 
-    if (
-      !body ||
-      typeof body !== 'object' ||
-      Array.isArray(body)
-    ) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return jsonError('请求参数格式错误', 400);
     }
 
@@ -260,56 +370,42 @@ export async function POST(req: NextRequest) {
         ? body.wd
         : body.keyword;
 
-    if (typeof rawKeyword !== 'string') {
-      return jsonError('缺少搜索关键词', 400);
-    }
+    if (typeof rawKeyword !== 'string') return jsonError('缺少搜索关键词', 400);
 
     const keyword = rawKeyword.trim();
-
-    if (!keyword) {
-      return jsonError('缺少搜索关键词', 400);
-    }
-
+    if (!keyword) return jsonError('缺少搜索关键词', 400);
     if (keyword.length > MAX_KEYWORD_LENGTH) {
       return jsonError('搜索关键词不能超过 50 个字符', 400);
     }
 
     let sources: SourceConfig[];
-
     try {
       sources = validateSources(body.sources);
     } catch {
       return jsonError('资源站配置无效', 400);
     }
 
-    if (sources.length === 0) {
-      return NextResponse.json({
-        items: [],
-      });
-    }
-
     const filterAdult = body.filterAdult === true;
+    const cacheKey = makeCacheKey(keyword, sources, filterAdult);
+    const cached = getCachedOutcomes(cacheKey);
+    const wantsStream = new URL(req.url).searchParams.get('stream') === '1';
 
-    const outcomes = await searchSources(
-      keyword,
-      sources,
-      {
-        filterAdult,
-        signal: req.signal,
-      },
-    );
-
-    if (req.signal.aborted) {
-      return jsonError('请求已取消', 400);
+    if (wantsStream) {
+      return ndjsonResponse(req, keyword, sources, filterAdult, cacheKey, cached);
     }
 
-    const items = mergeSearchResults(outcomes);
+    const outcomes = cached ?? await searchSources(keyword, sources, {
+      filterAdult,
+      signal: req.signal,
+    });
 
-    return NextResponse.json({
-      items,
+    if (req.signal.aborted) return jsonError('请求已取消', 400);
+    if (!cached) setCachedOutcomes(cacheKey, outcomes);
+
+    return NextResponse.json(toSearchResponse(outcomes), {
+      headers: { 'Cache-Control': 'no-store' },
     });
   } catch {
-    // 不向客户端暴露内部异常、堆栈和上游地址。
     return jsonError('搜索服务暂时不可用，请稍后重试', 500);
   }
 }

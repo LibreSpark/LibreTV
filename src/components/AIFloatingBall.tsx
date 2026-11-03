@@ -346,6 +346,7 @@ export default function AIFloatingBall({
 
   const recognitionErrorRef = useRef("");
   const pendingVoiceTextRef = useRef("");
+  const manualVoiceStopRef = useRef(false);
   const voiceResumeTimerRef = useRef<number | null>(null);
 
   const lastSpokenMessageRef = useRef("");
@@ -480,6 +481,7 @@ export default function AIFloatingBall({
     const recognition = recognitionRef.current;
 
     recognitionRef.current = null;
+    listeningRef.current = false;
     pendingVoiceTextRef.current = "";
     recognitionErrorRef.current = "";
     setListening(false);
@@ -591,6 +593,7 @@ export default function AIFloatingBall({
 
       pendingVoiceTextRef.current = "";
       recognitionErrorRef.current = "";
+      manualVoiceStopRef.current = false;
 
       const recognition = new SpeechRecognitionClass();
 
@@ -663,13 +666,21 @@ export default function AIFloatingBall({
 
         const finalText = pendingVoiceTextRef.current.trim();
         const recognitionError = recognitionErrorRef.current;
+        const wasManualStop = manualVoiceStopRef.current;
 
         pendingVoiceTextRef.current = "";
         recognitionErrorRef.current = "";
+        manualVoiceStopRef.current = false;
 
         if (finalText) {
           setInput("");
-          void handleSendRef.current(finalText, true);
+          // 手动停止时提交最终文本后结束语音会话；自然结束则保留连续聆听会话。
+          void handleSendRef.current(finalText, !wasManualStop);
+          return;
+        }
+
+        if (wasManualStop) {
+          setVoiceSession(false);
           return;
         }
 
@@ -2369,14 +2380,16 @@ export default function AIFloatingBall({
                   }
                   onClick={() => {
                     if (listeningRef.current) {
-                      // 停止本次识别并保留最终识别文本。
-                      setVoiceSession(false);
+                      // 不提前结束 session：等待 onresult/onend 收齐最终识别文本。
+                      manualVoiceStopRef.current = true;
                       clearVoiceResumeTimer();
 
                       try {
                         recognitionRef.current?.stop();
                       } catch {
+                        manualVoiceStopRef.current = false;
                         stopRecognition(true);
+                        setVoiceSession(false);
                       }
                     } else {
                       setVoiceSession(true);

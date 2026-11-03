@@ -2,6 +2,15 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 import { SESSION_COOKIE, signSession } from '@/lib/auth';
 
+// 测试域名使用保留的 .test/.example 后缀；模拟公网 DNS 答案，
+// 让这些测试只验证路由与上游逻辑，不依赖 CI runner 的真实 DNS。
+vi.mock('node:dns/promises', () => ({
+  resolve4: async () => ['93.184.216.34'],
+  resolve6: async () => {
+    throw Object.assign(new Error('ENODATA'), { code: 'ENODATA' });
+  },
+}));
+
 /**
  * 测活接口单测：流式 NDJSON、codec 解析、内容校验、结果缓存、内网放行。
  * 上游一律用 mock fetch，不产生真实网络请求。

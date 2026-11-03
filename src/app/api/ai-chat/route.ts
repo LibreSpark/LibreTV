@@ -5,9 +5,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runChat } from '@/lib/orchestrator';
 import { registerInflight, unregisterInflight } from '@/lib/infra/inflight';
 import { inspectInput } from '@/lib/infra/guard';
+import { guardRequest } from '@/lib/api-guard';
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('Authorization') ? 'user_123' : 'dev-user';
+  const guarded = guardRequest(req);
+  if (guarded) return guarded;
+
+  const userId = 'libretv-authenticated-user';
   let requestId: string | undefined;
   
   try {

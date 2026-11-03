@@ -3,11 +3,15 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { cancelInflight } from '@/lib/infra/inflight';
+import { guardRequest } from '@/lib/api-guard';
 
 const RID_RE = /^[A-Za-z0-9_:.-]{1,128}$/;
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('Authorization') ? 'user_123' : 'dev-user';
+  const guarded = guardRequest(req);
+  if (guarded) return guarded;
+
+  const userId = 'libretv-authenticated-user';
 
   try {
     const { requestId } = (await req.json()) as { requestId?: string };

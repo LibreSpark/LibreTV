@@ -13,7 +13,8 @@ import {
 import { z } from "zod";
 
 import { searchSources, mergeSearchResults } from "@/lib/search";
-import type { SourceConfig } from "@/lib/types";
+import type { SearchResultItem, SourceConfig, SourceSearchOutcome } from "@/lib/types";
+import { guardRequest } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,28 +45,9 @@ const requestSchema = z.object({
   filterAdult: z.boolean().default(true),
 });
 
-type SearchItem = {
-  sourceKey?: string;
-  sourceName?: string;
-  vodId?: string | number;
-  name?: string;
-  pic?: string;
-  typeName?: string;
-  year?: string | number;
-  area?: string;
-  remarks?: string;
-  sourceUrl?: string;
-  isAdult?: boolean;
-};
+type SearchItem = SearchResultItem;
 
-type SearchOutcome = {
-  sourceKey: string;
-  ok: boolean;
-  list: SearchItem[];
-  error?: string;
-  timedOut?: boolean;
-  ms?: number;
-};
+type SearchOutcome = SourceSearchOutcome;
 
 type MovieDataPart = {
   searchId: string;
@@ -267,6 +249,9 @@ function makeSearchId() {
 }
 
 export async function POST(request: Request) {
+  const authError = guardRequest(request);
+  if (authError) return authError;
+
   if (request.signal.aborted) {
     return jsonError("请求已取消", 499);
   }
@@ -406,20 +391,16 @@ export async function POST(request: Request) {
       }
 
       try {
-        const outcomes = (
-          await searchSources(
-            keyword,
-            sources as SourceConfig[],
-            {
-              filterAdult: payload.filterAdult,
-              signal: request.signal,
-            },
-          )
-        ) as SearchOutcome[];
+        const outcomes = await searchSources(
+          keyword,
+          sources as SourceConfig[],
+          {
+            filterAdult: payload.filterAdult,
+            signal: request.signal,
+          },
+        );
 
-        const merged = mergeSearchResults(
-          outcomes,
-        ) as SearchItem[];
+        const merged = mergeSearchResults(outcomes);
 
         const allResults = Array.isArray(merged)
           ? merged.filter(

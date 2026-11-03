@@ -11,6 +11,7 @@ const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_RESULTS_PER_SOURCE = 30;
 const MAX_SOURCES = 30;
 const SEARCH_TIMEOUT_MS = 8000;
+const SEARCH_TOTAL_TIMEOUT_MS = 16000;
 const MAX_CONCURRENT_SOURCES = 6;
 
 function safeString(value: unknown, maxLength: number): string {
@@ -341,19 +342,19 @@ async function fetchFromSource(
       ms: Date.now() - startedAt,
     };
   } catch (error) {
-    const externallyCancelled =
-      externalSignal?.aborted === true;
+    const totalTimedOut = externalSignal?.reason instanceof Error && externalSignal.reason.name === 'TimeoutError';
+    const externallyCancelled = externalSignal?.aborted === true && !totalTimedOut;
 
     return {
       sourceKey: source.key,
       ok: false,
       list: [],
-      error: timedOut
-        ? '搜索超时'
+      error: timedOut || totalTimedOut
+        ? '搜索总时间超时'
         : externallyCancelled
           ? '请求已取消'
           : getErrorMessage(error),
-      timedOut,
+      timedOut: timedOut || totalTimedOut,
       ms: Date.now() - startedAt,
     };
   } finally {
@@ -372,6 +373,7 @@ export async function searchSources(
   options?: {
     filterAdult?: boolean;
     signal?: AbortSignal;
+    onOutcome?: (outcome: SourceSearchOutcome) => void;
   },
 ): Promise<SourceSearchOutcome[]> {
   const safeKeyword = safeString(
@@ -445,13 +447,22 @@ export async function searchSources(
   );
 
   const outcomes: SourceSearchOutcome[] = [];
+  const totalController = new AbortController();
+  const abortFromCaller = () => totalController.abort(options?.signal?.reason);
+  if (options?.signal?.aborted) abortFromCaller();
+  else options?.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  const totalTimer = setTimeout(() => {
+    totalController.abort(new DOMException('搜索总时间超时', 'TimeoutError'));
+  }, SEARCH_TOTAL_TIMEOUT_MS);
+  const effectiveSignal = totalController.signal;
 
+  try {
   for (
     let offset = 0;
     offset < sourceList.length;
     offset += MAX_CONCURRENT_SOURCES
   ) {
-    if (options?.signal?.aborted) {
+    if (effectiveSignal.aborted) {
       break;
     }
 
@@ -461,16 +472,52 @@ export async function searchSources(
     );
 
     const batchResults = await Promise.all(
-      batch.map(source =>
-        fetchFromSource(
+      batch.map(async (source) => {
+        const outcome = await fetchFromSource(
           safeKeyword,
           source,
-          options?.signal,
-        ),
-      ),
+          effectiveSignal,
+        );
+
+        // 过滤掉明显非影视类别；成人内容只在用户开启过滤时移除。
+        if (outcome.ok) {
+          const seenVodIds = new Set<string>();
+          outcome.list = outcome.list.filter((item) => {
+            // 同一资源站内重复 vod_id 只保留首次出现的条目。
+            if (seenVodIds.has(item.vodId)) return false;
+            seenVodIds.add(item.vodId);
+
+            const category = item.typeName || '';
+            if (/足球|篮球|网球|排球|棒球|体育|赛事/.test(category)) {
+              return false;
+            }
+            if (
+              options?.filterAdult &&
+              (item.isAdult === true ||
+                /成人|色情|情色|福利视频|无码|三级|伦理|\bAV\b/i.test(
+                  `${item.typeName || ''} ${item.name || ''}`,
+                ))
+            ) {
+              return false;
+            }
+            return true;
+          });
+        }
+
+        try {
+          options?.onOutcome?.(outcome);
+        } catch {
+          // 单个流式消费者回调失败不能中断其余来源的搜索。
+        }
+        return outcome;
+      }),
     );
 
     outcomes.push(...batchResults);
+  }
+  } finally {
+    clearTimeout(totalTimer);
+    options?.signal?.removeEventListener('abort', abortFromCaller);
   }
 
   return outcomes;

@@ -100,15 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 预置订阅（DEFAULT_SUBSCRIPTIONS）的首屏同步发生在登录之前，会 401 静默失败，
     // 这里用缓存中的 /api/status 补跑一次（缓存缺失时回落为一次请求）
     try {
-      const cached = queryClient.getQueryData<AuthStatusResponse>(STATUS_QUERY_KEY);
-      const status =
-        cached ??
-        (await queryClient.fetchQuery<AuthStatusResponse>({
-          queryKey: STATUS_QUERY_KEY,
-          queryFn: () => api.status(),
-          staleTime: 0,
-        }));
-      if (status) await applyEnvPresets(status, { verified: true });
+      // 登录前的缓存状态会刻意隐藏部署预置源；登录成功后必须重新请求，
+      // 不能复用匿名阶段的空数组。
+      const status = await queryClient.fetchQuery<AuthStatusResponse>({
+        queryKey: STATUS_QUERY_KEY,
+        queryFn: () => api.status(),
+        staleTime: 0,
+      });
+      await applyEnvPresets(status, { verified: true });
     } catch {
       // 补拉预置数据失败不影响登录后的正常使用
     }

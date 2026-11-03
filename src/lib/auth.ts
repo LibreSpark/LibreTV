@@ -70,7 +70,12 @@ export function sessionFromCookieHeader(cookieHeader: string | null): boolean {
     if (eq === -1) continue;
     const name = c.slice(0, eq).trim();
     if (name === SESSION_COOKIE) {
-      return verifySession(decodeURIComponent(c.slice(eq + 1).trim()));
+      try {
+        return verifySession(decodeURIComponent(c.slice(eq + 1).trim()));
+      } catch {
+        // 非法百分号编码的 Cookie 视为无效会话，不应让 API 返回 500。
+        return false;
+      }
     }
   }
   return false;

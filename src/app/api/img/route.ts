@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
         Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
       },
       timeoutMs: IMAGE_TIMEOUT_MS,
+      signal: req.signal,
       retries: 0,
       safeRedirects: true,
       cache: 'no-store',
