@@ -135,9 +135,10 @@ declare global {
 
 const MAX_INPUT_LENGTH = 1000;
 const MAX_MOVIE_CARDS = 60;
-const FAB_SIZE = 72;
+const FAB_SIZE = 68;
 const DRAG_THRESHOLD = 6;
 const MOVIE_CLOSE_DELAY = 250;
+const VOICE_RESUME_DELAY = 700;
 
 function getPartText(message: MessageLike): string {
   if (!Array.isArray(message.parts)) return "";
@@ -204,7 +205,7 @@ function getSpeechErrorMessage(error?: string): string {
     case "network":
       return "语音识别网络连接异常，请检查网络后重试。";
     case "no-speech":
-      return "没有检测到语音，请靠近麦克风再试一次。";
+      return "没有检测到语音，请点击麦克风重新聆听。";
     case "language-not-supported":
       return "当前浏览器暂不支持中文语音识别。";
     case "aborted":
@@ -327,20 +328,34 @@ export default function AIFloatingBall({
   const [completed, setCompleted] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [fabHidden, setFabHidden] = useState(false);
+  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
   const [fabPosition, setFabPosition] = useState<{
     left: number;
     top: number;
   } | null>(null);
 
+  const openRef = useRef(false);
+  const closingRef = useRef(false);
+  const busyRef = useRef(false);
+  const listeningRef = useRef(false);
+  const voiceSessionActiveRef = useRef(false);
+  const voiceSessionIdRef = useRef(0);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
+  const recognitionErrorRef = useRef("");
+  const pendingVoiceTextRef = useRef("");
+  const voiceResumeTimerRef = useRef<number | null>(null);
+
   const lastSpokenMessageRef = useRef("");
   const lastCompletedMessageRef = useRef("");
-  const pendingVoiceTextRef = useRef("");
-  const handleSendRef = useRef<(text?: string) => Promise<void>>(
-    async () => {},
-  );
+
+  const handleSendRef = useRef<
+    (text?: string, keepVoiceSession?: boolean) => Promise<void>
+  >(async () => {});
+
+  const startListeningRef = useRef<(automatic?: boolean) => void>(() => {});
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -413,6 +428,11 @@ export default function AIFloatingBall({
   const typedMessages = messages as unknown as MessageLike[];
   const busy = status === "submitted" || status === "streaming";
 
+  // 同步引用，避免回调读取到上一轮渲染的状态。
+  busyRef.current = busy;
+  listeningRef.current = listening;
+  closingRef.current = closing;
+
   const auroraState: AuroraState = speaking
     ? "speaking"
     : listening
@@ -434,30 +454,60 @@ export default function AIFloatingBall({
             ? "已完成"
             : "随时为你服务";
 
+  const clearVoiceResumeTimer = useCallback(() => {
+    if (voiceResumeTimerRef.current !== null) {
+      window.clearTimeout(voiceResumeTimerRef.current);
+      voiceResumeTimerRef.current = null;
+    }
+  }, []);
+
+  const setVoiceSession = useCallback((active: boolean) => {
+    voiceSessionActiveRef.current = active;
+    setVoiceSessionActive(active);
+
+    if (!active) {
+      voiceSessionIdRef.current += 1;
+    }
+  }, []);
+
   const stopSpeech = useCallback(() => {
     utteranceRef.current = null;
     cancelBrowserSpeech();
     setSpeaking(false);
   }, []);
 
-  const stopAllVoice = useCallback(() => {
+  const stopRecognition = useCallback((abort = true) => {
     const recognition = recognitionRef.current;
+
     recognitionRef.current = null;
     pendingVoiceTextRef.current = "";
-
-    if (recognition) {
-      try {
-        recognition.abort();
-      } catch {
-        // 忽略浏览器 abort 异常。
-      }
-    }
-
+    recognitionErrorRef.current = "";
     setListening(false);
-    utteranceRef.current = null;
-    cancelBrowserSpeech();
-    setSpeaking(false);
+
+    if (!recognition) return;
+
+    try {
+      if (abort) {
+        recognition.abort();
+      } else {
+        recognition.stop();
+      }
+    } catch {
+      // 忽略浏览器识别实例已结束的异常。
+    }
   }, []);
+
+  const stopAllVoice = useCallback(() => {
+    setVoiceSession(false);
+    clearVoiceResumeTimer();
+    stopRecognition(true);
+    stopSpeech();
+  }, [
+    setVoiceSession,
+    clearVoiceResumeTimer,
+    stopRecognition,
+    stopSpeech,
+  ]);
 
   const clearMovieCloseTimer = useCallback(() => {
     if (movieCloseTimerRef.current !== null) {
@@ -466,37 +516,265 @@ export default function AIFloatingBall({
     }
   }, []);
 
-  const finalizeMovieOpen = useCallback(() => {
-    if (movieDispatchedRef.current) return;
+  const scheduleVoiceResume = useCallback(() => {
+    clearVoiceResumeTimer();
 
-    const movie = pendingMovieRef.current;
+    if (!voiceSessionActiveRef.current) return;
+    if (!openRef.current || closingRef.current) return;
+    if (busyRef.current) return;
+    if (speaking) return;
 
-    if (!movie) {
-      setClosing(false);
-      return;
-    }
+    const sessionId = voiceSessionIdRef.current;
 
-    movieDispatchedRef.current = true;
-    pendingMovieRef.current = null;
+    voiceResumeTimerRef.current = window.setTimeout(() => {
+      voiceResumeTimerRef.current = null;
 
+      if (sessionId !== voiceSessionIdRef.current) return;
+      if (!voiceSessionActiveRef.current) return;
+      if (!openRef.current || closingRef.current) return;
+      if (busyRef.current || listeningRef.current) return;
+
+      startListeningRef.current(true);
+    }, VOICE_RESUME_DELAY);
+  }, [clearVoiceResumeTimer, speaking]);
+
+  const startListening = useCallback(
+    (automatic = false) => {
+      if (busyRef.current) return;
+      if (listeningRef.current) return;
+      if (closingRef.current) return;
+      if (!openRef.current) return;
+
+      if (!automatic && !voiceSessionActiveRef.current) {
+        setVoiceSession(true);
+      }
+
+      if (!voiceSessionActiveRef.current) return;
+
+      clearVoiceResumeTimer();
+      setVoiceError("");
+
+      if (
+        typeof window === "undefined" ||
+        !window.isSecureContext
+      ) {
+        setVoiceError(
+          "语音识别需要安全连接，请使用 HTTPS 网站或 localhost。",
+        );
+        return;
+      }
+
+      const SpeechRecognitionClass =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognitionClass) {
+        setVoiceError(
+          "当前浏览器暂不支持语音识别，请使用键盘输入。",
+        );
+        return;
+      }
+
+      stopSpeech();
+
+      const previousRecognition = recognitionRef.current;
+      recognitionRef.current = null;
+
+      if (previousRecognition) {
+        try {
+          previousRecognition.abort();
+        } catch {
+          // 忽略旧实例异常。
+        }
+      }
+
+      const sessionId = voiceSessionIdRef.current;
+
+      pendingVoiceTextRef.current = "";
+      recognitionErrorRef.current = "";
+
+      const recognition = new SpeechRecognitionClass();
+
+      recognition.lang = "zh-CN";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        if (recognitionRef.current !== recognition) return;
+        if (sessionId !== voiceSessionIdRef.current) return;
+
+        listeningRef.current = true;
+        setListening(true);
+        setVoiceError("");
+      };
+
+      recognition.onresult = (event) => {
+        if (recognitionRef.current !== recognition) return;
+        if (sessionId !== voiceSessionIdRef.current) return;
+
+        let finalText = "";
+        let interimText = "";
+
+        for (let index = 0; index < event.results.length; index += 1) {
+          const result = event.results[index];
+          const transcript = result?.[0]?.transcript || "";
+
+          if (result.isFinal) {
+            finalText += transcript;
+          } else {
+            interimText += transcript;
+          }
+        }
+
+        const recognizedText = (finalText || interimText)
+          .trim()
+          .slice(0, MAX_INPUT_LENGTH);
+
+        if (recognizedText) {
+          setInput(recognizedText);
+        }
+
+        if (finalText.trim()) {
+          pendingVoiceTextRef.current = finalText
+            .trim()
+            .slice(0, MAX_INPUT_LENGTH);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        if (recognitionRef.current !== recognition) return;
+        if (sessionId !== voiceSessionIdRef.current) return;
+
+        recognitionErrorRef.current = event.error || "unknown";
+
+        const message = getSpeechErrorMessage(event.error);
+
+        if (message) {
+          setVoiceError(message);
+        }
+      };
+
+      recognition.onend = () => {
+        if (recognitionRef.current !== recognition) return;
+        if (sessionId !== voiceSessionIdRef.current) return;
+
+        recognitionRef.current = null;
+        listeningRef.current = false;
+        setListening(false);
+
+        const finalText = pendingVoiceTextRef.current.trim();
+        const recognitionError = recognitionErrorRef.current;
+
+        pendingVoiceTextRef.current = "";
+        recognitionErrorRef.current = "";
+
+        if (finalText) {
+          setInput("");
+          void handleSendRef.current(finalText, true);
+          return;
+        }
+
+        if (!voiceSessionActiveRef.current) return;
+
+        if (
+          recognitionError &&
+          recognitionError !== "aborted"
+        ) {
+          if (recognitionError === "no-speech") {
+            setVoiceError("没有识别到语音，请点击麦克风重新聆听。");
+          }
+
+          // 权限、网络和设备错误不自动循环重启。
+          return;
+        }
+
+        if (openRef.current && !busyRef.current) {
+          setVoiceError(
+            "本次没有识别到完整语音，请点击麦克风继续。",
+          );
+        }
+      };
+
+      recognitionRef.current = recognition;
+
+      try {
+        // 首次启动必须在用户点击的同步调用链内。
+        recognition.start();
+      } catch (recognitionError) {
+        console.error(
+          "[Friday] Speech recognition start failed:",
+          recognitionError,
+        );
+
+        if (recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+        }
+
+        listeningRef.current = false;
+        setListening(false);
+
+        setVoiceError(
+          automatic
+            ? "浏览器未允许自动恢复麦克风，请点击麦克风继续聆听。"
+            : "语音识别启动失败，请检查麦克风权限后重试。",
+        );
+      }
+    },
+    [
+      clearVoiceResumeTimer,
+      setVoiceSession,
+      stopSpeech,
+    ],
+  );
+
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  }, [startListening]);
+
+  const openPanel = useCallback(() => {
     clearMovieCloseTimer();
-    setClosing(false);
+    clearVoiceResumeTimer();
 
-    window.dispatchEvent(
-      new CustomEvent("friday-open-detail", {
-        detail: movie,
-      }),
-    );
-  }, [clearMovieCloseTimer]);
+    pendingMovieRef.current = null;
+    movieDispatchedRef.current = false;
+
+    closingRef.current = false;
+    openRef.current = true;
+
+    setClosing(false);
+    setOpen(true);
+    setExpanded(false);
+    setVoiceError("");
+    setFabHidden(false);
+  }, [clearMovieCloseTimer, clearVoiceResumeTimer]);
+
+  const openAndListen = useCallback(() => {
+    openPanel();
+
+    // 先同步更新引用，再启动识别。
+    openRef.current = true;
+    closingRef.current = false;
+
+    setVoiceSession(true);
+
+    // 保留真实用户点击手势。
+    startListeningRef.current(false);
+  }, [openPanel, setVoiceSession]);
 
   const handleSend = useCallback(
-    async (text?: string) => {
+    async (text?: string, keepVoiceSession = false) => {
       const content = (text ?? input).trim();
 
-      if (!content || busy || closing) return;
+      if (!content || busyRef.current || closingRef.current) return;
       if (content.length > MAX_INPUT_LENGTH) return;
 
-      stopAllVoice();
+      if (keepVoiceSession) {
+        clearVoiceResumeTimer();
+        stopRecognition(true);
+        stopSpeech();
+      } else {
+        stopAllVoice();
+      }
+
       setVoiceError("");
       setCompleted(false);
       setInput("");
@@ -509,170 +787,54 @@ export default function AIFloatingBall({
         await sendMessage({ text: content });
       } catch (sendError) {
         console.error("[Friday] Send failed:", sendError);
+
+        setVoiceError("消息发送失败，请检查网络后重试。");
+
+        if (keepVoiceSession && voiceSessionActiveRef.current) {
+          setVoiceSession(false);
+        }
       }
     },
-    [input, busy, closing, sendMessage, stopAllVoice],
+    [
+      input,
+      sendMessage,
+      clearVoiceResumeTimer,
+      stopRecognition,
+      stopSpeech,
+      stopAllVoice,
+      setVoiceSession,
+    ],
   );
 
   useEffect(() => {
     handleSendRef.current = handleSend;
   }, [handleSend]);
 
-  const startListening = useCallback(() => {
-    if (busy || listening || closing) return;
+  const finalizeMovieOpen = useCallback(() => {
+    if (movieDispatchedRef.current) return;
 
-    setVoiceError("");
+    const movie = pendingMovieRef.current;
 
-    if (
-      typeof window === "undefined" ||
-      !window.isSecureContext
-    ) {
-      setVoiceError(
-        "语音识别需要安全连接，请使用 HTTPS 网站或 localhost。",
-      );
+    if (!movie) {
+      setClosing(false);
+      closingRef.current = false;
       return;
     }
 
-    const SpeechRecognitionClass =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    movieDispatchedRef.current = true;
+    pendingMovieRef.current = null;
 
-    if (!SpeechRecognitionClass) {
-      setVoiceError(
-        "当前浏览器暂不支持语音识别，请使用键盘输入。",
-      );
-      return;
-    }
-
-    stopSpeech();
-
-    const previousRecognition = recognitionRef.current;
-    recognitionRef.current = null;
-
-    if (previousRecognition) {
-      try {
-        previousRecognition.abort();
-      } catch {
-        // 忽略旧实例异常。
-      }
-    }
-
-    pendingVoiceTextRef.current = "";
-
-    const recognition = new SpeechRecognitionClass();
-
-    recognition.lang = "zh-CN";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-
-    recognition.onstart = () => {
-      if (recognitionRef.current !== recognition) return;
-
-      setListening(true);
-      setVoiceError("");
-    };
-
-    recognition.onresult = (event) => {
-      if (recognitionRef.current !== recognition) return;
-
-      let finalText = "";
-      let interimText = "";
-
-      for (let index = 0; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        const transcript = result?.[0]?.transcript || "";
-
-        if (result.isFinal) {
-          finalText += transcript;
-        } else {
-          interimText += transcript;
-        }
-      }
-
-      const recognizedText = (finalText || interimText)
-        .trim()
-        .slice(0, MAX_INPUT_LENGTH);
-
-      if (recognizedText) {
-        setInput(recognizedText);
-      }
-
-      if (finalText.trim()) {
-        pendingVoiceTextRef.current = finalText
-          .trim()
-          .slice(0, MAX_INPUT_LENGTH);
-      }
-    };
-
-    recognition.onerror = (event) => {
-      if (recognitionRef.current !== recognition) return;
-
-      recognitionRef.current = null;
-      setListening(false);
-
-      const message = getSpeechErrorMessage(event.error);
-
-      if (message) {
-        setVoiceError(message);
-      }
-    };
-
-    recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-
-      recognitionRef.current = null;
-      setListening(false);
-
-      const finalText = pendingVoiceTextRef.current.trim();
-      pendingVoiceTextRef.current = "";
-
-      if (finalText && !busy) {
-        setInput("");
-        void handleSendRef.current(finalText);
-      }
-    };
-
-    recognitionRef.current = recognition;
-
-    try {
-      // 必须在用户点击事件的同步调用链内启动。
-      recognition.start();
-    } catch (recognitionError) {
-      console.error(
-        "[Friday] Speech recognition start failed:",
-        recognitionError,
-      );
-
-      if (recognitionRef.current === recognition) {
-        recognitionRef.current = null;
-      }
-
-      setListening(false);
-      setVoiceError("语音识别启动失败，请检查麦克风权限后重试。");
-    }
-  }, [busy, listening, closing, stopSpeech]);
-
-  const openPanel = useCallback(() => {
     clearMovieCloseTimer();
 
-    pendingMovieRef.current = null;
-    movieDispatchedRef.current = false;
-
+    closingRef.current = false;
     setClosing(false);
-    setOpen(true);
-    setExpanded(false);
-    setVoiceError("");
 
-    if (typeof document !== "undefined") {
-      document.body.classList.add("friday-popup-lock");
-    }
+    window.dispatchEvent(
+      new CustomEvent("friday-open-detail", {
+        detail: movie,
+      }),
+    );
   }, [clearMovieCloseTimer]);
-
-  const openAndListen = useCallback(() => {
-    openPanel();
-
-    // 不放进 useEffect 或 setTimeout，尽量保留点击手势授权。
-    startListening();
-  }, [openPanel, startListening]);
 
   const closePanel = useCallback(() => {
     clearMovieCloseTimer();
@@ -680,33 +842,40 @@ export default function AIFloatingBall({
     pendingMovieRef.current = null;
     movieDispatchedRef.current = false;
 
+    openRef.current = false;
+    closingRef.current = false;
+
     stopAllVoice();
+
+    if (busyRef.current) {
+      stop();
+    }
+
     setClosing(false);
     setOpen(false);
     setExpanded(false);
-
-    if (typeof document !== "undefined") {
-      document.body.classList.remove("friday-popup-lock");
-    }
-  }, [clearMovieCloseTimer, stopAllVoice]);
+  }, [clearMovieCloseTimer, stopAllVoice, stop]);
 
   const handleOpenMovie = useCallback(
     (movie: MovieItem) => {
       if (typeof window === "undefined") return;
-      if (closing || movieDispatchedRef.current) return;
+      if (closingRef.current || movieDispatchedRef.current) return;
 
       stopAllVoice();
+
+      if (busyRef.current) {
+        stop();
+      }
 
       pendingMovieRef.current = movie;
       movieDispatchedRef.current = false;
 
+      openRef.current = false;
+      closingRef.current = true;
+
       setClosing(true);
       setOpen(false);
       setExpanded(false);
-
-      if (typeof document !== "undefined") {
-        document.body.classList.remove("friday-popup-lock");
-      }
 
       clearMovieCloseTimer();
 
@@ -714,34 +883,51 @@ export default function AIFloatingBall({
         finalizeMovieOpen();
       }, MOVIE_CLOSE_DELAY);
     },
-    [closing, stopAllVoice, clearMovieCloseTimer, finalizeMovieOpen],
+    [
+      stopAllVoice,
+      stop,
+      clearMovieCloseTimer,
+      finalizeMovieOpen,
+    ],
   );
 
   const handlePanelAnimationEnd = useCallback(
     (event: React.AnimationEvent<HTMLElement>) => {
       if (event.target !== event.currentTarget) return;
       if (event.animationName !== "friday-panel-close") return;
-      if (closing) finalizeMovieOpen();
+
+      if (closingRef.current) {
+        finalizeMovieOpen();
+      }
     },
-    [closing, finalizeMovieOpen],
+    [finalizeMovieOpen],
   );
 
   const interrupt = useCallback(() => {
     stopAllVoice();
 
-    if (busy) {
+    if (busyRef.current) {
       stop();
     }
-  }, [busy, stop, stopAllVoice]);
+  }, [stopAllVoice, stop]);
 
   const speakText = useCallback(
     (text: string, messageId: string) => {
-      if (!voiceEnabled || !text.trim()) return;
+      if (!voiceEnabled || !text.trim()) {
+        setSpeaking(false);
+        setCompleted(true);
+        scheduleVoiceResume();
+        return;
+      }
 
       if (
         typeof window === "undefined" ||
         !("speechSynthesis" in window)
       ) {
+        setSpeaking(false);
+        setCompleted(true);
+        setVoiceError("当前浏览器不支持语音播报。");
+        scheduleVoiceResume();
         return;
       }
 
@@ -765,6 +951,7 @@ export default function AIFloatingBall({
         utteranceRef.current = null;
         setSpeaking(false);
         setCompleted(true);
+        scheduleVoiceResume();
       };
 
       utterance.onerror = () => {
@@ -773,6 +960,7 @@ export default function AIFloatingBall({
         utteranceRef.current = null;
         setSpeaking(false);
         setCompleted(true);
+        scheduleVoiceResume();
       };
 
       lastSpokenMessageRef.current = messageId;
@@ -788,11 +976,18 @@ export default function AIFloatingBall({
         }
 
         setSpeaking(false);
+        setCompleted(true);
+        scheduleVoiceResume();
       }
     },
-    [voiceEnabled, stopSpeech],
+    [
+      voiceEnabled,
+      stopSpeech,
+      scheduleVoiceResume,
+    ],
   );
 
+  // 只在本轮 AI 回复真正完成后播报一次。
   useEffect(() => {
     if (status !== "ready" || !open) return;
 
@@ -802,25 +997,72 @@ export default function AIFloatingBall({
 
     if (!lastAssistant?.id) return;
 
-    const text = getPartText(lastAssistant);
-
-    if (!text.trim()) return;
-
     if (lastCompletedMessageRef.current === lastAssistant.id) {
       return;
     }
 
+    const text = getPartText(lastAssistant);
+    const movieData = getMovieDataForMessage(lastAssistant);
+
+    if (!text.trim() && movieData.length === 0) return;
+
     lastCompletedMessageRef.current = lastAssistant.id;
 
-    if (
-      voiceEnabled &&
-      lastSpokenMessageRef.current !== lastAssistant.id
-    ) {
-      speakText(text, lastAssistant.id);
-    } else if (!voiceEnabled) {
+    if (text.trim()) {
+      if (
+        voiceEnabled &&
+        lastSpokenMessageRef.current !== lastAssistant.id
+      ) {
+        speakText(text, lastAssistant.id);
+      } else {
+        setCompleted(true);
+        scheduleVoiceResume();
+      }
+    } else {
       setCompleted(true);
+      scheduleVoiceResume();
     }
-  }, [typedMessages, status, voiceEnabled, open, speakText]);
+  }, [
+    typedMessages,
+    status,
+    voiceEnabled,
+    open,
+    speakText,
+    scheduleVoiceResume,
+  ]);
+
+  // 请求异常时，不让用户误以为麦克风仍在聆听。
+  useEffect(() => {
+    if (!error) return;
+
+    setSpeaking(false);
+
+    if (voiceSessionActiveRef.current) {
+      setVoiceError("Friday 请求失败，请检查网络后重新尝试。");
+    }
+  }, [error]);
+
+  // 关闭语音播报时，取消当前播报并尝试恢复监听。
+  const toggleVoiceEnabled = useCallback(() => {
+    if (voiceEnabled) {
+      stopSpeech();
+
+      if (voiceSessionActiveRef.current) {
+        scheduleVoiceResume();
+      }
+    }
+
+    setVoiceEnabled((value) => !value);
+  }, [voiceEnabled, stopSpeech, scheduleVoiceResume]);
+
+  // 手动停止播报后恢复语音会话。
+  const stopSpeechAndResume = useCallback(() => {
+    stopSpeech();
+
+    if (voiceSessionActiveRef.current) {
+      scheduleVoiceResume();
+    }
+  }, [stopSpeech, scheduleVoiceResume]);
 
   useEffect(() => {
     if (!completed) return;
@@ -848,18 +1090,27 @@ export default function AIFloatingBall({
     setMounted(true);
 
     return () => {
-      stopAllVoice();
+      openRef.current = false;
+      closingRef.current = false;
+
+      voiceSessionActiveRef.current = false;
+      voiceSessionIdRef.current += 1;
+
+      clearVoiceResumeTimer();
+      stopRecognition(true);
+      stopSpeech();
       clearMovieCloseTimer();
 
       if (dragResetTimerRef.current !== null) {
         window.clearTimeout(dragResetTimerRef.current);
       }
-
-      if (typeof document !== "undefined") {
-        document.body.classList.remove("friday-popup-lock");
-      }
     };
-  }, [stopAllVoice, clearMovieCloseTimer]);
+  }, [
+    clearVoiceResumeTimer,
+    stopRecognition,
+    stopSpeech,
+    clearMovieCloseTimer,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -879,9 +1130,11 @@ export default function AIFloatingBall({
 
   const clearConversation = useCallback(() => {
     interrupt();
+
     setMessages([]);
     lastSpokenMessageRef.current = "";
     lastCompletedMessageRef.current = "";
+
     setCompleted(false);
     setVoiceError("");
     setInput("");
@@ -941,7 +1194,7 @@ export default function AIFloatingBall({
 
   const handleFabPointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (open || closing) return;
+      if (openRef.current || closingRef.current) return;
 
       const rect = event.currentTarget.getBoundingClientRect();
 
@@ -960,7 +1213,7 @@ export default function AIFloatingBall({
         // 某些浏览器不支持 pointer capture。
       }
     },
-    [open, closing],
+    [],
   );
 
   const handleFabPointerMove = useCallback(
@@ -1026,33 +1279,26 @@ export default function AIFloatingBall({
     openAndListen();
   }, [openAndListen]);
 
-  const lastAssistantMessage = [...typedMessages]
-    .reverse()
-    .find((message) => message.role === "assistant");
+  const hideAssistant = useCallback(() => {
+    closePanel();
+    setFabHidden(true);
+  }, [closePanel]);
 
-  const latestAssistantText = lastAssistantMessage
-    ? getPartText(lastAssistantMessage)
-    : "";
-
-  const latestMovieData = lastAssistantMessage
-    ? getMovieDataForMessage(lastAssistantMessage)
-    : [];
+  const restoreAssistant = useCallback(() => {
+    setFabHidden(false);
+    setFabPosition(null);
+  }, []);
 
   if (!mounted) return null;
 
   const content = (
     <>
       <style jsx global>{`
-        .friday-popup-lock {
-          overflow: hidden !important;
-          overscroll-behavior: none;
-        }
-
         .friday-root {
           position: fixed;
-          z-index: 99999;
-          right: 22px;
-          bottom: max(24px, env(safe-area-inset-bottom, 0px));
+          z-index: 30;
+          right: 16px;
+          bottom: max(20px, env(safe-area-inset-bottom, 0px));
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
             "SF Pro Text", "PingFang SC", sans-serif;
           color: #fff;
@@ -1065,16 +1311,12 @@ export default function AIFloatingBall({
           pointer-events: auto;
         }
 
-        /* ================================
-           V2.1 液态玻璃球
-        ================================= */
-
         .friday-fab {
           position: relative;
           display: grid;
           place-items: center;
-          width: 72px;
-          height: 72px;
+          width: ${FAB_SIZE}px;
+          height: ${FAB_SIZE}px;
           padding: 0;
           overflow: visible;
           border: 0;
@@ -1085,12 +1327,10 @@ export default function AIFloatingBall({
           user-select: none;
           -webkit-user-select: none;
           -webkit-tap-highlight-color: transparent;
-          filter: drop-shadow(0 9px 18px rgba(0,0,0,.25));
+          filter: drop-shadow(0 8px 16px rgba(0,0,0,.24));
         }
 
-        .friday-fab:active {
-          cursor: grabbing;
-        }
+        .friday-fab:active { cursor: grabbing; }
 
         .friday-orb-visual {
           position: relative;
@@ -1098,34 +1338,23 @@ export default function AIFloatingBall({
           width: 100%;
           height: 100%;
           overflow: hidden;
-          border: 1px solid rgba(255,255,255,.48);
+          border: 1px solid rgba(255,255,255,.55);
           border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
           background:
-            radial-gradient(
-              ellipse at 28% 17%,
-              rgba(255,255,255,.22),
-              transparent 24%
-            ),
-            radial-gradient(
-              ellipse at 75% 80%,
-              rgba(92,95,160,.14),
-              transparent 46%
-            ),
+            radial-gradient(ellipse at 28% 17%,rgba(255,255,255,.22),transparent 24%),
+            radial-gradient(ellipse at 75% 80%,rgba(92,95,160,.14),transparent 46%),
             rgba(15,18,29,.19);
           box-shadow:
             0 0 0 1px rgba(255,255,255,.08),
-            0 0 19px rgba(111,194,255,.15),
-            0 0 32px rgba(190,117,255,.13),
-            inset 0 1px 2px rgba(255,255,255,.48),
-            inset 0 -2px 7px rgba(0,0,0,.19);
+            0 0 16px rgba(111,194,255,.16),
+            0 0 25px rgba(190,117,255,.12),
+            inset 0 1px 2px rgba(255,255,255,.5),
+            inset 0 -2px 7px rgba(0,0,0,.16);
           -webkit-backdrop-filter: blur(2px) saturate(175%);
           backdrop-filter: blur(2px) saturate(175%);
-          animation:
-            friday-orb-morph 9s ease-in-out infinite,
+          animation: friday-orb-morph 9s ease-in-out infinite,
             friday-orb-breathe 4.8s ease-in-out infinite;
-          transition:
-            border-radius .45s ease,
-            transform .45s cubic-bezier(.2,.8,.2,1);
+          transition: border-radius .45s ease, transform .45s ease;
         }
 
         .friday-orb-inner {
@@ -1134,24 +1363,10 @@ export default function AIFloatingBall({
           inset: 3px;
           border-radius: inherit;
           background:
-            radial-gradient(
-              ellipse at 29% 18%,
-              rgba(255,255,255,.17),
-              transparent 25%
-            ),
-            radial-gradient(
-              ellipse at 70% 72%,
-              rgba(113,99,183,.13),
-              transparent 43%
-            ),
-            radial-gradient(
-              ellipse at 50% 52%,
-              rgba(17,23,38,.18),
-              rgba(9,13,25,.11) 60%,
-              rgba(3,5,12,.24) 100%
-            );
-          box-shadow:
-            inset 0 0 9px rgba(0,0,0,.18),
+            radial-gradient(ellipse at 29% 18%,rgba(255,255,255,.17),transparent 25%),
+            radial-gradient(ellipse at 70% 72%,rgba(113,99,183,.13),transparent 43%),
+            radial-gradient(ellipse at 50% 52%,rgba(17,23,38,.18),rgba(9,13,25,.11) 60%,rgba(3,5,12,.24) 100%);
+          box-shadow: inset 0 0 8px rgba(0,0,0,.16),
             inset 0 1px 3px rgba(255,255,255,.22);
         }
 
@@ -1161,21 +1376,10 @@ export default function AIFloatingBall({
           inset: 8%;
           border-radius: 48% 52% 57% 43% / 55% 43% 57% 45%;
           background:
-            radial-gradient(
-              ellipse at 20% 38%,
-              rgba(102,231,255,.27),
-              transparent 39%
-            ),
-            radial-gradient(
-              ellipse at 82% 32%,
-              rgba(183,132,255,.25),
-              transparent 38%
-            ),
-            radial-gradient(
-              ellipse at 55% 90%,
-              rgba(255,180,135,.2),
-              transparent 44%
-            );
+            radial-gradient(ellipse at 20% 38%,rgba(102,231,255,.28),transparent 39%),
+            radial-gradient(ellipse at 82% 32%,rgba(183,132,255,.25),transparent 38%),
+            radial-gradient(ellipse at 55% 90%,rgba(255,180,135,.2),transparent 44%),
+            radial-gradient(ellipse at 12% 78%,rgba(119,48,77,.16),transparent 40%);
           mix-blend-mode: screen;
           opacity: .78;
           animation: friday-fluid-drift 8s ease-in-out infinite alternate;
@@ -1198,13 +1402,9 @@ export default function AIFloatingBall({
             rgba(115,155,255,.95),
             rgba(120,220,255,.95)
           );
-          -webkit-mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
+          -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
           -webkit-mask-composite: xor;
-          mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
+          mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
           mask-composite: exclude;
           filter: drop-shadow(0 0 2px rgba(167,220,255,.55));
           pointer-events: none;
@@ -1220,12 +1420,7 @@ export default function AIFloatingBall({
           height: 11%;
           border-radius: 50%;
           transform: rotate(-32deg);
-          background: linear-gradient(
-            90deg,
-            rgba(255,255,255,.94),
-            rgba(255,255,255,.38) 60%,
-            transparent
-          );
+          background: linear-gradient(90deg,rgba(255,255,255,.94),rgba(255,255,255,.38) 60%,transparent);
           filter: blur(.25px);
           opacity: .9;
           pointer-events: none;
@@ -1246,15 +1441,9 @@ export default function AIFloatingBall({
         }
 
         @keyframes friday-orb-morph {
-          0%,100% {
-            border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
-          }
-          35% {
-            border-radius: 55% 45% 44% 56% / 44% 56% 44% 56%;
-          }
-          70% {
-            border-radius: 43% 57% 58% 42% / 55% 45% 55% 45%;
-          }
+          0%,100% { border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%; }
+          35% { border-radius: 55% 45% 44% 56% / 44% 56% 44% 56%; }
+          70% { border-radius: 43% 57% 58% 42% / 55% 45% 55% 45%; }
         }
 
         @keyframes friday-orb-breathe {
@@ -1278,78 +1467,77 @@ export default function AIFloatingBall({
           border-radius: 42% 58% 60% 40% / 57% 43% 57% 43%;
         }
 
-        /* ================================
-           Siri 式胶囊容器
-        ================================= */
+        .friday-restore {
+          position: fixed;
+          right: 8px;
+          bottom: max(22px,env(safe-area-inset-bottom,0px));
+          z-index: 30;
+          display: grid;
+          place-items: center;
+          width: 34px;
+          height: 34px;
+          padding: 0;
+          border: 1px solid rgba(255,255,255,.25);
+          border-radius: 50%;
+          background: rgba(18,22,34,.7);
+          color: rgba(255,255,255,.85);
+          font-family: Georgia,serif;
+          font-size: 15px;
+          box-shadow: 0 4px 16px rgba(0,0,0,.22);
+          -webkit-backdrop-filter: blur(12px);
+          backdrop-filter: blur(12px);
+          cursor: pointer;
+          pointer-events: auto;
+        }
 
         .friday-panel {
           position: fixed;
-          right: 18px;
-          bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+          right: 14px;
+          bottom: calc(96px + env(safe-area-inset-bottom,0px));
+          z-index: 30;
           display: flex;
           flex-direction: column;
-          width: min(500px, calc(100vw - 28px));
-          max-height: min(430px, calc(100dvh - 130px));
-          min-height: 176px;
+          width: min(370px,calc(100vw - 28px));
+          max-height: min(360px,calc(100dvh - 118px));
+          min-height: 150px;
           overflow: hidden;
           isolation: isolate;
           border: 1px solid rgba(255,255,255,.27);
-          border-radius: 29px;
+          border-radius: 25px;
           color: #fff;
           background:
-            linear-gradient(
-              145deg,
-              rgba(255,255,255,.16),
-              rgba(255,255,255,.035) 45%,
-              rgba(255,255,255,.075)
-            ),
-            rgba(12,15,25,.77);
-          -webkit-backdrop-filter: blur(32px) saturate(165%);
-          backdrop-filter: blur(32px) saturate(165%);
-          box-shadow:
-            0 22px 75px rgba(0,0,0,.36),
+            linear-gradient(145deg,rgba(255,255,255,.15),rgba(255,255,255,.035) 45%,rgba(255,255,255,.075)),
+            rgba(12,15,25,.83);
+          -webkit-backdrop-filter: blur(25px) saturate(165%);
+          backdrop-filter: blur(25px) saturate(165%);
+          box-shadow: 0 18px 55px rgba(0,0,0,.32),
             inset 0 1px 0 rgba(255,255,255,.3),
             inset 0 -1px 0 rgba(255,255,255,.06);
           transform-origin: bottom right;
-          animation: friday-capsule-in .48s cubic-bezier(.18,.82,.2,1);
+          animation: friday-capsule-in .42s cubic-bezier(.18,.82,.2,1);
+          pointer-events: auto;
         }
 
         @keyframes friday-capsule-in {
-          0% {
-            opacity: 0;
-            transform: translate3d(24px,35px,0) scale(.72);
-            border-radius: 50px;
-          }
-          65% {
-            opacity: 1;
-            transform: translate3d(-3px,-3px,0) scale(1.025);
-          }
-          100% {
-            transform: translate3d(0,0,0) scale(1);
-            border-radius: 29px;
-          }
+          0% { opacity: 0; transform: translate3d(20px,25px,0) scale(.78); border-radius: 45px; }
+          65% { opacity: 1; transform: translate3d(-2px,-2px,0) scale(1.02); }
+          100% { transform: translate3d(0,0,0) scale(1); border-radius: 25px; }
         }
 
         .friday-panel.friday-expanded {
           right: 8px;
           bottom: 8px;
-          width: min(650px, calc(100vw - 16px));
-          height: min(780px, calc(100dvh - 16px));
+          width: min(650px,calc(100vw - 16px));
+          height: min(780px,calc(100dvh - 16px));
           max-height: calc(100dvh - 16px);
-          min-height: 320px;
-          border-radius: 34px;
-          animation: friday-expanded-in .38s cubic-bezier(.2,.8,.2,1);
+          min-height: 300px;
+          border-radius: 30px;
+          animation: friday-expanded-in .35s cubic-bezier(.2,.8,.2,1);
         }
 
         @keyframes friday-expanded-in {
-          from {
-            opacity: .7;
-            transform: translateY(24px) scale(.97);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
+          from { opacity: .7; transform: translateY(20px) scale(.97); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         .friday-panel.friday-closing {
@@ -1368,21 +1556,11 @@ export default function AIFloatingBall({
           inset: 0;
           border-radius: inherit;
           background:
-            radial-gradient(
-              ellipse at 50% 110%,
-              rgba(115,183,255,.19),
-              transparent 55%
-            ),
-            radial-gradient(
-              ellipse at 90% 0%,
-              rgba(203,143,255,.13),
-              transparent 45%
-            );
+            radial-gradient(ellipse at 50% 110%,rgba(115,183,255,.19),transparent 55%),
+            radial-gradient(ellipse at 90% 0%,rgba(203,143,255,.13),transparent 45%);
           content: "";
           pointer-events: none;
         }
-
-        /* 胶囊顶部 */
 
         .friday-canvas-top {
           position: relative;
@@ -1391,46 +1569,68 @@ export default function AIFloatingBall({
           align-items: center;
           justify-content: space-between;
           flex: 0 0 auto;
-          min-height: 48px;
-          padding: 13px 18px 4px;
+          min-height: 46px;
+          padding: 10px 14px 3px 17px;
         }
 
         .friday-wordmark {
           color: rgba(255,255,255,.96);
-          font-family: Georgia, "Times New Roman", serif;
-          font-size: 21px;
+          font-family: Georgia,"Times New Roman",serif;
+          font-size: 20px;
           font-weight: 400;
           letter-spacing: -.8px;
           text-shadow: 0 1px 12px rgba(255,255,255,.15);
         }
 
-        .friday-state-wrap {
+        .friday-header-actions {
           display: flex;
           align-items: center;
           gap: 9px;
+        }
+
+        .friday-state-wrap {
+          display: flex;
+          align-items: center;
+          gap: 7px;
           color: rgba(255,255,255,.67);
-          font-size: 11px;
+          font-size: 10px;
         }
 
         .friday-status-dot {
-          width: 9px;
-          height: 9px;
-          flex: 0 0 9px;
-          padding: 0;
-          border: 0;
+          width: 7px;
+          height: 7px;
+          flex: 0 0 7px;
           border-radius: 50%;
           background: #8de7dc;
           box-shadow: 0 0 8px rgba(116,239,224,.8);
-          cursor: pointer;
           animation: friday-dot-pulse 1.8s ease-in-out infinite;
+        }
+
+        .friday-close-btn {
+          display: grid;
+          place-items: center;
+          width: 29px;
+          height: 29px;
+          padding: 0;
+          border: 1px solid rgba(255,255,255,.16);
+          border-radius: 50%;
+          background: rgba(255,255,255,.08);
+          color: rgba(255,255,255,.88);
+          font-size: 19px;
+          line-height: 1;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .friday-close-btn:active {
+          background: rgba(255,255,255,.2);
+          transform: scale(.94);
         }
 
         @keyframes friday-dot-pulse {
           0%,100% { opacity: .6; transform: scale(.85); }
           50% { opacity: 1; transform: scale(1.18); }
         }
-
-        /* 消息区域 */
 
         .friday-messages {
           position: relative;
@@ -1440,26 +1640,26 @@ export default function AIFloatingBall({
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 10px 19px 14px;
+          padding: 8px 17px 12px;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
           scrollbar-color: rgba(255,255,255,.17) transparent;
         }
 
         .friday-panel:not(.friday-expanded) .friday-messages {
-          max-height: 180px;
+          max-height: 150px;
         }
 
         .friday-welcome {
           display: flex;
           flex-direction: column;
           justify-content: center;
-          min-height: 82px;
-          padding: 4px 0 12px;
+          min-height: 75px;
+          padding: 4px 0 10px;
         }
 
         .friday-welcome-kicker {
-          margin-bottom: 7px;
+          margin-bottom: 6px;
           color: rgba(255,255,255,.43);
           font-size: 9px;
           letter-spacing: 2px;
@@ -1468,27 +1668,25 @@ export default function AIFloatingBall({
         .friday-welcome-title {
           margin: 0 0 5px;
           color: #fff;
-          font-size: 20px;
+          font-size: 19px;
           font-weight: 500;
           letter-spacing: -.6px;
         }
 
         .friday-welcome-text {
           color: rgba(255,255,255,.65);
-          font-size: 12px;
-          line-height: 1.7;
+          font-size: 11px;
+          line-height: 1.65;
         }
 
         .friday-message {
           display: flex;
           justify-content: flex-start;
-          margin: 0 0 12px;
+          margin: 0 0 11px;
           animation: friday-message-in .3s ease both;
         }
 
-        .friday-message-user {
-          justify-content: flex-end;
-        }
+        .friday-message-user { justify-content: flex-end; }
 
         @keyframes friday-message-in {
           from { opacity: 0; transform: translateY(7px); }
@@ -1498,19 +1696,19 @@ export default function AIFloatingBall({
         .friday-message-content {
           max-width: 96%;
           color: rgba(255,255,255,.95);
-          font-size: 13px;
-          line-height: 1.75;
+          font-size: 12px;
+          line-height: 1.72;
           white-space: pre-wrap;
           overflow-wrap: anywhere;
         }
 
         .friday-message-user .friday-message-content {
           max-width: 86%;
-          padding: 8px 12px;
+          padding: 7px 11px;
           border: 1px solid rgba(255,255,255,.1);
-          border-radius: 16px 16px 4px 16px;
+          border-radius: 15px 15px 4px 15px;
           background: rgba(255,255,255,.1);
-          color: rgba(255,255,255,.86);
+          color: rgba(255,255,255,.9);
         }
 
         .friday-status {
@@ -1548,8 +1746,6 @@ export default function AIFloatingBall({
           line-height: 1.6;
         }
 
-        /* 球体与状态波纹 */
-
         .friday-orb-stage {
           position: relative;
           z-index: 2;
@@ -1557,97 +1753,84 @@ export default function AIFloatingBall({
           align-items: center;
           justify-content: center;
           flex: 0 0 auto;
-          gap: 10px;
-          min-height: 42px;
-          padding: 0 15px 9px;
+          gap: 9px;
+          min-height: 38px;
+          padding: 0 14px 7px;
           pointer-events: none;
         }
 
         .friday-orb-stage .friday-orb-visual {
-          width: 38px;
-          height: 38px;
-          flex: 0 0 38px;
+          width: 32px;
+          height: 32px;
+          flex: 0 0 32px;
         }
 
         .friday-orb-status {
           color: rgba(255,255,255,.69);
-          font-size: 11px;
+          font-size: 10px;
           letter-spacing: .3px;
         }
 
         .friday-panel[data-state="listening"] .friday-orb-visual {
-          animation-duration: 5s, 1.5s;
+          animation-duration: 5s,1.5s;
           filter: brightness(1.22);
         }
 
         .friday-panel[data-state="thinking"] .friday-orb-visual {
-          animation-duration: 2.5s, 1.1s;
+          animation-duration: 2.5s,1.1s;
           filter: brightness(1.24) saturate(1.3);
         }
 
         .friday-panel[data-state="speaking"] .friday-orb-visual {
-          animation-duration: 2s, .75s;
+          animation-duration: 2s,.75s;
           filter: brightness(1.28);
         }
-
-        /* 输入栏 */
 
         .friday-input-area {
           position: relative;
           z-index: 4;
           flex: 0 0 auto;
-          padding: 10px 13px calc(11px + env(safe-area-inset-bottom, 0px));
+          padding: 9px 11px calc(9px + env(safe-area-inset-bottom,0px));
           border-top: 1px solid rgba(255,255,255,.1);
           background: rgba(10,13,22,.27);
-          -webkit-backdrop-filter: blur(18px);
-          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(15px);
+          backdrop-filter: blur(15px);
         }
 
         .friday-input-box {
           display: flex;
           align-items: flex-end;
-          gap: 8px;
-          min-height: 47px;
-          padding: 6px 7px 6px 12px;
+          gap: 7px;
+          min-height: 44px;
+          padding: 5px 6px 5px 10px;
           border: 1px solid rgba(255,255,255,.24);
-          border-radius: 25px;
-          background:
-            linear-gradient(
-              145deg,
-              rgba(255,255,255,.15),
-              rgba(255,255,255,.045)
-            ),
-            rgba(22,25,35,.48);
-          -webkit-backdrop-filter: blur(22px) saturate(160%);
-          backdrop-filter: blur(22px) saturate(160%);
-          box-shadow:
-            0 8px 25px rgba(0,0,0,.16),
-            inset 0 1px 0 rgba(255,255,255,.2);
+          border-radius: 24px;
+          background: linear-gradient(145deg,rgba(255,255,255,.15),rgba(255,255,255,.045)),rgba(22,25,35,.48);
+          -webkit-backdrop-filter: blur(18px) saturate(160%);
+          backdrop-filter: blur(18px) saturate(160%);
+          box-shadow: 0 8px 25px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.2);
         }
 
         .friday-plus-btn {
           display: grid;
           place-items: center;
-          width: 30px;
-          height: 34px;
-          flex: 0 0 30px;
+          width: 27px;
+          height: 32px;
+          flex: 0 0 27px;
           padding: 0;
           border: 0;
           background: transparent;
           color: rgba(255,255,255,.8);
-          font-size: 24px;
+          font-size: 22px;
           font-weight: 200;
           cursor: pointer;
         }
 
-        .friday-plus-btn:disabled {
-          opacity: .45;
-          cursor: default;
-        }
+        .friday-plus-btn:disabled { opacity: .4; cursor: default; }
 
         .friday-input-divider {
           width: 1px;
-          height: 23px;
+          height: 21px;
           flex: 0 0 1px;
           margin: 5px 1px;
           background: rgba(255,255,255,.18);
@@ -1664,34 +1847,29 @@ export default function AIFloatingBall({
           background: transparent;
           color: #fff;
           font-family: inherit;
-          font-size: 13px;
+          font-size: 12px;
           line-height: 1.65;
-          padding: 6px 0;
+          padding: 5px 0;
         }
 
-        .friday-textarea::placeholder {
-          color: rgba(255,255,255,.53);
-        }
-
-        .friday-textarea:disabled {
-          opacity: .5;
-        }
+        .friday-textarea::placeholder { color: rgba(255,255,255,.53); }
+        .friday-textarea:disabled { opacity: .5; }
 
         .friday-send-btn,
         .friday-mic-btn {
           display: grid;
           place-items: center;
-          width: 35px;
-          height: 35px;
-          flex: 0 0 35px;
+          width: 33px;
+          height: 33px;
+          flex: 0 0 33px;
           padding: 0;
           border: 1px solid rgba(255,255,255,.2);
           border-radius: 50%;
           background: rgba(255,255,255,.1);
           color: rgba(255,255,255,.94);
           cursor: pointer;
-          font-size: 17px;
-          transition: background .2s ease, transform .2s ease;
+          font-size: 16px;
+          transition: background .2s ease,transform .2s ease;
           -webkit-tap-highlight-color: transparent;
         }
 
@@ -1699,10 +1877,11 @@ export default function AIFloatingBall({
           border-color: rgba(255,255,255,.8);
           background: #f5f5f5;
           color: #151515;
-          font-size: 20px;
+          font-size: 19px;
         }
 
-        .friday-send-btn:disabled {
+        .friday-send-btn:disabled,
+        .friday-mic-btn:disabled {
           opacity: .4;
           cursor: not-allowed;
         }
@@ -1715,24 +1894,23 @@ export default function AIFloatingBall({
         }
 
         .friday-send-btn:active,
-        .friday-mic-btn:active {
-          transform: scale(.91);
-        }
+        .friday-mic-btn:active { transform: scale(.91); }
 
         .friday-tools {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 8px;
-          min-height: 22px;
-          margin-top: 5px;
-          padding: 0 7px;
+          gap: 7px;
+          min-height: 21px;
+          margin-top: 4px;
+          padding: 0 6px;
         }
 
         .friday-tool-group {
           display: flex;
           align-items: center;
-          gap: 11px;
+          gap: 9px;
+          min-width: 0;
         }
 
         .friday-tool-btn {
@@ -1742,17 +1920,12 @@ export default function AIFloatingBall({
           color: rgba(255,255,255,.57);
           cursor: pointer;
           font-family: inherit;
-          font-size: 10px;
+          font-size: 9px;
+          white-space: nowrap;
         }
 
-        .friday-tool-btn.active {
-          color: #a9dcff;
-        }
-
-        .friday-tool-btn:disabled {
-          opacity: .35;
-          cursor: not-allowed;
-        }
+        .friday-tool-btn.active { color: #a9dcff; }
+        .friday-tool-btn:disabled { opacity: .35; cursor: not-allowed; }
 
         .friday-voice-error {
           margin: 6px 6px 0;
@@ -1761,18 +1934,14 @@ export default function AIFloatingBall({
           line-height: 1.55;
         }
 
-        /* 影视结果 */
-
-        .friday-movie-section {
-          margin: 10px 0 16px;
-        }
+        .friday-movie-section { margin: 10px 0 15px; }
 
         .friday-result-heading {
           display: flex;
           justify-content: space-between;
           align-items: center;
           gap: 8px;
-          margin-bottom: 10px;
+          margin-bottom: 9px;
           color: rgba(255,255,255,.93);
           font-size: 11px;
           font-weight: 600;
@@ -1785,7 +1954,7 @@ export default function AIFloatingBall({
 
         .friday-movie-grid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(2,minmax(0,1fr));
           gap: 8px;
         }
 
@@ -1795,12 +1964,12 @@ export default function AIFloatingBall({
           gap: 8px;
           padding: 7px;
           border: 1px solid rgba(255,255,255,.14);
-          border-radius: 14px;
+          border-radius: 13px;
           background: rgba(255,255,255,.075);
           color: white;
           text-align: left;
           cursor: pointer;
-          transition: background .2s ease, transform .2s ease;
+          transition: background .2s ease,transform .2s ease;
         }
 
         .friday-movie-card:active {
@@ -1810,11 +1979,11 @@ export default function AIFloatingBall({
 
         .friday-poster {
           position: relative;
-          width: 48px;
-          height: 68px;
-          flex: 0 0 48px;
+          width: 46px;
+          height: 65px;
+          flex: 0 0 46px;
           overflow: hidden;
-          border-radius: 8px;
+          border-radius: 7px;
           background: rgba(20,22,27,.8);
         }
 
@@ -1870,23 +2039,17 @@ export default function AIFloatingBall({
           line-height: 1.5;
         }
 
-        .friday-movie-meta {
+        .friday-movie-meta,
+        .friday-movie-source {
           margin-top: 4px;
           overflow: hidden;
-          color: rgba(255,255,255,.55);
           font-size: 9px;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
 
-        .friday-movie-source {
-          margin-top: 4px;
-          overflow: hidden;
-          color: rgba(190,221,255,.85);
-          font-size: 9px;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
+        .friday-movie-meta { color: rgba(255,255,255,.55); }
+        .friday-movie-source { color: rgba(190,221,255,.85); }
 
         .friday-empty-result {
           margin: 10px 0;
@@ -1894,49 +2057,34 @@ export default function AIFloatingBall({
           font-size: 12px;
         }
 
-        /* 展开模式 */
-
         .friday-expanded .friday-messages {
           max-height: none;
-          padding: 20px 24px;
+          padding: 18px 23px;
         }
 
-        .friday-expanded .friday-welcome {
-          min-height: 220px;
-        }
-
-        .friday-expanded .friday-welcome-title {
-          font-size: 34px;
-        }
-
-        .friday-expanded .friday-message-content {
-          font-size: 15px;
-        }
-
-        .friday-expanded .friday-orb-stage {
-          min-height: 62px;
-        }
+        .friday-expanded .friday-welcome { min-height: 180px; }
+        .friday-expanded .friday-welcome-title { font-size: 32px; }
+        .friday-expanded .friday-message-content { font-size: 14px; }
+        .friday-expanded .friday-orb-stage { min-height: 55px; }
 
         .friday-expanded .friday-orb-stage .friday-orb-visual {
-          width: 56px;
-          height: 56px;
-          flex-basis: 56px;
+          width: 48px;
+          height: 48px;
+          flex-basis: 48px;
         }
 
-        /* 移动端 */
-
-        @media (max-width: 600px) {
+        @media (max-width:600px) {
           .friday-root {
             right: 16px;
-            bottom: max(20px, env(safe-area-inset-bottom, 0px));
+            bottom: max(20px,env(safe-area-inset-bottom,0px));
           }
 
           .friday-panel {
             right: 8px;
-            bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+            bottom: calc(92px + env(safe-area-inset-bottom,0px));
             width: calc(100vw - 16px);
-            max-height: min(390px, calc(100dvh - 115px));
-            border-radius: 26px;
+            max-height: min(370px,calc(100dvh - 108px));
+            border-radius: 24px;
           }
 
           .friday-panel.friday-expanded {
@@ -1945,32 +2093,26 @@ export default function AIFloatingBall({
             width: calc(100vw - 8px);
             height: 100dvh;
             max-height: 100dvh;
-            border-radius: 27px 27px 0 0;
+            border-radius: 25px 25px 0 0;
           }
 
           .friday-canvas-top {
-            padding:
-              max(13px, env(safe-area-inset-top, 0px))
-              16px 4px;
+            padding: max(10px,env(safe-area-inset-top,0px)) 13px 3px;
           }
 
           .friday-messages {
-            padding-right: 15px;
-            padding-left: 15px;
+            padding-right: 14px;
+            padding-left: 14px;
           }
 
-          .friday-expanded .friday-messages {
-            padding: 18px 17px;
-          }
+          .friday-expanded .friday-messages { padding: 16px; }
 
           .friday-input-area {
-            padding-right: 10px;
-            padding-left: 10px;
+            padding-right: 9px;
+            padding-left: 9px;
           }
 
-          .friday-movie-grid {
-            gap: 7px;
-          }
+          .friday-movie-grid { gap: 7px; }
 
           .friday-movie-card {
             gap: 6px;
@@ -1978,48 +2120,32 @@ export default function AIFloatingBall({
           }
 
           .friday-poster {
-            width: 43px;
-            height: 63px;
-            flex-basis: 43px;
-          }
-
-          .friday-fab {
-            width: 68px;
-            height: 68px;
+            width: 42px;
+            height: 61px;
+            flex-basis: 42px;
           }
         }
 
-        @media (max-height: 520px) {
+        @media (max-height:520px) {
           .friday-panel.friday-expanded {
             bottom: 4px;
             height: calc(100dvh - 8px);
             min-height: 0;
-            border-radius: 22px;
+            border-radius: 20px;
           }
 
           .friday-canvas-top {
-            min-height: 40px;
-            padding-top: 8px;
+            min-height: 38px;
+            padding-top: 7px;
           }
 
-          .friday-expanded .friday-welcome {
-            min-height: 120px;
-          }
-
-          .friday-orb-stage {
-            min-height: 34px;
-          }
-
-          .friday-input-area {
-            padding-top: 6px;
-          }
-
-          .friday-tools {
-            margin-top: 2px;
-          }
+          .friday-expanded .friday-welcome { min-height: 100px; }
+          .friday-orb-stage { min-height: 32px; }
+          .friday-input-area { padding-top: 5px; }
+          .friday-tools { margin-top: 2px; }
         }
 
-        @media (prefers-reduced-motion: reduce) {
+        @media (prefers-reduced-motion:reduce) {
           .friday-fab *,
           .friday-panel,
           .friday-orb-visual,
@@ -2039,23 +2165,15 @@ export default function AIFloatingBall({
           }
         }
 
-        @supports not (
-          (backdrop-filter: blur(1px)) or
-          (-webkit-backdrop-filter: blur(1px))
-        ) {
-          .friday-panel {
-            background: rgba(12,15,25,.97);
-          }
-
+        @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+          .friday-panel { background: rgba(12,15,25,.97); }
           .friday-input-box,
-          .friday-movie-card {
-            background: rgba(35,37,44,.96);
-          }
+          .friday-movie-card { background: rgba(35,37,44,.96); }
         }
       `}</style>
 
       <div className="friday-root">
-        {!open && !closing ? (
+        {!open && !closing && !fabHidden ? (
           <button
             type="button"
             className="friday-fab"
@@ -2094,16 +2212,21 @@ export default function AIFloatingBall({
             <div className="friday-canvas-top">
               <div className="friday-wordmark">Friday</div>
 
-              <div className="friday-state-wrap">
-                <span>{stateLabel}</span>
+              <div className="friday-header-actions">
+                <div className="friday-state-wrap">
+                  <span className="friday-status-dot" />
+                  <span>{stateLabel}</span>
+                </div>
 
                 <button
                   type="button"
-                  className="friday-status-dot"
-                  title="收起 Friday"
-                  aria-label="收起 Friday"
+                  className="friday-close-btn"
+                  title="关闭 Friday"
+                  aria-label="关闭 Friday"
                   onClick={closePanel}
-                />
+                >
+                  ×
+                </button>
               </div>
             </div>
 
@@ -2181,8 +2304,11 @@ export default function AIFloatingBall({
                       ? "正在为你播报"
                       : completed
                         ? "已经为你准备好了"
-                        : "Friday 随时待命"}
+                        : voiceSessionActive
+                          ? "等待恢复语音聆听"
+                          : "Friday 随时待命"}
               </span>
+
               <OrbVisual />
             </div>
 
@@ -2236,11 +2362,25 @@ export default function AIFloatingBall({
                   aria-label={
                     listening ? "停止语音输入" : "开始语音输入"
                   }
+                  title={
+                    listening
+                      ? "停止本次聆听"
+                      : "开始语音输入或恢复连续对话"
+                  }
                   onClick={() => {
-                    if (listening) {
-                      recognitionRef.current?.stop();
+                    if (listeningRef.current) {
+                      // 停止本次识别并保留最终识别文本。
+                      setVoiceSession(false);
+                      clearVoiceResumeTimer();
+
+                      try {
+                        recognitionRef.current?.stop();
+                      } catch {
+                        stopRecognition(true);
+                      }
                     } else {
-                      startListening();
+                      setVoiceSession(true);
+                      startListeningRef.current(false);
                     }
                   }}
                 >
@@ -2271,10 +2411,7 @@ export default function AIFloatingBall({
                     className={`friday-tool-btn ${
                       voiceEnabled ? "active" : ""
                     }`}
-                    onClick={() => {
-                      if (voiceEnabled) stopSpeech();
-                      setVoiceEnabled((value) => !value);
-                    }}
+                    onClick={toggleVoiceEnabled}
                   >
                     {voiceEnabled ? "语音播报开启" : "语音播报关闭"}
                   </button>
@@ -2293,7 +2430,7 @@ export default function AIFloatingBall({
                     <button
                       type="button"
                       className="friday-tool-btn active"
-                      onClick={stopSpeech}
+                      onClick={stopSpeechAndResume}
                     >
                       停止播报
                     </button>
@@ -2316,12 +2453,32 @@ export default function AIFloatingBall({
                   >
                     {expanded ? "收起面板" : "展开对话"}
                   </button>
+
+                  <button
+                    type="button"
+                    className="friday-tool-btn"
+                    onClick={hideAssistant}
+                  >
+                    隐藏助手
+                  </button>
                 </div>
               </div>
             </footer>
           </section>
         ) : null}
       </div>
+
+      {fabHidden && !open ? (
+        <button
+          type="button"
+          className="friday-restore"
+          aria-label="恢复 Friday 助手"
+          title="恢复 Friday"
+          onClick={restoreAssistant}
+        >
+          F
+        </button>
+      ) : null}
     </>
   );
 
