@@ -5,12 +5,14 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import { fridayReducer, initialFridayState } from "@/lib/friday/state";
 
 import {
   useAppStore,
@@ -317,6 +319,14 @@ export default function AIFloatingBall({
   filterAdult,
 }: FridayProps) {
   const appStore = useAppStore();
+  const [machineState, dispatchMachine] = useReducer(
+    fridayReducer,
+    initialFridayState,
+  );
+
+  const requestSequenceRef = useRef(0);
+  const activeRequestIdRef = useRef(0);
+  const observedBusyRef = useRef(false);
 
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -429,6 +439,34 @@ export default function AIFloatingBall({
   const typedMessages = messages as unknown as MessageLike[];
   const busy = status === "submitted" || status === "streaming";
 
+  useEffect(() => {
+    const requestId = activeRequestIdRef.current;
+    if (!requestId) return;
+
+    if (error) {
+      dispatchMachine({
+        type: "REQUEST_FAILED",
+        requestId,
+        code: "chat_request_failed",
+        message: error.message || "消息请求失败",
+      });
+      activeRequestIdRef.current = 0;
+      observedBusyRef.current = false;
+      return;
+    }
+
+    if (busy) {
+      observedBusyRef.current = true;
+      return;
+    }
+
+    if (observedBusyRef.current) {
+      dispatchMachine({ type: "RESPONSE_COMPLETED", requestId });
+      activeRequestIdRef.current = 0;
+      observedBusyRef.current = false;
+    }
+  }, [busy, error]);
+
   // 同步引用，避免回调读取到上一轮渲染的状态。
   busyRef.current = busy;
   listeningRef.current = listening;
@@ -467,6 +505,10 @@ export default function AIFloatingBall({
     setVoiceSessionActive(active);
 
     if (!active) {
+      dispatchMachine({
+        type: "VOICE_STOP",
+        sessionId: voiceSessionIdRef.current,
+      });
       voiceSessionIdRef.current += 1;
     }
   }, []);
@@ -590,6 +632,7 @@ export default function AIFloatingBall({
       }
 
       const sessionId = voiceSessionIdRef.current;
+      dispatchMachine({ type: "VOICE_START_REQUESTED", sessionId });
 
       pendingVoiceTextRef.current = "";
       recognitionErrorRef.current = "";
@@ -607,6 +650,7 @@ export default function AIFloatingBall({
 
         listeningRef.current = true;
         setListening(true);
+        dispatchMachine({ type: "VOICE_STARTED", sessionId });
         setVoiceError("");
       };
 
@@ -637,6 +681,7 @@ export default function AIFloatingBall({
         }
 
         if (finalText.trim()) {
+          dispatchMachine({ type: "VOICE_FINAL_TEXT", sessionId });
           pendingVoiceTextRef.current = finalText
             .trim()
             .slice(0, MAX_INPUT_LENGTH);
@@ -652,6 +697,12 @@ export default function AIFloatingBall({
         const message = getSpeechErrorMessage(event.error);
 
         if (message) {
+          dispatchMachine({
+            type: "VOICE_FAILED",
+            sessionId,
+            code: event.error || "unknown",
+            message,
+          });
           setVoiceError(message);
         }
       };
@@ -663,6 +714,7 @@ export default function AIFloatingBall({
         recognitionRef.current = null;
         listeningRef.current = false;
         setListening(false);
+        dispatchMachine({ type: "VOICE_ENDED", sessionId });
 
         const finalText = pendingVoiceTextRef.current.trim();
         const recognitionError = recognitionErrorRef.current;
@@ -720,6 +772,12 @@ export default function AIFloatingBall({
           recognitionRef.current = null;
         }
 
+        dispatchMachine({
+          type: "VOICE_FAILED",
+          sessionId,
+          code: "start-failed",
+          message: "语音识别启动失败",
+        });
         listeningRef.current = false;
         setListening(false);
 
@@ -753,6 +811,7 @@ export default function AIFloatingBall({
 
     setClosing(false);
     setOpen(true);
+    dispatchMachine({ type: "OPEN" });
     setExpanded(false);
     setVoiceError("");
     setFabHidden(false);
@@ -790,6 +849,11 @@ export default function AIFloatingBall({
       setCompleted(false);
       setInput("");
 
+      const requestId = ++requestSequenceRef.current;
+      activeRequestIdRef.current = requestId;
+      observedBusyRef.current = false;
+      dispatchMachine({ type: "MESSAGE_SUBMITTED", requestId });
+
       if (inputRef.current) {
         inputRef.current.style.height = "auto";
       }
@@ -799,6 +863,15 @@ export default function AIFloatingBall({
       } catch (sendError) {
         console.error("[Friday] Send failed:", sendError);
 
+        if (activeRequestIdRef.current) {
+          dispatchMachine({
+            type: "REQUEST_FAILED",
+            requestId: activeRequestIdRef.current,
+            code: "send-failed",
+            message: "消息发送失败，请检查网络后重试。",
+          });
+          activeRequestIdRef.current = 0;
+        }
         setVoiceError("消息发送失败，请检查网络后重试。");
 
         if (keepVoiceSession && voiceSessionActiveRef.current) {
@@ -864,6 +937,15 @@ export default function AIFloatingBall({
 
     setClosing(false);
     setOpen(false);
+    dispatchMachine({ type: "CLOSE" });
+    if (busyRef.current && activeRequestIdRef.current) {
+      dispatchMachine({
+        type: "REQUEST_CANCELLED",
+        requestId: activeRequestIdRef.current,
+      });
+      activeRequestIdRef.current = 0;
+      observedBusyRef.current = false;
+    }
     setExpanded(false);
   }, [clearMovieCloseTimer, stopAllVoice, stop]);
 
@@ -2216,6 +2298,8 @@ export default function AIFloatingBall({
               expanded ? "friday-expanded" : ""
             } ${closing ? "friday-closing" : ""}`}
             data-state={auroraState}
+            data-agent-state={machineState.agent}
+            data-voice-state={machineState.voice}
             aria-label="Friday AI 助手"
             aria-hidden={closing}
             onAnimationEnd={handlePanelAnimationEnd}
