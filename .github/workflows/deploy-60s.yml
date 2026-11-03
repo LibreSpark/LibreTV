@@ -1,0 +1,49 @@
+name: Deploy 60s API Worker
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".gitmodules"
+      - "workers/60s"
+      - "workers/60s/**"
+      - ".github/workflows/deploy-60s.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-60s-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository and 60s submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: workers/60s/pnpm-lock.yaml
+
+      - name: Install 60s dependencies
+        working-directory: workers/60s
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy 60s Worker
+        working-directory: workers/60s
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy
