@@ -50,7 +50,8 @@ describe("fridayReducer", () => {
   });
 
   it("supports repeated tool execution cycles for one request", () => {
-    let state = fridayReducer(initialFridayState, {
+    let state = fridayReducer(initialFridayState, { type: "OPEN" });
+    state = fridayReducer(state, {
       type: "MESSAGE_SUBMITTED",
       requestId: 10,
     });
