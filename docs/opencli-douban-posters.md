@@ -1,55 +1,23 @@
-# 豆瓣海报同步（OpenCLI）
+# 豆瓣海报自动同步（无需本地电脑）
 
-LibreTV 的 Cloudflare Worker 无法直接访问你电脑上的 Chrome 登录会话。本功能采用本地同步方式：本机 OpenCLI 使用已登录的 Chrome 读取豆瓣海报 URL，将公开图片地址写入 `src/data/douban-posters.json`；LibreTV 构建后优先使用该索引，未命中的条目继续使用原有海报地址。
+LibreTV 的豆瓣周榜由服务端通过 60s API 获取。海报索引现由 GitHub Actions 定时同步公开榜单中的图片 URL，不再依赖本地 OpenCLI、Chrome 或豆瓣登录会话。
 
-## 1. 本机准备
+## 工作方式
 
-要求 Node.js >= 20.18.1，并安装 OpenCLI：
+1. GitHub Actions 每天 UTC 02:30 自动运行，也可以在仓库 Actions 页面手动运行。
+2. 从 60s API 获取五类豆瓣周榜，每类最多读取前 12 条。
+3. 优先使用豆瓣原始海报地址；原图地址不可用时，尝试 60s 提供的豆瓣图片镜像。
+4. 只接受 HTTPS 且域名属于豆瓣图片 CDN 或明确配置的镜像域名。
+5. 将结果合并写入 `src/data/douban-posters.json`，不会因单次接口失败清空旧索引。
+6. 如索引发生变化，自动提交到 main 分支。若 Cloudflare Pages 已连接该 GitHub 仓库并启用 Git 自动部署，提交会触发后续构建；否则需在 Cloudflare 手动触发一次部署。
 
-```bash
-node --version
-npm install -g @jackwener/opencli
-opencli doctor
-```
+## 手动运行
 
-安装 OpenCLI Browser Bridge Chrome 扩展，打开 Chrome 登录 `douban.com`。不要导出或复制 Cookie，也不要把浏览器配置目录提交到 Git。
+在 GitHub 仓库打开 **Actions → Sync Douban poster index → Run workflow**。
 
-官方说明：
-- https://github.com/jackwener/OpenCLI
-- https://github.com/jackwener/OpenCLI/blob/main/docs/adapters/browser/douban.md
-- https://github.com/jackwener/OpenCLI/blob/main/docs/guide/browser-bridge.md
+## 重要限制
 
-## 2. 同步海报
-
-在 LibreTV 仓库根目录执行：
-
-```bash
-npm run syncDoubanPosters
-```
-
-脚本默认从五类豆瓣周榜各取前 8 个条目，最多并发 2 个 OpenCLI 请求。可以调整：
-
-```bash
-DOUBAN_POSTERS_PER_CATEGORY=12 DOUBAN_POSTERS_CONCURRENCY=2 npm run syncDoubanPosters
-```
-
-脚本会验证返回图片必须是 HTTPS 豆瓣图片 CDN 地址，只写入公开图片 URL，不会读取或上传 Chrome Cookie。遇到登录失效、豆瓣验证或无图片结果时会跳过该条目；如果全部失败，不会覆盖现有索引。
-
-## 3. 发布
-
-同步成功后检查 `src/data/douban-posters.json`，再提交并推送：
-
-```bash
-git add src/data/douban-posters.json
-git commit -m "chore: sync Douban poster URLs"
-git push
-```
-
-推送后，按仓库现有 Cloudflare 部署流程发布新版本。部署完成后，首页豆瓣周榜会优先使用索引中对应电影 ID 的图片；索引没有覆盖的电影自动回退原有海报地址。
-
-## 注意
-
-- OpenCLI 必须在登录豆瓣的本机 Chrome 所在设备运行；GitHub Actions 和 Cloudflare Worker 不会共享该浏览器会话。
-- 海报索引只包含公开图片 URL，不包含账号、密码、Cookie 或浏览器登录数据。
-- 豆瓣可能调整页面结构或触发验证；如同步失败，先运行 `opencli doctor`，在 Chrome 手动打开豆瓣确认登录状态，再重试。
-- 这套机制解决的是海报 URL 的获取与回退，不保证豆瓣 CDN 永久可用；图片仍可能受豆瓣访问策略影响。
+- 这是公开榜单海报同步，不会访问你设备上的 Chrome，也不会使用豆瓣账号 Cookie。
+- 豆瓣或 60s API 可能限流、调整字段或不可用；同步失败时保留已有索引，首页继续回退原始榜单海报。
+- 只同步榜单中返回的海报地址，不保证所有条目都有 4K 或高分辨率图片。
+- 不要把账号密码、Cookie 或浏览器配置文件提交到仓库。
