@@ -10,7 +10,8 @@
     "start": "next start -p 8080",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "syncDoubanPosters": "node scripts/sync-douban-posters.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "1.0.0",
