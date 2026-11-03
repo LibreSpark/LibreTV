@@ -5,14 +5,11 @@ import { fetchUpstream, getCache, setCache } from './fetch-utils';
  * 影视热榜聚合（经 60s API，免 key，https://github.com/vikiboss/60s）。
  * 豆瓣周榜走其 rexxar 移动端接口（需伪装 iPhone UA），百度热播剧榜解析 top.baidu.com，
  * 均由 60s 代为抓取；这里只做服务端转发 + 内存缓存 + 字段归一。
- * 默认优先使用已验证可返回数据的 60s.viki.moe，失败后回退 60s.crystelf.top；
- * 可用 API_60S_BASE 指向自部署实例。
+ * 仅使用 API_60S_BASE 指定的自部署实例。
  */
 
 const CACHE_TTL = 60 * 60 * 1000;
 const UA = 'LibreTV (+https://github.com/LibreSpark/LibreTV)';
-
-const FALLBACK_BASE = 'https://60s.crystelf.top';
 
 function apiBase(): string {
   return (process.env['API_60S_BASE'] || 'https://60s.viki.moe').replace(/\/+$/, '');
@@ -95,81 +92,41 @@ function assertArray<T>(value: unknown, what: string): T[] {
 }
 
 async function fetchJson(path: string): Promise<unknown> {
-  const primary = apiBase();
+  const base = apiBase();
+  const apiUrl = `${base}${path}`;
 
-  // 主实例失败后回退备用实例；相同地址只请求一次
-  const bases = primary === FALLBACK_BASE
-    ? [primary]
-    : [primary, FALLBACK_BASE];
+  try {
+    console.log("【LibreTV Debug】请求的接口地址:", apiUrl);
 
-  const failures: string[] = [];
+    const res = await fetchUpstream(apiUrl, {
+      timeoutMs: 8000,
+      headers: {
+        'User-Agent': UA,
+        Accept: 'application/json',
+      },
+    });
 
-  for (let index = 0; index < bases.length; index++) {
-    const base = bases[index];
-    const label = index === 0 ? '主接口' : '备用接口';
-
-    let host = '未知地址';
-    try {
-      host = new URL(base).host;
-    } catch {
-      // 保留未知地址标记
+    if (!res.ok) {
+      const reason = `HTTP ${res.status}`;
+      console.warn(`[hot-list] ${apiUrl} 请求失败：${reason}`);
+      throw new Error(`60s API 请求失败：主接口(${new URL(base).host}) ${reason}`);
     }
 
     try {
-      const res = await fetchUpstream(`${base}${path}`, {
-        timeoutMs: 8000,
-        headers: {
-          'User-Agent': UA,
-          Accept: 'application/json',
-        },
-      });
-
-      if (!res.ok) {
-        const reason = `HTTP ${res.status}`;
-        failures.push(`${label}(${host}) ${reason}`);
-
-        console.warn(
-          `[hot-list] ${label} ${host} ${path} 请求失败：${reason}`
-        );
-
-        continue;
-      }
-
-      try {
-        const data: unknown = await res.json();
-
-        console.info(
-          `[hot-list] ${label} ${host} ${path} 请求成功`
-        );
-
-        return data;
-      } catch (err) {
-        const reason = err instanceof Error
-          ? `JSON解析失败：${err.message}`
-          : 'JSON解析失败';
-
-        failures.push(`${label}(${host}) ${reason}`);
-
-        console.error(
-          `[hot-list] ${label} ${host} ${path} ${reason}`
-        );
-      }
+      const data: unknown = await res.json();
+      console.info(`[hot-list] ${apiUrl} 请求成功`);
+      return data;
     } catch (err) {
-      const reason = err instanceof Error
-        ? err.message
-        : String(err);
-
-      failures.push(`${label}(${host}) ${reason}`);
-
-      console.error(
-        `[hot-list] ${label} ${host} ${path} 请求异常：${reason}`
-      );
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`[hot-list] ${apiUrl} JSON解析失败：${reason}`);
+      throw new Error(`60s API 响应 JSON 解析失败：${reason}`);
     }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('60s API')) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[hot-list] ${apiUrl} 请求异常：${reason}`);
+    throw new Error(`60s API 请求失败：主接口(${new URL(base).host}) ${reason}`);
   }
-
-  throw new Error(
-    `60s API 请求失败：${failures.join('；') || '未知错误'}`
-  );
 }
 
 export async function fetchHotList(id: HotListId): Promise<DoubanItem[]> {
