@@ -76,7 +76,7 @@ export function buildImageCandidates(
     return [...new Set([built, ...mirrors, url])];
   }
   if (mode !== 'direct') return [built];
-  return [...new Set([built, ...mirrors, \`/api/proxy?url=\${encodeURIComponent(url)}\`])];
+  return [...new Set([built, ...mirrors, `/api/proxy?url=${encodeURIComponent(url)}`])];
 }
 export function validateSourceUrl(url: string): boolean {
   return /^https?:\/\/.+/.test(url);
