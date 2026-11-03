@@ -8,8 +8,6 @@ on:
       - package.json
       - .github/workflows/wrangler-dependency-verify.yml
   workflow_dispatch:
-    branches:
-      - fix/wrangler-peer-dependency-2026-11-03
 
 permissions:
   contents: write
