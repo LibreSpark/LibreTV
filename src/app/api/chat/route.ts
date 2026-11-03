@@ -1,3 +1,4 @@
+
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
@@ -12,6 +13,7 @@ import {
 import { z } from "zod";
 
 import { searchSources, mergeSearchResults } from "@/lib/search";
+import type { SourceConfig } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,7 @@ export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_MESSAGES = 30;
 const MAX_MESSAGE_CHARS = 4000;
+const MAX_KEYWORD_LENGTH = 50;
 const MAX_SOURCES = 50;
 const MAX_RESULTS_TO_CLIENT = 60;
 const MAX_RESULTS_TO_MODEL = 10;
@@ -67,7 +70,8 @@ type SearchOutcome = {
 type MovieDataPart = {
   searchId: string;
   keyword: string;
-  total: number;
+  totalFound: number;
+  returnedCount: number;
   outcomes: SearchOutcome[];
   results: SearchItem[];
   createdAt: number;
@@ -78,9 +82,7 @@ function jsonError(message: string, status: number) {
     { error: message },
     {
       status,
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      headers: { "Cache-Control": "no-store" },
     },
   );
 }
@@ -89,9 +91,11 @@ async function readLimitedBody(
   request: Request,
   maxBytes: number,
 ): Promise<string> {
-  const contentLength = Number(request.headers.get("content-length") || 0);
+  const contentLength = Number(
+    request.headers.get("content-length") || 0,
+  );
 
-  if (contentLength > maxBytes) {
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     throw new Error("REQUEST_TOO_LARGE");
   }
 
@@ -151,21 +155,21 @@ function sanitizeMessages(input: unknown[]): UIMessage[] {
     }
 
     const parts = message.parts
-      .filter((part): part is Record<string, unknown> => {
-        return !!part && typeof part === "object";
-      })
+      .filter(
+        (part): part is Record<string, unknown> =>
+          !!part && typeof part === "object",
+      )
       .filter((part) => {
-        // 不接受客户端伪造的工具执行结果。
-        // 自定义 data parts 也不需要进入模型上下文。
         if (typeof part.type !== "string") return false;
+
+        // 不接受客户端伪造的工具结果和历史数据块。
         if (part.type.startsWith("tool-")) return false;
         if (part.type.startsWith("data-")) return false;
 
-        if (part.type === "text") {
-          return typeof part.text === "string";
-        }
-
-        return false;
+        return (
+          part.type === "text" &&
+          typeof part.text === "string"
+        );
       })
       .map((part) => ({
         type: "text" as const,
@@ -185,7 +189,10 @@ function sanitizeMessages(input: unknown[]): UIMessage[] {
 }
 
 function cleanSourceList(input: unknown) {
-  const parsed = z.array(sourceSchema).max(MAX_SOURCES).safeParse(input);
+  const parsed = z
+    .array(sourceSchema)
+    .max(MAX_SOURCES)
+    .safeParse(input);
 
   if (!parsed.success) {
     throw new Error("INVALID_SOURCES");
@@ -208,6 +215,7 @@ function createModelSummary(
   keyword: string,
   outcomes: SearchOutcome[],
   results: SearchItem[],
+  totalFound: number,
 ) {
   const successful = outcomes.filter((item) => item.ok).length;
   const failed = outcomes.length - successful;
@@ -216,10 +224,14 @@ function createModelSummary(
     .slice(0, MAX_RESULTS_TO_MODEL)
     .map((item, index) => {
       const name = getMovieName(item);
-      const source = String(item.sourceName || item.sourceKey || "未知来源");
+      const source = String(
+        item.sourceName || item.sourceKey || "未知来源",
+      );
       const year = item.year ? `，年份：${item.year}` : "";
       const type = item.typeName ? `，类型：${item.typeName}` : "";
-      const remarks = item.remarks ? `，备注：${item.remarks}` : "";
+      const remarks = item.remarks
+        ? `，备注：${String(item.remarks).slice(0, 100)}`
+        : "";
 
       return `${index + 1}. ${name}；来源：${source}${year}${type}${remarks}`;
     });
@@ -227,14 +239,20 @@ function createModelSummary(
   return [
     `搜索关键词：${keyword}`,
     `搜索源：${outcomes.length} 个，成功 ${successful} 个，失败 ${failed} 个。`,
-    `共找到 ${results.length} 条结果。`,
-    lines.length ? `部分结果：\n${lines.join("\n")}` : "没有找到可用结果。",
-    "注意：完整影片数据已经通过独立数据流发送给前端。不要编造影片、播放地址、清晰度或搜索结果。",
+    `符合过滤条件的结果共 ${totalFound} 条。`,
+    lines.length
+      ? `部分结果：\n${lines.join("\n")}`
+      : "没有找到可用结果。",
+    "完整影片数据由系统通过独立数据流发送给前端。",
+    "不要编造影片、播放地址、清晰度或搜索结果。",
   ].join("\n");
 }
 
 function getLatestUserText(messages: UIMessage[]) {
-  const last = [...messages].reverse().find((message) => message.role === "user");
+  const last = [...messages]
+    .reverse()
+    .find((message) => message.role === "user");
+
   if (!last) return "";
 
   return last.parts
@@ -249,10 +267,6 @@ function makeSearchId() {
 }
 
 export async function POST(request: Request) {
-  if (request.method !== "POST") {
-    return jsonError("Method not allowed", 405);
-  }
-
   if (request.signal.aborted) {
     return jsonError("请求已取消", 499);
   }
@@ -260,7 +274,11 @@ export async function POST(request: Request) {
   let payload: z.infer<typeof requestSchema>;
 
   try {
-    const rawBody = await readLimitedBody(request, MAX_BODY_BYTES);
+    const rawBody = await readLimitedBody(
+      request,
+      MAX_BODY_BYTES,
+    );
+
     const parsedJson = JSON.parse(rawBody);
     const parsed = requestSchema.safeParse(parsedJson);
 
@@ -270,7 +288,8 @@ export async function POST(request: Request) {
 
     payload = parsed.data;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+    const message =
+      error instanceof Error ? error.message : "";
 
     if (message === "REQUEST_TOO_LARGE") {
       return jsonError("请求内容过大", 413);
@@ -307,15 +326,28 @@ export async function POST(request: Request) {
 
   try {
     const { env } = getCloudflareContext();
-    apiKey = env.ZHIPU_API_KEY;
+
+    apiKey = (
+      env as { ZHIPU_API_KEY?: string }
+    ).ZHIPU_API_KEY;
   } catch (error) {
-    console.error("[Friday] Cloudflare context unavailable:", error);
+    console.error(
+      "[Friday] Cloudflare context unavailable:",
+      error,
+    );
+
     return jsonError("服务器环境配置不可用", 500);
   }
 
   if (!apiKey) {
-    console.error("[Friday] Missing Cloudflare binding: ZHIPU_API_KEY");
-    return jsonError("AI 服务尚未配置，请检查服务器密钥", 503);
+    console.error(
+      "[Friday] Missing Cloudflare binding: ZHIPU_API_KEY",
+    );
+
+    return jsonError(
+      "AI 服务尚未配置，请检查服务器密钥",
+      503,
+    );
   }
 
   const provider = createOpenAICompatible({
@@ -342,15 +374,21 @@ export async function POST(request: Request) {
 - 只根据真实搜索结果回答。
 - 没有结果时明确说没有找到。
 - 不得声称某个资源支持 4K，除非搜索结果明确提供了可靠依据。
-- 完整影片数据由系统单独发送到前端，不需要你重复输出所有影片字段。
+- 完整影片数据由系统单独发送到前端，不需要重复输出所有影片字段。
 `.trim();
 
   const searchMovieTool = tool({
     description:
       "搜索 LibreTV 当前启用的视频源。仅在用户明确要求查找影视资源时调用。",
     inputSchema: z.object({
-      keyword: z.string().trim().min(1).max(100).describe("影视名称或搜索关键词"),
+      keyword: z
+        .string()
+        .trim()
+        .min(1)
+        .max(MAX_KEYWORD_LENGTH)
+        .describe("影视名称或搜索关键词"),
     }),
+
     execute: async ({ keyword }) => {
       if (request.signal.aborted) {
         return {
@@ -362,37 +400,62 @@ export async function POST(request: Request) {
       if (sources.length === 0) {
         return {
           ok: false,
-          summary: "当前没有可用的视频源，请先在 LibreTV 中启用视频源。",
+          summary:
+            "当前没有可用的视频源，请先在 LibreTV 中启用视频源。",
         };
       }
 
       try {
-        // 关键：继续走项目现有 searchSources 安全链路。
-        // 不在这里自行 fetch 用户提交的 URL，也不绕过现有 SSRF 防护。
-        const outcomes = (await searchSources(keyword, sources, {
-          filterAdult: payload.filterAdult,
-          signal: request.signal,
-        })) as SearchOutcome[];
+        const outcomes = (
+          await searchSources(
+            keyword,
+            sources as SourceConfig[],
+            {
+              filterAdult: payload.filterAdult,
+              signal: request.signal,
+            },
+          )
+        ) as SearchOutcome[];
 
-        const merged = mergeSearchResults(outcomes) as SearchItem[];
-        const results = Array.isArray(merged) ? merged : [];
+        const merged = mergeSearchResults(
+          outcomes,
+        ) as SearchItem[];
 
-        const safeResults = results
-          .filter((item) => item && typeof item === "object")
-          .filter((item) => {
-            if (payload.filterAdult && item.isAdult) return false;
-            return true;
-          })
-          .slice(0, MAX_RESULTS_TO_CLIENT);
+        const allResults = Array.isArray(merged)
+          ? merged.filter(
+              (item) => item && typeof item === "object",
+            )
+          : [];
+
+        const filteredResults = allResults.filter((item) => {
+          if (payload.filterAdult && item.isAdult) {
+            return false;
+          }
+
+          return true;
+        });
+
+        // 过滤后的真实总数，不受前端显示上限影响。
+        const totalFound = filteredResults.length;
+
+        // 仅把最多 60 条完整结果发送给前端。
+        const clientResults = filteredResults.slice(
+          0,
+          MAX_RESULTS_TO_CLIENT,
+        );
 
         const searchId = makeSearchId();
 
         const data: MovieDataPart = {
           searchId,
           keyword,
-          total: safeResults.length,
+          totalFound,
+          returnedCount: clientResults.length,
+
           outcomes: outcomes.map((outcome) => ({
-            sourceKey: String(outcome.sourceKey || "").slice(0, 120),
+            sourceKey: String(
+              outcome.sourceKey || "",
+            ).slice(0, 120),
             ok: Boolean(outcome.ok),
             list: [],
             error: outcome.error
@@ -400,20 +463,30 @@ export async function POST(request: Request) {
               : undefined,
             timedOut: Boolean(outcome.timedOut),
             ms:
-              typeof outcome.ms === "number" && Number.isFinite(outcome.ms)
+              typeof outcome.ms === "number" &&
+              Number.isFinite(outcome.ms)
                 ? outcome.ms
                 : undefined,
           })),
-          results: safeResults,
+
+          results: clientResults,
           createdAt: Date.now(),
         };
+
+        // 暂存完整数据，等待 onStepFinish 写入 UI Data Stream。
+        pendingMovieData.set(searchId, data);
 
         return {
           ok: true,
           searchId,
-          summary: createModelSummary(keyword, outcomes, safeResults),
-          // 这里不返回完整影片列表，避免进入模型上下文。
-          total: safeResults.length,
+          totalFound,
+          returnedCount: clientResults.length,
+          summary: createModelSummary(
+            keyword,
+            outcomes,
+            filteredResults,
+            totalFound,
+          ),
         };
       } catch (error) {
         if (request.signal.aborted) {
@@ -423,7 +496,10 @@ export async function POST(request: Request) {
           };
         }
 
-        console.error("[Friday] search_movie failed:", error);
+        console.error(
+          "[Friday] search_movie failed:",
+          error,
+        );
 
         return {
           ok: false,
@@ -433,7 +509,12 @@ export async function POST(request: Request) {
     },
   });
 
-  let latestMovieData: MovieDataPart | null = null;
+  const pendingMovieData = new Map<
+    string,
+    MovieDataPart
+  >();
+
+  const sentSearchIds = new Set<string>();
 
   const stream = createUIMessageStream({
     originalMessages: messages,
@@ -443,9 +524,11 @@ export async function POST(request: Request) {
         model,
         system,
         messages: await convertToModelMessages(messages),
+
         tools: {
           search_movie: searchMovieTool,
         },
+
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         abortSignal: request.signal,
         temperature: 0.3,
@@ -453,7 +536,9 @@ export async function POST(request: Request) {
 
         onStepFinish: async ({ toolResults }) => {
           for (const toolResult of toolResults) {
-            if (toolResult.toolName !== "search_movie") continue;
+            if (toolResult.toolName !== "search_movie") {
+              continue;
+            }
 
             const output = toolResult.output as
               | {
@@ -462,11 +547,35 @@ export async function POST(request: Request) {
                 }
               | undefined;
 
-            if (!output?.ok || !output.searchId) continue;
+            if (
+              !output?.ok ||
+              !output.searchId ||
+              sentSearchIds.has(output.searchId)
+            ) {
+              continue;
+            }
 
-            // 完整影片数据不从模型工具结果读取。
-            // 搜索结果会在下方独立数据通道中发送。
-            // 此处只做步骤状态记录，避免重复向模型注入大对象。
+            const movieData = pendingMovieData.get(
+              output.searchId,
+            );
+
+            if (!movieData) {
+              console.error(
+                "[Friday] Movie data missing:",
+                output.searchId,
+              );
+              continue;
+            }
+
+            // 完整影片数据在这里写入 UI Data Stream。
+            writer.write({
+              type: "data-movies",
+              id: movieData.searchId,
+              data: movieData,
+            });
+
+            sentSearchIds.add(output.searchId);
+            pendingMovieData.delete(output.searchId);
           }
         },
       });
@@ -480,6 +589,7 @@ export async function POST(request: Request) {
 
     onError: (error) => {
       console.error("[Friday] UI stream error:", error);
+
       return "Friday 暂时遇到问题，请稍后重试。";
     },
   });
