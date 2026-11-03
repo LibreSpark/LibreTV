@@ -13,9 +13,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^0.1.14",
+    "@ai-sdk/react": "^1.1.9",
     "@opennextjs/cloudflare": "^1.0.0",
     "@tanstack/react-query": "^5.59.0",
     "@tanstack/react-virtual": "^3.14.12",
+    "ai": "^3.4.33",
     "artplayer": "^5.2.3",
     "dexie": "^4.0.8",
     "dexie-react-hooks": "^1.1.7",
@@ -25,6 +28,7 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "zod": "^3.24.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
