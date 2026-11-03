@@ -96,23 +96,80 @@ function assertArray<T>(value: unknown, what: string): T[] {
 
 async function fetchJson(path: string): Promise<unknown> {
   const primary = apiBase();
-  // 主实例失败（限流/宕机/网络不通）时回退官方实例；两者相同则只试一次
-  const bases = primary === FALLBACK_BASE ? [primary] : [primary, FALLBACK_BASE];
 
-  let lastError: unknown;
-  for (const base of bases) {
+  // 主实例失败后回退备用实例；相同地址只请求一次
+  const bases = primary === FALLBACK_BASE
+    ? [primary]
+    : [primary, FALLBACK_BASE];
+
+  const failures: string[] = [];
+
+  for (let index = 0; index < bases.length; index++) {
+    const base = bases[index];
+    const label = index === 0 ? '主接口' : '备用接口';
+
+    let host = '未知地址';
+    try {
+      host = new URL(base).host;
+    } catch {
+      // 保留未知地址标记
+    }
+
     try {
       const res = await fetchUpstream(`${base}${path}`, {
         timeoutMs: 8000,
-        headers: { 'User-Agent': UA, Accept: 'application/json' },
+        headers: {
+          'User-Agent': UA,
+          Accept: 'application/json',
+        },
       });
-      if (!res.ok) throw new Error(`60s API 响应异常 (${res.status})`);
-      return await res.json();
+
+      if (!res.ok) {
+        const reason = `HTTP ${res.status}`;
+        failures.push(`${label}(${host}) ${reason}`);
+
+        console.warn(
+          `[hot-list] ${label} ${host} ${path} 请求失败：${reason}`
+        );
+
+        continue;
+      }
+
+      try {
+        const data: unknown = await res.json();
+
+        console.info(
+          `[hot-list] ${label} ${host} ${path} 请求成功`
+        );
+
+        return data;
+      } catch (err) {
+        const reason = err instanceof Error
+          ? `JSON解析失败：${err.message}`
+          : 'JSON解析失败';
+
+        failures.push(`${label}(${host}) ${reason}`);
+
+        console.error(
+          `[hot-list] ${label} ${host} ${path} ${reason}`
+        );
+      }
     } catch (err) {
-      lastError = err;
+      const reason = err instanceof Error
+        ? err.message
+        : String(err);
+
+      failures.push(`${label}(${host}) ${reason}`);
+
+      console.error(
+        `[hot-list] ${label} ${host} ${path} 请求异常：${reason}`
+      );
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('60s API 请求失败');
+
+  throw new Error(
+    `60s API 请求失败：${failures.join('；') || '未知错误'}`
+  );
 }
 
 export async function fetchHotList(id: HotListId): Promise<DoubanItem[]> {
