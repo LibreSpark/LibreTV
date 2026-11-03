@@ -129,7 +129,7 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
       </div>
 
       {query.isError ? (
-        <QueryError error={query.error} onRetry={() => void query.refetch()} />
+        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试或在设置中关闭</p>
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
@@ -180,7 +180,7 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试或在设置中关闭</p>
+        <QueryError error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
