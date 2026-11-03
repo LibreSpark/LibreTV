@@ -1,5 +1,4 @@
 import type { DoubanItem } from './types';
-import posterOverrides from '@/data/douban-posters.json';
 import { fetchUpstream, getCache, setCache } from './fetch-utils';
 
 /**
@@ -67,8 +66,7 @@ interface SixtyResponse<T> {
 export function doubanWeeklyToItem(raw: DoubanWeeklyRaw, isTv: boolean): DoubanItem | undefined {
   // 原生 cover 是 img*.doubanio.com，命中图片代理的豆瓣白名单并带 Referer 伪装，
   // 可稳定加载；cover_proxy（doubanio.viki.moe 公共镜像）限流严重，仅作兜底
-  const overrides = posterOverrides as Record<string, string>;
-  const cover = overrides[String(raw.id)] || raw.cover || raw.cover_proxy;
+  const cover = raw.cover || raw.cover_proxy;
   if (!raw.id || !raw.title || !cover) return undefined;
   return {
     id: String(raw.id),
