@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import type { MovieData, MovieItem } from "./FridayPanel";
 
 export function FridayMovieResults({
