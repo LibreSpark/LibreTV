@@ -3,7 +3,6 @@
 import React from "react";
 import type { RefObject } from "react";
 import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
-import { FridayMovieResults } from "@/components/friday/FridayMovieResults";
 import { FridayConversation } from "@/components/friday/FridayConversation";
 
 const MAX_MOVIE_CARDS = 60;
