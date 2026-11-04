@@ -366,7 +366,7 @@ export default function AIFloatingBall({
   const content = (
     <>
       <style jsx global>{`
-        .friday-root {
+        .friday-root{
           position: fixed;
           z-index: 30;
           right: 16px;
@@ -379,11 +379,11 @@ export default function AIFloatingBall({
 
         .friday-root button,
         .friday-root textarea,
-        .friday-root section {
+        .friday-root section{
           pointer-events: auto;
         }
 
-        .friday-fab {
+        .friday-root .friday-fab{
           position: relative;
           display: grid;
           place-items: center;
@@ -402,9 +402,9 @@ export default function AIFloatingBall({
           filter: drop-shadow(0 8px 16px rgba(0,0,0,.24));
         }
 
-        .friday-fab:active { cursor: grabbing; }
+        .friday-root .friday-fab:active{ cursor: grabbing; }
 
-        .friday-orb-visual {
+        .friday-root .friday-orb-visual{
           position: relative;
           isolation: isolate;
           width: 100%;
@@ -429,7 +429,7 @@ export default function AIFloatingBall({
           transition: border-radius .45s ease, transform .45s ease;
         }
 
-        .friday-orb-inner {
+        .friday-root .friday-orb-inner{
           position: absolute;
           z-index: 0;
           inset: 3px;
@@ -442,7 +442,7 @@ export default function AIFloatingBall({
             inset 0 1px 3px rgba(255,255,255,.22);
         }
 
-        .friday-orb-fluid {
+        .friday-root .friday-orb-fluid{
           position: absolute;
           z-index: 1;
           inset: 8%;
@@ -458,7 +458,7 @@ export default function AIFloatingBall({
           pointer-events: none;
         }
 
-        .friday-orb-rim {
+        .friday-root .friday-orb-rim{
           position: absolute;
           z-index: 2;
           inset: 0;
@@ -483,7 +483,7 @@ export default function AIFloatingBall({
           animation: friday-orb-spectrum 12s linear infinite;
         }
 
-        .friday-orb-glint {
+        .friday-root .friday-orb-glint{
           position: absolute;
           z-index: 3;
           top: 10%;
@@ -498,7 +498,7 @@ export default function AIFloatingBall({
           pointer-events: none;
         }
 
-        .friday-orb-glint-small {
+        .friday-root .friday-orb-glint-small{
           position: absolute;
           z-index: 3;
           top: 23%;
@@ -534,12 +534,12 @@ export default function AIFloatingBall({
           100% { transform: translate(-1%,3%) rotate(3deg) scale(1.02); }
         }
 
-        .friday-fab:active .friday-orb-visual {
+        .friday-root .friday-fab:active .friday-orb-visual{
           transform: scale(.86);
           border-radius: 42% 58% 60% 40% / 57% 43% 57% 43%;
         }
 
-        .friday-restore {
+        .friday-root .friday-restore{
           position: fixed;
           right: 8px;
           bottom: max(22px,env(safe-area-inset-bottom,0px));
@@ -562,7 +562,7 @@ export default function AIFloatingBall({
           pointer-events: auto;
         }
 
-        .friday-panel {
+        .friday-root .friday-panel{
           position: fixed;
           right: 14px;
           bottom: calc(96px + env(safe-area-inset-bottom,0px));
@@ -596,7 +596,7 @@ export default function AIFloatingBall({
           100% { transform: translate3d(0,0,0) scale(1); border-radius: 25px; }
         }
 
-        .friday-panel.friday-expanded {
+        .friday-root .friday-panel.friday-expanded{
           right: 8px;
           bottom: 8px;
           width: min(650px,calc(100vw - 16px));
@@ -612,7 +612,7 @@ export default function AIFloatingBall({
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
-        .friday-panel.friday-closing {
+        .friday-root .friday-panel.friday-closing{
           pointer-events: none;
           animation: friday-panel-close .25s ease-in forwards;
         }
@@ -622,7 +622,7 @@ export default function AIFloatingBall({
           to { opacity: 0; transform: translate(16px,15px) scale(.94); }
         }
 
-        .friday-panel::before {
+        .friday-root .friday-panel::before{
           position: absolute;
           z-index: -1;
           inset: 0;
@@ -634,7 +634,7 @@ export default function AIFloatingBall({
           pointer-events: none;
         }
 
-        .friday-canvas-top {
+        .friday-root .friday-canvas-top{
           position: relative;
           z-index: 3;
           display: flex;
@@ -645,7 +645,7 @@ export default function AIFloatingBall({
           padding: 10px 14px 3px 17px;
         }
 
-        .friday-wordmark {
+        .friday-root .friday-wordmark{
           color: rgba(255,255,255,.96);
           font-family: Georgia,"Times New Roman",serif;
           font-size: 20px;
@@ -654,13 +654,13 @@ export default function AIFloatingBall({
           text-shadow: 0 1px 12px rgba(255,255,255,.15);
         }
 
-        .friday-header-actions {
+        .friday-root .friday-header-actions{
           display: flex;
           align-items: center;
           gap: 9px;
         }
 
-        .friday-state-wrap {
+        .friday-root .friday-state-wrap{
           display: flex;
           align-items: center;
           gap: 7px;
@@ -668,7 +668,7 @@ export default function AIFloatingBall({
           font-size: 10px;
         }
 
-        .friday-status-dot {
+        .friday-root .friday-status-dot{
           width: 7px;
           height: 7px;
           flex: 0 0 7px;
@@ -678,7 +678,7 @@ export default function AIFloatingBall({
           animation: friday-dot-pulse 1.8s ease-in-out infinite;
         }
 
-        .friday-close-btn {
+        .friday-root .friday-close-btn{
           display: grid;
           place-items: center;
           width: 29px;
@@ -694,7 +694,7 @@ export default function AIFloatingBall({
           -webkit-tap-highlight-color: transparent;
         }
 
-        .friday-close-btn:active {
+        .friday-root .friday-close-btn:active{
           background: rgba(255,255,255,.2);
           transform: scale(.94);
         }
@@ -704,7 +704,7 @@ export default function AIFloatingBall({
           50% { opacity: 1; transform: scale(1.18); }
         }
 
-        .friday-messages {
+        .friday-root .friday-messages{
           position: relative;
           z-index: 1;
           flex: 1 1 auto;
@@ -718,11 +718,11 @@ export default function AIFloatingBall({
           scrollbar-color: rgba(255,255,255,.17) transparent;
         }
 
-        .friday-panel:not(.friday-expanded) .friday-messages {
+        .friday-root .friday-panel:not(.friday-expanded) .friday-messages{
           max-height: 150px;
         }
 
-        .friday-welcome {
+        .friday-root .friday-welcome{
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -730,14 +730,14 @@ export default function AIFloatingBall({
           padding: 4px 0 10px;
         }
 
-        .friday-welcome-kicker {
+        .friday-root .friday-welcome-kicker{
           margin-bottom: 6px;
           color: rgba(255,255,255,.43);
           font-size: 9px;
           letter-spacing: 2px;
         }
 
-        .friday-welcome-title {
+        .friday-root .friday-welcome-title{
           margin: 0 0 5px;
           color: #fff;
           font-size: 19px;
@@ -745,27 +745,27 @@ export default function AIFloatingBall({
           letter-spacing: -.6px;
         }
 
-        .friday-welcome-text {
+        .friday-root .friday-welcome-text{
           color: rgba(255,255,255,.65);
           font-size: 11px;
           line-height: 1.65;
         }
 
-        .friday-message {
+        .friday-root .friday-message{
           display: flex;
           justify-content: flex-start;
           margin: 0 0 11px;
           animation: friday-message-in .3s ease both;
         }
 
-        .friday-message-user { justify-content: flex-end; }
+        .friday-root .friday-message-user{ justify-content: flex-end; }
 
         @keyframes friday-message-in {
           from { opacity: 0; transform: translateY(7px); }
           to { opacity: 1; transform: translateY(0); }
         }
 
-        .friday-message-content {
+        .friday-root .friday-message-content{
           max-width: 96%;
           color: rgba(255,255,255,.95);
           font-size: 12px;
@@ -774,7 +774,7 @@ export default function AIFloatingBall({
           overflow-wrap: anywhere;
         }
 
-        .friday-message-user .friday-message-content {
+        .friday-root .friday-message-user .friday-message-content{
           max-width: 86%;
           padding: 7px 11px;
           border: 1px solid rgba(255,255,255,.1);
@@ -783,7 +783,7 @@ export default function AIFloatingBall({
           color: rgba(255,255,255,.9);
         }
 
-        .friday-status {
+        .friday-root .friday-status{
           display: flex;
           align-items: center;
           gap: 8px;
@@ -793,7 +793,7 @@ export default function AIFloatingBall({
           animation: friday-status-pulse 1.8s ease-in-out infinite;
         }
 
-        .friday-status::before {
+        .friday-root .friday-status::before{
           width: 5px;
           height: 5px;
           border-radius: 50%;
@@ -807,7 +807,7 @@ export default function AIFloatingBall({
           50% { opacity: 1; }
         }
 
-        .friday-error {
+        .friday-root .friday-error{
           margin: 9px 0;
           padding: 10px 12px;
           border: 1px solid rgba(248,113,113,.2);
@@ -818,7 +818,7 @@ export default function AIFloatingBall({
           line-height: 1.6;
         }
 
-        .friday-orb-stage {
+        .friday-root .friday-orb-stage{
           position: relative;
           z-index: 2;
           display: flex;
@@ -831,34 +831,34 @@ export default function AIFloatingBall({
           pointer-events: none;
         }
 
-        .friday-orb-stage .friday-orb-visual {
+        .friday-root .friday-orb-stage .friday-orb-visual{
           width: 32px;
           height: 32px;
           flex: 0 0 32px;
         }
 
-        .friday-orb-status {
+        .friday-root .friday-orb-status{
           color: rgba(255,255,255,.69);
           font-size: 10px;
           letter-spacing: .3px;
         }
 
-        .friday-panel[data-state="listening"] .friday-orb-visual {
+        .friday-root .friday-panel[data-state="listening"] .friday-orb-visual{
           animation-duration: 5s,1.5s;
           filter: brightness(1.22);
         }
 
-        .friday-panel[data-state="thinking"] .friday-orb-visual {
+        .friday-root .friday-panel[data-state="thinking"] .friday-orb-visual{
           animation-duration: 2.5s,1.1s;
           filter: brightness(1.24) saturate(1.3);
         }
 
-        .friday-panel[data-state="speaking"] .friday-orb-visual {
+        .friday-root .friday-panel[data-state="speaking"] .friday-orb-visual{
           animation-duration: 2s,.75s;
           filter: brightness(1.28);
         }
 
-        .friday-input-area {
+        .friday-root .friday-input-area{
           position: relative;
           z-index: 4;
           flex: 0 0 auto;
@@ -869,7 +869,7 @@ export default function AIFloatingBall({
           backdrop-filter: blur(15px);
         }
 
-        .friday-input-box {
+        .friday-root .friday-input-box{
           display: flex;
           align-items: flex-end;
           gap: 7px;
@@ -883,7 +883,7 @@ export default function AIFloatingBall({
           box-shadow: 0 8px 25px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.2);
         }
 
-        .friday-plus-btn {
+        .friday-root .friday-plus-btn{
           display: grid;
           place-items: center;
           width: 27px;
@@ -898,9 +898,9 @@ export default function AIFloatingBall({
           cursor: pointer;
         }
 
-        .friday-plus-btn:disabled { opacity: .4; cursor: default; }
+        .friday-root .friday-plus-btn:disabled{ opacity: .4; cursor: default; }
 
-        .friday-input-divider {
+        .friday-root .friday-input-divider{
           width: 1px;
           height: 21px;
           flex: 0 0 1px;
@@ -908,7 +908,7 @@ export default function AIFloatingBall({
           background: rgba(255,255,255,.18);
         }
 
-        .friday-textarea {
+        .friday-root .friday-textarea{
           flex: 1;
           min-width: 0;
           max-height: 110px;
@@ -924,11 +924,11 @@ export default function AIFloatingBall({
           padding: 5px 0;
         }
 
-        .friday-textarea::placeholder { color: rgba(255,255,255,.53); }
-        .friday-textarea:disabled { opacity: .5; }
+        .friday-root .friday-textarea::placeholder{ color: rgba(255,255,255,.53); }
+        .friday-root .friday-textarea:disabled{ opacity: .5; }
 
-        .friday-send-btn,
-        .friday-mic-btn {
+        .friday-root .friday-send-btn,
+        .friday-root .friday-mic-btn{
           display: grid;
           place-items: center;
           width: 33px;
@@ -945,30 +945,30 @@ export default function AIFloatingBall({
           -webkit-tap-highlight-color: transparent;
         }
 
-        .friday-send-btn {
+        .friday-root .friday-send-btn{
           border-color: rgba(255,255,255,.8);
           background: #f5f5f5;
           color: #151515;
           font-size: 19px;
         }
 
-        .friday-send-btn:disabled,
-        .friday-mic-btn:disabled {
+        .friday-root .friday-send-btn:disabled,
+        .friday-root .friday-mic-btn:disabled{
           opacity: .4;
           cursor: not-allowed;
         }
 
-        .friday-mic-btn.active {
+        .friday-root .friday-mic-btn.active{
           border-color: rgba(130,221,255,.7);
           background: rgba(89,185,255,.23);
           color: #b8eaff;
           animation: friday-dot-pulse 1.4s ease-in-out infinite;
         }
 
-        .friday-send-btn:active,
-        .friday-mic-btn:active { transform: scale(.91); }
+        .friday-root .friday-send-btn:active,
+        .friday-root .friday-mic-btn:active{ transform: scale(.91); }
 
-        .friday-tools {
+        .friday-root .friday-tools{
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -978,14 +978,14 @@ export default function AIFloatingBall({
           padding: 0 6px;
         }
 
-        .friday-tool-group {
+        .friday-root .friday-tool-group{
           display: flex;
           align-items: center;
           gap: 9px;
           min-width: 0;
         }
 
-        .friday-tool-btn {
+        .friday-root .friday-tool-btn{
           padding: 4px 2px;
           border: 0;
           background: transparent;
@@ -996,19 +996,19 @@ export default function AIFloatingBall({
           white-space: nowrap;
         }
 
-        .friday-tool-btn.active { color: #a9dcff; }
-        .friday-tool-btn:disabled { opacity: .35; cursor: not-allowed; }
+        .friday-root .friday-tool-btn.active{ color: #a9dcff; }
+        .friday-root .friday-tool-btn:disabled{ opacity: .35; cursor: not-allowed; }
 
-        .friday-voice-error {
+        .friday-root .friday-voice-error{
           margin: 6px 6px 0;
           color: #ffb4a8;
           font-size: 10px;
           line-height: 1.55;
         }
 
-        .friday-movie-section { margin: 10px 0 15px; }
+        .friday-root .friday-movie-section{ margin: 10px 0 15px; }
 
-        .friday-result-heading {
+        .friday-root .friday-result-heading{
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -1019,18 +1019,18 @@ export default function AIFloatingBall({
           font-weight: 600;
         }
 
-        .friday-result-count {
+        .friday-root .friday-result-count{
           color: rgba(255,255,255,.55);
           font-weight: 400;
         }
 
-        .friday-movie-grid {
+        .friday-root .friday-movie-grid{
           display: grid;
           grid-template-columns: repeat(2,minmax(0,1fr));
           gap: 8px;
         }
 
-        .friday-movie-card {
+        .friday-root .friday-movie-card{
           display: flex;
           min-width: 0;
           gap: 8px;
@@ -1044,12 +1044,12 @@ export default function AIFloatingBall({
           transition: background .2s ease,transform .2s ease;
         }
 
-        .friday-movie-card:active {
+        .friday-root .friday-movie-card:active{
           background: rgba(255,255,255,.15);
           transform: scale(.985);
         }
 
-        .friday-poster {
+        .friday-root .friday-poster{
           position: relative;
           width: 46px;
           height: 65px;
@@ -1059,7 +1059,7 @@ export default function AIFloatingBall({
           background: rgba(20,22,27,.8);
         }
 
-        .friday-poster img {
+        .friday-root .friday-poster img{
           position: absolute;
           z-index: 1;
           inset: 0;
@@ -1068,7 +1068,7 @@ export default function AIFloatingBall({
           object-fit: cover;
         }
 
-        .friday-poster-fallback {
+        .friday-root .friday-poster-fallback{
           position: absolute;
           inset: 0;
           display: grid;
@@ -1077,7 +1077,7 @@ export default function AIFloatingBall({
           background: linear-gradient(145deg,#303632,#111512);
         }
 
-        .friday-poster-remark {
+        .friday-root .friday-poster-remark{
           position: absolute;
           z-index: 2;
           right: 2px;
@@ -1094,13 +1094,13 @@ export default function AIFloatingBall({
           white-space: nowrap;
         }
 
-        .friday-movie-info {
+        .friday-root .friday-movie-info{
           min-width: 0;
           flex: 1;
           padding: 2px 0;
         }
 
-        .friday-movie-name {
+        .friday-root .friday-movie-name{
           display: -webkit-box;
           overflow: hidden;
           -webkit-box-orient: vertical;
@@ -1111,8 +1111,8 @@ export default function AIFloatingBall({
           line-height: 1.5;
         }
 
-        .friday-movie-meta,
-        .friday-movie-source {
+        .friday-root .friday-movie-meta,
+        .friday-root .friday-movie-source{
           margin-top: 4px;
           overflow: hidden;
           font-size: 9px;
@@ -1120,38 +1120,38 @@ export default function AIFloatingBall({
           white-space: nowrap;
         }
 
-        .friday-movie-meta { color: rgba(255,255,255,.55); }
-        .friday-movie-source { color: rgba(190,221,255,.85); }
+        .friday-root .friday-movie-meta{ color: rgba(255,255,255,.55); }
+        .friday-root .friday-movie-source{ color: rgba(190,221,255,.85); }
 
-        .friday-empty-result {
+        .friday-root .friday-empty-result{
           margin: 10px 0;
           color: rgba(255,255,255,.65);
           font-size: 12px;
         }
 
-        .friday-expanded .friday-messages {
+        .friday-root .friday-expanded .friday-messages{
           max-height: none;
           padding: 18px 23px;
         }
 
-        .friday-expanded .friday-welcome { min-height: 180px; }
-        .friday-expanded .friday-welcome-title { font-size: 32px; }
-        .friday-expanded .friday-message-content { font-size: 14px; }
-        .friday-expanded .friday-orb-stage { min-height: 55px; }
+        .friday-root .friday-expanded .friday-welcome{ min-height: 180px; }
+        .friday-root .friday-expanded .friday-welcome-title{ font-size: 32px; }
+        .friday-root .friday-expanded .friday-message-content{ font-size: 14px; }
+        .friday-root .friday-expanded .friday-orb-stage{ min-height: 55px; }
 
-        .friday-expanded .friday-orb-stage .friday-orb-visual {
+        .friday-root .friday-expanded .friday-orb-stage .friday-orb-visual{
           width: 48px;
           height: 48px;
           flex-basis: 48px;
         }
 
         @media (max-width:600px) {
-          .friday-root {
+          .friday-root{
             right: 16px;
             bottom: max(20px,env(safe-area-inset-bottom,0px));
           }
 
-          .friday-panel {
+          .friday-root .friday-panel{
             right: 8px;
             bottom: calc(92px + env(safe-area-inset-bottom,0px));
             width: calc(100vw - 16px);
@@ -1159,7 +1159,7 @@ export default function AIFloatingBall({
             border-radius: 24px;
           }
 
-          .friday-panel.friday-expanded {
+          .friday-root .friday-panel.friday-expanded{
             right: 4px;
             bottom: 0;
             width: calc(100vw - 8px);
@@ -1168,30 +1168,30 @@ export default function AIFloatingBall({
             border-radius: 25px 25px 0 0;
           }
 
-          .friday-canvas-top {
+          .friday-root .friday-canvas-top{
             padding: max(10px,env(safe-area-inset-top,0px)) 13px 3px;
           }
 
-          .friday-messages {
+          .friday-root .friday-messages{
             padding-right: 14px;
             padding-left: 14px;
           }
 
-          .friday-expanded .friday-messages { padding: 16px; }
+          .friday-root .friday-expanded .friday-messages{ padding: 16px; }
 
-          .friday-input-area {
+          .friday-root .friday-input-area{
             padding-right: 9px;
             padding-left: 9px;
           }
 
-          .friday-movie-grid { gap: 7px; }
+          .friday-root .friday-movie-grid{ gap: 7px; }
 
-          .friday-movie-card {
+          .friday-root .friday-movie-card{
             gap: 6px;
             padding: 6px;
           }
 
-          .friday-poster {
+          .friday-root .friday-poster{
             width: 42px;
             height: 61px;
             flex-basis: 42px;
@@ -1199,48 +1199,48 @@ export default function AIFloatingBall({
         }
 
         @media (max-height:520px) {
-          .friday-panel.friday-expanded {
+          .friday-root .friday-panel.friday-expanded{
             bottom: 4px;
             height: calc(100dvh - 8px);
             min-height: 0;
             border-radius: 20px;
           }
 
-          .friday-canvas-top {
+          .friday-root .friday-canvas-top{
             min-height: 38px;
             padding-top: 7px;
           }
 
-          .friday-expanded .friday-welcome { min-height: 100px; }
-          .friday-orb-stage { min-height: 32px; }
-          .friday-input-area { padding-top: 5px; }
-          .friday-tools { margin-top: 2px; }
+          .friday-root .friday-expanded .friday-welcome{ min-height: 100px; }
+          .friday-root .friday-orb-stage{ min-height: 32px; }
+          .friday-root .friday-input-area{ padding-top: 5px; }
+          .friday-root .friday-tools{ margin-top: 2px; }
         }
 
         @media (prefers-reduced-motion:reduce) {
-          .friday-fab *,
-          .friday-panel,
-          .friday-orb-visual,
-          .friday-orb-fluid,
-          .friday-orb-rim,
-          .friday-status-dot,
-          .friday-message,
-          .friday-status {
+          .friday-root .friday-fab *,
+        .friday-root .friday-panel,
+        .friday-root .friday-orb-visual,
+        .friday-root .friday-orb-fluid,
+        .friday-root .friday-orb-rim,
+        .friday-root .friday-status-dot,
+        .friday-root .friday-message,
+        .friday-root .friday-status{
             animation: none !important;
           }
 
-          .friday-fab,
-          .friday-send-btn,
-          .friday-mic-btn,
-          .friday-movie-card {
+          .friday-root .friday-fab,
+        .friday-root .friday-send-btn,
+        .friday-root .friday-mic-btn,
+        .friday-root .friday-movie-card{
             transition: none !important;
           }
         }
 
         @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
-          .friday-panel { background: rgba(12,15,25,.97); }
-          .friday-input-box,
-          .friday-movie-card { background: rgba(35,37,44,.96); }
+          .friday-root .friday-panel{ background: rgba(12,15,25,.97); }
+          .friday-root .friday-input-box,
+        .friday-root .friday-movie-card{ background: rgba(35,37,44,.96); }
         }
       `}</style>
 
@@ -1306,8 +1306,6 @@ export default function AIFloatingBall({
             onOpenMovie={handleOpenMovie}
           />
         ) : null}
-      </div>
-
       {showFab && fabHidden && !open ? (
         <button
           type="button"
@@ -1319,6 +1317,7 @@ export default function AIFloatingBall({
           F
         </button>
       ) : null}
+      </div>
     </>
   );
 
