@@ -72,7 +72,7 @@ export default function AIFloatingBall({
 
   const {
     listening, voiceEnabled, speaking, completed, voiceError, voiceSessionActive,
-    voiceSessionActiveRef, scheduleVoiceResume, setSpeaking,
+    voiceSessionActiveRef, startListening, scheduleVoiceResume, setSpeaking,
     clearVoiceResumeTimer, setVoiceSession, stopRecognition, stopSpeech,
     stopAllVoice, speakText, toggleVoiceEnabled,
     stopSpeechAndResume, toggleListening, setVoiceError, setCompleted,
