@@ -20,6 +20,7 @@ import { useFridayVoiceController } from "@/components/friday/useFridayVoiceCont
 import { useFridayFabController } from "@/components/friday/useFridayFabController";
 import { useFridayResponseController } from "@/components/friday/useFridayResponseController";
 import { useFridayRequestLifecycle } from "@/components/friday/useFridayRequestLifecycle";
+import { useFridayPanelEvents } from "@/components/friday/useFridayPanelEvents";
 
 import { useFridaySources, type FridaySourceConfig } from "@/components/friday/useFridaySources";
 
@@ -398,22 +399,6 @@ export default function AIFloatingBall({
     };
   }, [clearMovieCloseTimer]);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closePanel();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open, closePanel]);
-
   const clearConversation = useCallback(() => {
     interrupt();
 
@@ -429,27 +414,13 @@ export default function AIFloatingBall({
     }
   }, [interrupt, setMessages]);
 
-  // Header and homepage hero share one stable opening event contract.
-  useEffect(() => {
-    const handleToggleFridayPanel = (event: Event) => {
-      const detail = (event as CustomEvent<{ reset?: boolean; listen?: boolean }>).detail;
-
-      if (detail?.reset) {
-        clearConversation();
-      }
-
-      if (detail?.listen) {
-        openAndListen();
-      } else {
-        openPanel();
-      }
-    };
-
-    window.addEventListener("toggle-friday-panel", handleToggleFridayPanel);
-    return () => {
-      window.removeEventListener("toggle-friday-panel", handleToggleFridayPanel);
-    };
-  }, [clearConversation, openAndListen, openPanel]);
+  useFridayPanelEvents({
+    open,
+    closePanel,
+    clearConversation,
+    openAndListen,
+    openPanel,
+  });
 
   const resizeTextarea = useCallback(() => {
     const element = inputRef.current;
