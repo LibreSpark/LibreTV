@@ -8,7 +8,7 @@ This document records the safe extraction boundaries for the homepage refactor. 
 - `FridayOrbVisual` is a pure visual component. It renders the orb layers only and owns no microphone, speech-recognition, chat, or search state.
 - `useFridayVoiceController` now owns browser speech-recognition and speech-synthesis lifecycles, voice-session refs/timers, permission and recognition errors, and the callbacks/state returned to the orchestrator.
 - `AIFloatingBall` remains the single orchestrator for chat transport, request state, app-store source selection, panel lifecycle, and movie-detail events. It passes the current busy/open/closing refs and message callback into the voice controller.
-- The conversation panel markup and its scoped styles are still hosted by `AIFloatingBall`; panel extraction remains a separate follow-up after the new hook passes CI and behavior checks.
+- `FridayPanel` now owns the conversation panel's presentation markup, message rendering, movie-card rendering, and input/tool controls. It receives state and callbacks through explicit props; it does not call `useChat`, access the app store, or own voice lifecycle.
 
 ## Next extraction boundaries
 
@@ -26,14 +26,14 @@ It must not own `useChat`, movie search, app-store source selection, detail navi
 
 ### Conversation panel
 
-Target: `FridayPanel`
+Implemented: `FridayPanel`
 
 A presentation component receiving explicit props:
 - open/closing/expanded and agent/voice display states
 - messages, movie result data, loading/error state and input value
 - callbacks for close, send, microphone toggle, interrupt, expand, hide, restore, and movie selection
 
-It must not call `useChat`, access the app store, construct speech-recognition objects, or change search/detail URL contracts. Movie selection must continue to emit the existing `friday-open-detail` event through the orchestrator.
+It does not call `useChat`, access the app store, or construct speech-recognition objects. Movie selection is forwarded through `onOpenMovie`; the orchestrator continues to emit the existing `friday-open-detail` event.
 
 ### Orchestrator
 
