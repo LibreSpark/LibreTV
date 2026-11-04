@@ -4,19 +4,16 @@
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useReducer,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
 import { FridayStyles } from "@/components/friday/FridayStyles";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
 import { fridayReducer, initialFridayState } from "@/lib/friday/state";
 import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
 import { FridayPanel, getPartText, getMovieDataForMessage } from "@/components/friday/FridayPanel";
-import type { MessageLike, MovieItem } from "@/components/friday/FridayPanel";
+import type { MovieItem } from "@/components/friday/FridayPanel";
 import { useFridayVoiceController } from "@/components/friday/useFridayVoiceController";
 import { useFridayFabController } from "@/components/friday/useFridayFabController";
 import { useFridayResponseController } from "@/components/friday/useFridayResponseController";
@@ -25,6 +22,7 @@ import { useFridayPanelEvents } from "@/components/friday/useFridayPanelEvents";
 import { useFridayMovieTransition } from "@/components/friday/useFridayMovieTransition";
 
 import { useFridaySources, type FridaySourceConfig } from "@/components/friday/useFridaySources";
+import { useFridayChatSession } from "@/components/friday/useFridayChatSession";
 
 
 
@@ -85,34 +83,18 @@ export default function AIFloatingBall({
 
   const { activeSources, activeFilterAdult } = useFridaySources(sources, filterAdult);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        body: {
-          sources: activeSources,
-          filterAdult: activeFilterAdult,
-        },
-      }),
-    [activeSources, activeFilterAdult],
-  );
-
   const {
-    messages,
+    typedMessages,
     sendMessage,
     status,
     error,
     stop,
     setMessages,
-  } = useChat({
-    transport,
-    onError: (chatError) => {
-      console.error("[Friday] Chat error:", chatError);
-    },
+    busy,
+  } = useFridayChatSession({
+    sources: activeSources,
+    filterAdult: activeFilterAdult,
   });
-
-  const typedMessages = messages as unknown as MessageLike[];
-  const busy = status === "submitted" || status === "streaming";
 
   const { beginRequest, failActiveRequest, cancelActiveRequest } =
     useFridayRequestLifecycle({ busy, error, dispatchMachine });
