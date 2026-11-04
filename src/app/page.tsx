@@ -134,9 +134,8 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
         typeof sourceKey !== 'string' ||
         !sourceKey.trim() ||
         sourceKey.length > 100 ||
-        typeof sourceName !== 'string' ||
-        !sourceName.trim() ||
-        sourceName.length > 100 ||
+        (sourceName !== undefined &&
+          (typeof sourceName !== 'string' || sourceName.length > 100)) ||
         !normalizedVodId ||
         typeof name !== 'string' ||
         !name.trim() ||
@@ -174,11 +173,14 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
       }
 
       const normalizedSourceKey = sourceKey.trim();
-      const normalizedSourceName = sourceName.trim();
+      const suppliedSourceName =
+        typeof sourceName === 'string' ? sourceName.trim() : '';
       const currentStore = useAppStore.getState();
-      
+
       // 先读取本地配置，普通数据源仍然保持原有行为。
       const localSource = resolveSource(currentStore, normalizedSourceKey);
+      const normalizedSourceName =
+        suppliedSourceName || localSource?.name || normalizedSourceKey;
       let source = localSource;
       
       // Friday 搜索结果携带的 sourceUrl 是本次搜索实际使用的地址。
