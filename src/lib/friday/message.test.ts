@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPartText } from "./message";
+import { getMovieDataForMessage, getPartText } from "./message";
 
 describe("Friday message parsing", () => {
   it("joins text parts", () => {
@@ -9,5 +9,9 @@ describe("Friday message parsing", () => {
 
   it("returns empty text for messages without parts", () => {
     expect(getPartText({ id: "2", role: "assistant" })).toBe("");
+  });
+
+  it("returns no movie cards when message parts are absent", () => {
+    expect(getMovieDataForMessage({ id: "3", role: "assistant" })).toEqual([]);
   });
 });
