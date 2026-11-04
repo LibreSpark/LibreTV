@@ -4,9 +4,9 @@ import React from "react";
 import type { RefObject } from "react";
 import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
 import { FridayConversation } from "@/components/friday/FridayConversation";
+import { FridayComposer } from "@/components/friday/FridayComposer";
 
 const MAX_MOVIE_CARDS = 60;
-const MAX_INPUT_LENGTH = 1000;
 
 export type MovieItem = {
   sourceKey?: string;
