@@ -21,6 +21,7 @@ import { useFridayFabController } from "@/components/friday/useFridayFabControll
 import { useFridayResponseController } from "@/components/friday/useFridayResponseController";
 import { useFridayRequestLifecycle } from "@/components/friday/useFridayRequestLifecycle";
 import { useFridayPanelEvents } from "@/components/friday/useFridayPanelEvents";
+import { useFridayMovieTransition } from "@/components/friday/useFridayMovieTransition";
 
 import { useFridaySources, type FridaySourceConfig } from "@/components/friday/useFridaySources";
 
@@ -71,10 +72,6 @@ export default function AIFloatingBall({
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-
-  const pendingMovieRef = useRef<MovieItem | null>(null);
-  const movieCloseTimerRef = useRef<number | null>(null);
-  const movieDispatchedRef = useRef(false);
 
   const {
     listening, voiceEnabled, speaking, completed, voiceError, voiceSessionActive,
@@ -146,19 +143,9 @@ export default function AIFloatingBall({
             ? "已完成"
             : "随时为你服务";
 
-  const clearMovieCloseTimer = useCallback(() => {
-    if (movieCloseTimerRef.current !== null) {
-      window.clearTimeout(movieCloseTimerRef.current);
-      movieCloseTimerRef.current = null;
-    }
-  }, []);
-
   const openPanel = useCallback(() => {
-    clearMovieCloseTimer();
+    resetPendingMovie();
     clearVoiceResumeTimer();
-
-    pendingMovieRef.current = null;
-    movieDispatchedRef.current = false;
 
     closingRef.current = false;
     openRef.current = true;
@@ -238,37 +225,8 @@ export default function AIFloatingBall({
     handleSendRef.current = handleSend;
   }, [handleSend]);
 
-  const finalizeMovieOpen = useCallback(() => {
-    if (movieDispatchedRef.current) return;
-
-    const movie = pendingMovieRef.current;
-
-    if (!movie) {
-      setClosing(false);
-      closingRef.current = false;
-      return;
-    }
-
-    movieDispatchedRef.current = true;
-    pendingMovieRef.current = null;
-
-    clearMovieCloseTimer();
-
-    closingRef.current = false;
-    setClosing(false);
-
-    window.dispatchEvent(
-      new CustomEvent("friday-open-detail", {
-        detail: movie,
-      }),
-    );
-  }, [clearMovieCloseTimer]);
-
   const closePanel = useCallback(() => {
-    clearMovieCloseTimer();
-
-    pendingMovieRef.current = null;
-    movieDispatchedRef.current = false;
+    resetPendingMovie();
 
     openRef.current = false;
     closingRef.current = false;
@@ -286,7 +244,23 @@ export default function AIFloatingBall({
       cancelActiveRequest();
     }
     setExpanded(false);
-  }, [clearMovieCloseTimer, stopAllVoice, stop, cancelActiveRequest]);
+  }, [resetPendingMovie, stopAllVoice, stop, cancelActiveRequest]);
+
+  const {
+    clearMovieCloseTimer,
+    resetPendingMovie,
+    handleOpenMovie,
+    handlePanelAnimationEnd,
+  } = useFridayMovieTransition<MovieItem>({
+    openRef,
+    closingRef,
+    busyRef,
+    setClosing,
+    setOpen,
+    setExpanded,
+    stopAllVoice,
+    stop,
+  });
 
   const {
     fabHidden,
@@ -303,53 +277,6 @@ export default function AIFloatingBall({
     onOpen: openAndListen,
     onClose: closePanel,
   });
-
-  const handleOpenMovie = useCallback(
-    (movie: MovieItem) => {
-      if (typeof window === "undefined") return;
-      if (closingRef.current || movieDispatchedRef.current) return;
-
-      stopAllVoice();
-
-      if (busyRef.current) {
-        stop();
-      }
-
-      pendingMovieRef.current = movie;
-      movieDispatchedRef.current = false;
-
-      openRef.current = false;
-      closingRef.current = true;
-
-      setClosing(true);
-      setOpen(false);
-      setExpanded(false);
-
-      clearMovieCloseTimer();
-
-      movieCloseTimerRef.current = window.setTimeout(() => {
-        finalizeMovieOpen();
-      }, MOVIE_CLOSE_DELAY);
-    },
-    [
-      stopAllVoice,
-      stop,
-      clearMovieCloseTimer,
-      finalizeMovieOpen,
-    ],
-  );
-
-  const handlePanelAnimationEnd = useCallback(
-    (event: React.AnimationEvent<HTMLElement>) => {
-      if (event.target !== event.currentTarget) return;
-      if (event.animationName !== "friday-panel-close") return;
-
-      if (closingRef.current) {
-        finalizeMovieOpen();
-      }
-    },
-    [finalizeMovieOpen],
-  );
 
   const interrupt = useCallback(() => {
     stopAllVoice();
