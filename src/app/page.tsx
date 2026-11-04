@@ -379,6 +379,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
           runSearch={runSearch}
           pickHistory={pickHistory}
           showBrandTitle={!isV2}
+          showQuickSearches={isV2}
         />
         {urlQuery && (
           <section aria-label="搜索结果" className="mb-10">
