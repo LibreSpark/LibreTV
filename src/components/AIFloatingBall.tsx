@@ -293,7 +293,7 @@ export default function AIFloatingBall({
       top: container.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, busy, error, open]);
+  }, [typedMessages, busy, error, open]);
 
   useEffect(() => {
     setMounted(true);
