@@ -236,7 +236,6 @@ export default function AIFloatingBall({
     dispatchMachine({ type: "OPEN" });
     setExpanded(false);
     setVoiceError("");
-    setFabHidden(false);
   }, [clearMovieCloseTimer, clearVoiceResumeTimer]);
 
   const openAndListen = useCallback(() => {
