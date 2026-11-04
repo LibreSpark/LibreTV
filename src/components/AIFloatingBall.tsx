@@ -565,6 +565,28 @@ export default function AIFloatingBall({
     }
   }, [interrupt, setMessages]);
 
+  // Header and homepage hero share one stable opening event contract.
+  useEffect(() => {
+    const handleToggleFridayPanel = (event: Event) => {
+      const detail = (event as CustomEvent<{ reset?: boolean; listen?: boolean }>).detail;
+
+      if (detail?.reset) {
+        clearConversation();
+      }
+
+      if (detail?.listen) {
+        openAndListen();
+      } else {
+        openPanel();
+      }
+    };
+
+    window.addEventListener("toggle-friday-panel", handleToggleFridayPanel);
+    return () => {
+      window.removeEventListener("toggle-friday-panel", handleToggleFridayPanel);
+    };
+  }, [clearConversation, openAndListen, openPanel]);
+
   const resizeTextarea = useCallback(() => {
     const element = inputRef.current;
     if (!element) return;
