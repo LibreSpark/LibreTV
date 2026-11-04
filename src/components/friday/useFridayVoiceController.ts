@@ -133,8 +133,8 @@ export function useFridayVoiceController({
         // 忽略浏览器语音取消异常。
       }
     }
-    setSpeaking(false);
-  }, []);
+    setSpeakingState(false);
+  }, [setSpeakingState]);
 
   const stopRecognition = useCallback((abort = true) => {
     const recognition = recognitionRef.current;
