@@ -123,6 +123,17 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
         isAdult,
       } = raw;
 
+      const normalizedVodId =
+        typeof vodId === 'string'
+          ? vodId.trim()
+          : typeof vodId === 'number' && Number.isSafeInteger(vodId)
+            ? String(vodId)
+            : '';
+      const normalizedYear =
+        typeof year === 'number' && Number.isFinite(year)
+          ? String(year)
+          : year;
+
       if (
         typeof sourceKey !== 'string' ||
         !sourceKey.trim() ||
@@ -130,8 +141,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
         typeof sourceName !== 'string' ||
         !sourceName.trim() ||
         sourceName.length > 100 ||
-        typeof vodId !== 'string' ||
-        !/^[a-zA-Z0-9_-]{1,30}$/.test(vodId) ||
+        !/^[a-zA-Z0-9_-]{1,30}$/.test(normalizedVodId) ||
         typeof name !== 'string' ||
         !name.trim() ||
         name.length > 100
@@ -158,7 +168,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
       if (
         (pic !== undefined && typeof pic !== 'string') ||
         (typeName !== undefined && typeof typeName !== 'string') ||
-        (year !== undefined && typeof year !== 'string') ||
+        (normalizedYear !== undefined && typeof normalizedYear !== 'string') ||
         (area !== undefined && typeof area !== 'string') ||
         (remarks !== undefined && typeof remarks !== 'string') ||
         (isAdult !== undefined && typeof isAdult !== 'boolean')
@@ -213,11 +223,11 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
         sourceKey: source.key,
         sourceName: normalizedSourceName || source.name,
         sourceUrl: source.url,
-        vodId,
+        vodId: normalizedVodId,
         name: name.trim(),
         ...(typeof pic === 'string' && pic ? { pic } : {}),
         ...(typeof typeName === 'string' && typeName ? { typeName } : {}),
-        ...(typeof year === 'string' && year ? { year } : {}),
+        ...(typeof normalizedYear === 'string' && normalizedYear ? { year: normalizedYear } : {}),
         ...(typeof area === 'string' && area ? { area } : {}),
         ...(typeof remarks === 'string' && remarks ? { remarks } : {}),
         ...(typeof isAdult === 'boolean' ? { isAdult } : source.isAdult !== undefined ? { isAdult: source.isAdult } : {}),
