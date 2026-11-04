@@ -12,6 +12,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 import { Header } from '@/components/header';
+import { HomeSearchSection } from '@/components/home/HomeSearchSection';
 import { RecommendSection } from '@/components/douban-section';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
@@ -361,104 +362,15 @@ function HomeContent() {
             }}
           />
         )}
-        <section
-          className={cn(
-            'flex flex-col items-center',
-            urlQuery ? 'mb-6' : 'mt-8 mb-8'
-          )}
-        >
-          {!urlQuery && (
-            <header className="text-center mb-6">
-              <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">
-                LibreTV
-              </h1>
-            </header>
-          )}
-          {urlQuery && <h1 className="sr-only">LibreTV 视频搜索</h1>}
-          <div
-            ref={searchHistory.containerRef}
-            className="relative w-full max-w-2xl"
-          >
-            <form
-              className="w-full"
-              onSubmit={(e) => {
-                e.preventDefault();
-                runSearch(input);
-              }}
-            >
-              <div
-                className={cn(
-                  'flex items-stretch min-h-12 pl-4 border',
-                  'transition-[background-color,border-color,border-radius] duration-200',
-                  searchHistory.visible
-                    ? 'rounded-t-xl rounded-b-none border-accent border-b-line bg-surface-raised'
-                    : 'rounded-xl border-line bg-chip focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40'
-                )}
-              >
-                <input
-                  ref={inputRef}
-                  className="flex-1 min-w-0 pr-2 bg-transparent text-sm text-content placeholder:text-faint focus:outline-none"
-                  placeholder="输入影片名称..."
-                  value={input}
-                  maxLength={100}
-                  onChange={(e) => {
-                    setInput(e.target.value);
-                    searchHistory.resetActive();
-                  }}
-                  onFocus={searchHistory.onFocus}
-                  onKeyDown={(e) => searchHistory.onKeyDown(e, pickHistory)}
-                  role="combobox"
-                  aria-label="搜索影片"
-                  aria-expanded={searchHistory.visible}
-                  aria-controls="home-search-history"
-                  aria-autocomplete="list"
-                  aria-activedescendant={
-                    searchHistory.visible && searchHistory.activeIndex >= 0
-                      ? `home-search-history-${searchHistory.activeIndex}`
-                      : undefined
-                  }
-                />
-                {input && (
-                  <button
-                    type="button"
-                    className="shrink-0 self-center mr-1 p-1.5 rounded-full text-faint hover:text-content hover:bg-hover transition-colors"
-                    onClick={() => {
-                      setInput('');
-                      searchHistory.resetActive();
-                      inputRef.current?.focus();
-                    }}
-                    aria-label="清空"
-                  >
-                    <Icon name="close" className="w-4 h-4" />
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  className={cn(
-                    'btn-primary shrink-0 px-4 font-medium transition-[background-color,filter] active:brightness-90',
-                    '!rounded-l-none',
-                    searchHistory.visible
-                      ? '!rounded-tr-xl !rounded-br-none'
-                      : '!rounded-r-xl'
-                  )}
-                >
-                  <Icon name="search" className="w-4 h-4" />
-                  搜索
-                </button>
-              </div>
-            </form>
-            {searchHistory.visible && (
-              <SearchHistoryDropdown
-                id="home-search-history"
-                matches={searchHistory.matches}
-                activeIndex={searchHistory.activeIndex}
-                onPick={pickHistory}
-                onRemove={searchHistory.remove}
-                onClearAll={searchHistory.clearAll}
-              />
-            )}
-          </div>
-        </section>
+        <HomeSearchSection
+          urlQuery={urlQuery}
+          input={input}
+          setInput={setInput}
+          inputRef={inputRef}
+          searchHistory={searchHistory}
+          runSearch={runSearch}
+          pickHistory={pickHistory}
+        />
         {urlQuery && (
           <section aria-label="搜索结果" className="mb-10">
             <div className="flex items-center justify-between mb-3">
