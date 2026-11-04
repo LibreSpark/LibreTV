@@ -1,0 +1,48 @@
+'use client';
+
+import { FridayOrbVisual } from '@/components/friday/FridayOrbVisual';
+
+type FridayHeroProps = {
+  onSearchFocus: () => void;
+};
+
+/** 首页 Friday 主入口。语音会话仍由唯一挂载的 AIFloatingBall 协调。 */
+export function FridayHero({ onSearchFocus }: FridayHeroProps) {
+  const startVoice = () => {
+    window.dispatchEvent(
+      new CustomEvent('toggle-friday-panel', {
+        detail: { reset: false, listen: true },
+      }),
+    );
+  };
+
+  return (
+    <section className="friday-hero-v2" aria-label="Friday 影视助手">
+      <p className="friday-hero-eyebrow">YOUR PERSONAL CINEMA ASSISTANT</p>
+      <h1 className="friday-hero-title">Friday</h1>
+      <p className="friday-hero-description">
+        告诉我你想看什么，让我帮你找到合适的电影和剧集。
+      </p>
+
+      <button
+        type="button"
+        className="friday-hero-orb-button"
+        onClick={startVoice}
+        aria-label="打开 Friday 并开始语音聆听"
+      >
+        <span className="friday-hero-orb">
+          <FridayOrbVisual />
+        </span>
+        <span className="friday-hero-orb-label">点击开始语音</span>
+      </button>
+
+      <button
+        type="button"
+        className="friday-hero-text-entry"
+        onClick={onSearchFocus}
+      >
+        或者直接输入片名搜索
+      </button>
+    </section>
+  );
+}
