@@ -72,7 +72,7 @@ export default function AIFloatingBall({
 
   const {
     listening, voiceEnabled, speaking, completed, voiceError, voiceSessionActive,
-    voiceSessionActiveRef, startListeningRef, scheduleVoiceResume, setSpeaking,
+    voiceSessionActiveRef, scheduleVoiceResume, setSpeaking,
     clearVoiceResumeTimer, setVoiceSession, stopRecognition, stopSpeech,
     stopAllVoice, speakText, toggleVoiceEnabled,
     stopSpeechAndResume, toggleListening, setVoiceError, setCompleted,
@@ -164,8 +164,8 @@ export default function AIFloatingBall({
     setVoiceSession(true);
 
     // 保留真实用户点击手势。
-    startListeningRef.current(false);
-  }, [openPanel, setVoiceSession]);
+    startListening(false);
+  }, [openPanel, startListening]);
 
   const handleSend = useCallback(
     async (text?: string, keepVoiceSession = false) => {
