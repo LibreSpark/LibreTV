@@ -18,10 +18,10 @@ export function FridayHero({ onSearchFocus }: FridayHeroProps) {
 
   return (
     <section className="friday-hero-v2" aria-label="Friday 影视助手">
-      <p className="friday-hero-eyebrow">YOUR PERSONAL CINEMA ASSISTANT</p>
-      <h1 className="friday-hero-title">Friday</h1>
+      <p className="friday-hero-eyebrow">FRIDAY · AI ASSISTANT</p>
+      <h1 className="friday-hero-title">今天想看什么？</h1>
       <p className="friday-hero-description">
-        告诉我你想看什么，让我帮你找到合适的电影和剧集。
+        说出你想看的内容，Friday 帮你寻找。
       </p>
 
       <button
