@@ -4,6 +4,7 @@ import React from "react";
 import type { RefObject } from "react";
 import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
 import { FridayMovieResults } from "@/components/friday/FridayMovieResults";
+import { FridayConversation } from "@/components/friday/FridayConversation";
 
 const MAX_MOVIE_CARDS = 60;
 const MAX_INPUT_LENGTH = 1000;
@@ -149,6 +150,12 @@ export function FridayPanel({
   onHideAssistant, onOpenMovie,
 }: FridayPanelProps) {
   const typedMessages = messages;
+  const conversationEntries = typedMessages.map((message) => ({
+    id: message.id,
+    isUser: message.role === "user",
+    text: getPartText(message),
+    movies: getMovieDataForMessage(message),
+  }));
   return (
               <section
                 className={`friday-panel ${
@@ -182,69 +189,15 @@ export function FridayPanel({
                   </div>
                 </div>
     
-                <div ref={messagesRef} className="friday-messages">
-                  {messages.length === 0 ? (
-                    <div className="friday-welcome">
-                      <div className="friday-welcome-kicker">
-                        YOUR AMBIENT AI
-                      </div>
-    
-                      <div className="friday-welcome-title">
-                        你好，我是 Friday。
-                      </div>
-    
-                      <div className="friday-welcome-text">
-                        {listening
-                          ? "我正在聆听。告诉我你想看什么电影或电视剧。"
-                          : "告诉我你想看什么，或者让我帮你寻找更好的影视资源。"}
-                      </div>
-                    </div>
-                  ) : null}
-    
-                  {typedMessages.map((message) => {
-                    const isUser = message.role === "user";
-                    const text = getPartText(message);
-                    const messageMovies = getMovieDataForMessage(message);
-    
-                    return (
-                      <React.Fragment key={message.id}>
-                        {text ? (
-                          <div
-                            className={`friday-message ${
-                              isUser ? "friday-message-user" : ""
-                            }`}
-                          >
-                            <div className="friday-message-content">
-                              {text}
-                            </div>
-                          </div>
-                        ) : null}
-    
-                        {messageMovies.map((data) => (
-                          <FridayMovieResults
-                            key={data.searchId}
-                            data={data}
-                            onOpen={onOpenMovie}
-                          />
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
-    
-                  {busy ? (
-                    <div className="friday-status">
-                      {status === "submitted"
-                        ? "Friday 正在接收消息…"
-                        : "正在为你寻找合适的影视资源…"}
-                    </div>
-                  ) : null}
-    
-                  {error ? (
-                    <div className="friday-error">
-                      {error.message || "请求失败，请稍后重试。"}
-                    </div>
-                  ) : null}
-                </div>
+                <FridayConversation
+                  messagesRef={messagesRef}
+                  messages={conversationEntries}
+                  listening={listening}
+                  busy={busy}
+                  status={status}
+                  error={error}
+                  onOpenMovie={onOpenMovie}
+                />
     
                 <div className="friday-orb-stage">
                   <span className="friday-orb-status">
