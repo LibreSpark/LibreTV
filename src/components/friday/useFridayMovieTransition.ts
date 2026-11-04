@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { AnimationEvent, Dispatch, MutableRefObject, SetStateAction } from "react";
 
-type MovieLike = Record<string, unknown>;
-
 type MovieTransitionOptions<TMovie extends MovieLike> = {
   openRef: MutableRefObject<boolean>;
   closingRef: MutableRefObject<boolean>;
@@ -16,7 +14,7 @@ type MovieTransitionOptions<TMovie extends MovieLike> = {
   stop: () => void;
 };
 
-export function useFridayMovieTransition<TMovie extends MovieLike>({
+export function useFridayMovieTransition<TMovie>({
   openRef,
   closingRef,
   busyRef,
