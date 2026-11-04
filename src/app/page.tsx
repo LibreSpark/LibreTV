@@ -28,7 +28,6 @@ import type {
   SourceSearchOutcome,
 } from '@/lib/types';
 import {
-  SearchHistoryDropdown,
   useSearchHistory,
 } from '@/components/search-history';
 import {
@@ -38,7 +37,6 @@ import {
 } from '@/lib/utils';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
-import { Icon } from '@/components/icon';
 import { SiteFooter } from '@/components/site-footer';
 
 const RESULT_PAGE_SIZE = 60;
