@@ -83,6 +83,11 @@ export function useFridayVoiceController({
   const [listening, setListening] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [speaking, setSpeaking] = useState(false);
+  const speakingRef = useRef(false);
+  const setSpeakingState = useCallback((value: boolean) => {
+    speakingRef.current = value;
+    setSpeaking(value);
+  }, []);
   const [completed, setCompleted] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [voiceSessionActive, setVoiceSessionActive] = useState(false);
@@ -162,7 +167,7 @@ export function useFridayVoiceController({
 
     if (!voiceSessionActiveRef.current) return;
     if (!openRef.current || closingRef.current) return;
-    if (busyRef.current || speaking) return;
+    if (busyRef.current || speakingRef.current) return;
 
     const sessionId = voiceSessionIdRef.current;
     voiceResumeTimerRef.current = window.setTimeout(() => {
@@ -175,7 +180,7 @@ export function useFridayVoiceController({
 
       startListeningRef.current(true);
     }, VOICE_RESUME_DELAY);
-  }, [clearVoiceResumeTimer, openRef, closingRef, busyRef, speaking]);
+  }, [clearVoiceResumeTimer, openRef, closingRef, busyRef]);
 
   const startListening = useCallback((automatic = false) => {
     if (busyRef.current || listeningRef.current) return;
@@ -354,14 +359,14 @@ export function useFridayVoiceController({
 
   const speakText = useCallback((text: string, messageId: string) => {
     if (!voiceEnabled || !text.trim()) {
-      setSpeaking(false);
+      setSpeakingState(false);
       setCompleted(true);
       scheduleVoiceResume();
       return;
     }
 
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      setSpeaking(false);
+      setSpeakingState(false);
       setCompleted(true);
       setVoiceError("当前浏览器不支持语音播报。");
       scheduleVoiceResume();
@@ -377,19 +382,19 @@ export function useFridayVoiceController({
 
     utterance.onstart = () => {
       if (utteranceRef.current !== utterance) return;
-      setSpeaking(true);
+      setSpeakingState(true);
     };
     utterance.onend = () => {
       if (utteranceRef.current !== utterance) return;
       utteranceRef.current = null;
-      setSpeaking(false);
+      setSpeakingState(false);
       setCompleted(true);
       scheduleVoiceResume();
     };
     utterance.onerror = () => {
       if (utteranceRef.current !== utterance) return;
       utteranceRef.current = null;
-      setSpeaking(false);
+      setSpeakingState(false);
       setCompleted(true);
       scheduleVoiceResume();
     };
@@ -401,7 +406,7 @@ export function useFridayVoiceController({
     } catch (speechError) {
       console.error("[Friday] Speech synthesis failed:", speechError);
       if (utteranceRef.current === utterance) utteranceRef.current = null;
-      setSpeaking(false);
+      setSpeakingState(false);
       setCompleted(true);
       scheduleVoiceResume();
     }
@@ -458,7 +463,7 @@ export function useFridayVoiceController({
     voiceSessionActiveRef,
     startListeningRef,
     scheduleVoiceResume,
-    setSpeaking,
+    setSpeaking: setSpeakingState,
     clearVoiceResumeTimer,
     setVoiceSession,
     stopRecognition,
