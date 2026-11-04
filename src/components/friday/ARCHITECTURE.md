@@ -1,45 +1,45 @@
 # Friday component boundaries
 
-This document records the safe extraction boundaries for the homepage refactor. It does not change runtime behavior.
+This document records the implemented extraction boundaries for the Friday-first homepage. It describes ownership and protected runtime contracts.
 
 ## Current composition
 
-- `AIFloatingBall` remains the single mounted orchestrator. It owns the Friday state machine, chat transport, app-store source selection, panel lifecycle, and the existing `toggle-friday-panel` / `friday-open-detail` event contracts.
-- `FridayOrbVisual` is a pure visual component. It renders the orb layers only and owns no microphone, speech-recognition, chat, or search state.
-- `useFridayVoiceController` now owns browser speech-recognition and speech-synthesis lifecycles, voice-session refs/timers, permission and recognition errors, and the callbacks/state returned to the orchestrator.
-- `AIFloatingBall` remains the single orchestrator for chat transport, request state, app-store source selection, panel lifecycle, and movie-detail events. It passes the current busy/open/closing refs and message callback into the voice controller.
-- `FridayPanel` owns the conversation panel's presentation markup, message rendering, movie-card rendering, and input/tool controls. It receives state and callbacks through explicit props; it does not call `useChat`, access the app store, or own voice lifecycle.
-- `FridayHero` is the homepage's centered voice entry. It emits the shared `toggle-friday-panel` event with `listen: true`; `AIFloatingBall` remains the only owner of the actual microphone session.
-- `HomeSearchSection` owns only the traditional search form presentation. URL state, search history data, source selection, API requests, and result aggregation remain in `HomeContent`.
+- `AIFloatingBall` is the single mounted orchestrator. It wires the Friday reducer, panel lifecycle, app-store source selection, and the existing `toggle-friday-panel` / `friday-open-detail` event contracts.
+- `FridayOrbVisual` is a pure visual component. It renders orb layers only and owns no microphone, speech-recognition, chat, or search state.
+- `FridayStyles` contains the floating assistant's global stylesheet. Every selector is scoped beneath `.friday-root`; the restore control is also rendered inside that root.
+- `useFridayVoiceController` owns browser speech-recognition and speech-synthesis lifecycles, voice-session refs/timers, permission and recognition errors, and callbacks/state returned to the orchestrator.
+- `useFridayChatSession` owns the AI SDK transport and `useChat` session. It preserves the `/api/chat` endpoint and the current source/filter request body.
+- `useFridaySources` owns source and adult-filter configuration resolution. It does not own search requests or movie-detail navigation.
+- `useFridayRequestLifecycle` maps chat busy/error transitions to request IDs and reducer events, including completion, failure, and cancellation.
+- `useFridayResponseController` handles completed assistant responses, speech handoff, request-error feedback, and the short-lived completion indicator.
+- `useFridayFabController` owns floating-orb dragging, viewport clamping, click suppression after dragging, hide, and restore interactions.
+- `useFridayMovieTransition` owns the pending movie payload, close animation, fallback timer, duplicate-trigger guard, and `friday-open-detail` dispatch.
+- `useFridayPanelEvents` owns Escape handling and the shared `toggle-friday-panel` custom-event listener.
+- `FridayPanel` owns panel presentation and composes `FridayConversation` and `FridayComposer`. It receives explicit state and callbacks; it does not call `useChat`, access the app store, or construct speech-recognition objects.
+- `src/lib/friday/message.ts` contains pure message text and movie-result parsing. The panel re-exports these helpers for existing imports.
+- `FridayHero` is the homepage's centered voice entry. It emits `toggle-friday-panel` with `listen: true`; the single mounted `AIFloatingBall` owns the actual microphone session.
+- `HomeSearchSection` owns only traditional search-form presentation. URL state, search history, source selection, API requests, and result aggregation remain in `HomeContent`.
 
-## Next extraction boundaries
+## Ownership boundaries
 
-### Voice controller
+### Voice and chat
 
-Implemented: `useFridayVoiceController`
+The voice controller must not own `useChat`, movie search, app-store source selection, detail navigation, or panel layout. Keep the real user-gesture requirement for the first microphone start and preserve the user-facing permission and fallback behavior.
 
-Owns only browser voice lifecycle:
-- SpeechRecognition construction, start/stop/abort and event handlers
-- speech synthesis start/cancel and utterance lifecycle
-- voice-session refs, resume scheduling, permission and recognition error state
-- callbacks/state returned to the orchestrator
-
-It must not own `useChat`, movie search, app-store source selection, detail navigation, or panel layout. Keep the real user-gesture requirement for microphone start and preserve the current user-facing error/fallback behavior. The hook is wired into `AIFloatingBall`; it is not a dormant parallel implementation.
+The chat-session hook must not own speech recognition, speech synthesis, panel visibility, or movie-detail navigation. Keep the endpoint and request payload stable.
 
 ### Conversation panel
 
-Implemented: `FridayPanel`
-
-A presentation component receiving explicit props:
+`FridayPanel` receives:
 - open/closing/expanded and agent/voice display states
 - messages, movie result data, loading/error state and input value
-- callbacks for close, send, microphone toggle, interrupt, expand, hide, restore, and movie selection
+- callbacks for close, send, microphone toggle, interrupt, expand, hide, and movie selection
 
-It does not call `useChat`, access the app store, or construct speech-recognition objects. Movie selection is forwarded through `onOpenMovie`; the orchestrator continues to emit the existing `friday-open-detail` event.
+Movie selection is forwarded through `onOpenMovie`; the orchestrator continues to own the existing `friday-open-detail` event contract.
 
 ### Orchestrator
 
-`AIFloatingBall` remains responsible for wiring the voice controller, panel, chat transport, reducer, and existing event contracts. The header must mount exactly one instance.
+`AIFloatingBall` remains the single composition point for the hooks, reducer, panel, and existing event contracts. The header must mount exactly one instance, including when the floating launcher itself is hidden on the V2 homepage.
 
 ## Protected contracts
 
@@ -47,5 +47,6 @@ It does not call `useChat`, access the app store, or construct speech-recognitio
 - `friday-open-detail` event name and existing movie payload
 - `/api/chat` transport and current source/filter payload
 - search APIs, resource APIs, `?q=` / `?s=` URL behavior, detail modal, and player behavior
+- microphone start remains inside the synchronous user-gesture call chain
 
-The `HOME_V2` feature flag now selects a Friday-first homepage shell while the legacy route remains the default when the flag is off. The V2 shell reuses the existing search form, recommendation APIs, detail modal, and result pipeline; its visual rules are scoped to `.home-v2`.
+The `HOME_V2` feature flag selects the Friday-first homepage shell while the legacy route remains the default when the flag is off. The V2 shell reuses the existing search form, recommendation APIs, detail modal, and result pipeline; its visual rules are scoped to `.home-v2`.
