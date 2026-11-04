@@ -63,9 +63,9 @@ export default function HomePage() {
 }
 
 /**
- * Feature-flag entry for the V2 homepage.
- * Until the V2 shell is implemented, it deliberately delegates to HomeContent
- * so enabling the flag does not change search, recommendations, or navigation.
+ * Feature-flag entry for the Friday-first homepage.
+ * The V2 shell reuses HomeContent's existing search, recommendations,
+ * detail modal, and navigation data flow; only the presentation variant changes.
  */
 function HomePageV2() {
   return <HomeContent variant="v2" />;
