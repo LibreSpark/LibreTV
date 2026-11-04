@@ -457,6 +457,8 @@ export function useFridayVoiceController({
     voiceSessionActive,
     voiceSessionActiveRef,
     startListeningRef,
+    scheduleVoiceResume,
+    setSpeaking,
     clearVoiceResumeTimer,
     setVoiceSession,
     stopRecognition,
