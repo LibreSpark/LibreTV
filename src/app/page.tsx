@@ -39,6 +39,7 @@ import {
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
+import { normalizeFridayMovieId } from '@/lib/friday/movie-detail';
 
 const RESULT_PAGE_SIZE = 60;
 
@@ -123,12 +124,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
         isAdult,
       } = raw;
 
-      const normalizedVodId =
-        typeof vodId === 'string'
-          ? vodId.trim()
-          : typeof vodId === 'number' && Number.isSafeInteger(vodId)
-            ? String(vodId)
-            : '';
+      const normalizedVodId = normalizeFridayMovieId(vodId);
       const normalizedYear =
         typeof year === 'number' && Number.isFinite(year)
           ? String(year)
@@ -141,7 +137,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
         typeof sourceName !== 'string' ||
         !sourceName.trim() ||
         sourceName.length > 100 ||
-        !/^[a-zA-Z0-9_-]{1,30}$/.test(normalizedVodId) ||
+        !normalizedVodId ||
         typeof name !== 'string' ||
         !name.trim() ||
         name.length > 100
