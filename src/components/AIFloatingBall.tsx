@@ -17,6 +17,7 @@ import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
 import { FridayPanel, getPartText, getMovieDataForMessage } from "@/components/friday/FridayPanel";
 import type { MessageLike, MovieItem } from "@/components/friday/FridayPanel";
 import { useFridayVoiceController } from "@/components/friday/useFridayVoiceController";
+import { useFridayFabController } from "@/components/friday/useFridayFabController";
 
 import {
   useAppStore,
@@ -40,15 +41,6 @@ type FridayProps = {
   showFab?: boolean;
 };
 
-type DragState = {
-  pointerId: number;
-  offsetX: number;
-  offsetY: number;
-  startX: number;
-  startY: number;
-  moved: boolean;
-};
-
 type AuroraState =
   | "standby"
   | "listening"
@@ -58,7 +50,6 @@ type AuroraState =
 
 const MAX_INPUT_LENGTH = 1000;
 const FAB_SIZE = 68;
-const DRAG_THRESHOLD = 6;
 const MOVIE_CLOSE_DELAY = 250;
 
 export default function AIFloatingBall({
@@ -81,11 +72,6 @@ export default function AIFloatingBall({
   const [closing, setClosing] = useState(false);
   const [input, setInput] = useState("");
   const [expanded, setExpanded] = useState(false);
-  const [fabHidden, setFabHidden] = useState(false);
-  const [fabPosition, setFabPosition] = useState<{
-    left: number;
-    top: number;
-  } | null>(null);
 
   const openRef = useRef(false);
   const closingRef = useRef(false);
@@ -99,9 +85,6 @@ export default function AIFloatingBall({
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const dragRef = useRef<DragState | null>(null);
-  const suppressClickRef = useRef(false);
-  const dragResetTimerRef = useRef<number | null>(null);
 
   const pendingMovieRef = useRef<MovieItem | null>(null);
   const movieCloseTimerRef = useRef<number | null>(null);
@@ -388,6 +371,22 @@ export default function AIFloatingBall({
     setExpanded(false);
   }, [clearMovieCloseTimer, stopAllVoice, stop]);
 
+  const {
+    fabHidden,
+    fabPosition,
+    handleFabPointerDown,
+    handleFabPointerMove,
+    handleFabPointerUp,
+    handleFabClick,
+    hideAssistant,
+    restoreAssistant,
+  } = useFridayFabController({
+    openRef,
+    closingRef,
+    onOpen: openAndListen,
+    onClose: closePanel,
+  });
+
   const handleOpenMovie = useCallback(
     (movie: MovieItem) => {
       if (typeof window === "undefined") return;
@@ -529,9 +528,6 @@ export default function AIFloatingBall({
 
       clearMovieCloseTimer();
 
-      if (dragResetTimerRef.current !== null) {
-        window.clearTimeout(dragResetTimerRef.current);
-      }
     };
   }, [clearMovieCloseTimer]);
 
@@ -600,139 +596,6 @@ export default function AIFloatingBall({
   useEffect(() => {
     resizeTextarea();
   }, [input, resizeTextarea]);
-
-  const clampFabPosition = useCallback(
-    (position: { left: number; top: number }) => {
-      const margin = 8;
-
-      const maxLeft = Math.max(
-        margin,
-        window.innerWidth - FAB_SIZE - margin,
-      );
-
-      const maxTop = Math.max(
-        margin,
-        window.innerHeight - FAB_SIZE - margin,
-      );
-
-      return {
-        left: Math.min(maxLeft, Math.max(margin, position.left)),
-        top: Math.min(maxTop, Math.max(margin, position.top)),
-      };
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const handleResize = () => {
-      setFabPosition((current) =>
-        current ? clampFabPosition(current) : current,
-      );
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [clampFabPosition]);
-
-  const handleFabPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (openRef.current || closingRef.current) return;
-
-      const rect = event.currentTarget.getBoundingClientRect();
-
-      dragRef.current = {
-        pointerId: event.pointerId,
-        offsetX: event.clientX - rect.left,
-        offsetY: event.clientY - rect.top,
-        startX: event.clientX,
-        startY: event.clientY,
-        moved: false,
-      };
-
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      } catch {
-        // 某些浏览器不支持 pointer capture。
-      }
-    },
-    [],
-  );
-
-  const handleFabPointerMove = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      const drag = dragRef.current;
-
-      if (!drag || drag.pointerId !== event.pointerId) return;
-
-      const deltaX = event.clientX - drag.startX;
-      const deltaY = event.clientY - drag.startY;
-
-      if (
-        !drag.moved &&
-        Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD
-      ) {
-        return;
-      }
-
-      drag.moved = true;
-      suppressClickRef.current = true;
-
-      setFabPosition(
-        clampFabPosition({
-          left: event.clientX - drag.offsetX,
-          top: event.clientY - drag.offsetY,
-        }),
-      );
-    },
-    [clampFabPosition],
-  );
-
-  const handleFabPointerUp = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      const drag = dragRef.current;
-
-      if (!drag || drag.pointerId !== event.pointerId) return;
-
-      const wasMoved = drag.moved;
-      dragRef.current = null;
-
-      if (!wasMoved) return;
-
-      suppressClickRef.current = true;
-
-      if (dragResetTimerRef.current !== null) {
-        window.clearTimeout(dragResetTimerRef.current);
-      }
-
-      dragResetTimerRef.current = window.setTimeout(() => {
-        suppressClickRef.current = false;
-        dragResetTimerRef.current = null;
-      }, 350);
-    },
-    [],
-  );
-
-  const handleFabClick = useCallback(() => {
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
-
-    openAndListen();
-  }, [openAndListen]);
-
-  const hideAssistant = useCallback(() => {
-    closePanel();
-    setFabHidden(true);
-  }, [closePanel]);
-
-  const restoreAssistant = useCallback(() => {
-    setFabHidden(false);
-    setFabPosition(null);
-  }, []);
 
   if (!mounted) return null;
 
