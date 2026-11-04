@@ -65,7 +65,7 @@ function HomeContent() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const urlQuery = searchParams.get('s') || '';
+  const urlQuery = searchParams.get('q') ?? searchParams.get('s') ?? '';
 
   const customAPIs = useAppStore((s) => s.customAPIs);
   const envSources = useAppStore((s) => s.envSources);
@@ -291,7 +291,7 @@ function HomeContent() {
       toast('请先在设置中添加并勾选点播源', 'warning');
       return;
     }
-    router.push(`/?s=${encodeURIComponent(query)}`, { scroll: false });
+    router.push(`/?q=${encodeURIComponent(query)}`, { scroll: false });
     searchHistory.record(query);
   };
 
