@@ -4,9 +4,10 @@ import { useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { MessageLike } from "@/components/friday/FridayPanel";
+import type { FridaySourceConfig } from "@/components/friday/useFridaySources";
 
 type FridayChatSessionOptions = {
-  sources: Array<{ key: string; name: string; api: string; detail?: string }>;
+  sources: FridaySourceConfig[];
   filterAdult: boolean;
 };
 
