@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSpeechErrorMessage } from "./useFridayVoiceController";
+import { getSpeechErrorMessage, shouldEndVoiceSession } from "./useFridayVoiceController";
 
 describe("Friday speech recognition errors", () => {
   it("explains denied microphone permissions", () => {
@@ -23,5 +23,22 @@ describe("Friday speech recognition errors", () => {
 
   it("does not show an error for an intentional abort", () => {
     expect(getSpeechErrorMessage("aborted")).toBe("");
+  });
+});
+
+describe("Friday voice session recovery", () => {
+  it("ends the current session after terminal recognition errors", () => {
+    for (const error of ["not-allowed", "service-not-allowed", "audio-capture", "network", "language-not-supported", "unknown"]) {
+      expect(shouldEndVoiceSession(error)).toBe(true);
+    }
+  });
+
+  it("keeps the session available for a manual retry after no-speech", () => {
+    expect(shouldEndVoiceSession("no-speech")).toBe(false);
+  });
+
+  it("does not treat an intentional abort as a terminal error", () => {
+    expect(shouldEndVoiceSession("aborted")).toBe(false);
+    expect(shouldEndVoiceSession(undefined)).toBe(false);
   });
 });
