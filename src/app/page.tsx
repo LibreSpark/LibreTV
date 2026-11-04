@@ -52,12 +52,23 @@ function isRecord(
   );
 }
 
+const HOME_V2_ENABLED = process.env.NEXT_PUBLIC_HOME_V2 === 'true';
+
 export default function HomePage() {
   return (
     <Suspense>
-      <HomeContent />
+      {HOME_V2_ENABLED ? <HomePageV2 /> : <HomeContent />}
     </Suspense>
   );
+}
+
+/**
+ * Feature-flag entry for the V2 homepage.
+ * Until the V2 shell is implemented, it deliberately delegates to HomeContent
+ * so enabling the flag does not change search, recommendations, or navigation.
+ */
+function HomePageV2() {
+  return <HomeContent />;
 }
 
 function HomeContent() {
