@@ -1,4 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import dns from 'node:dns/promises';
+import net from 'node:net';
 
 /** 去掉 URL.hostname 对 IPv6 附加的方括号（"[::1]" → "::1"） */
 function stripBrackets(host: string): string {
@@ -107,4 +109,125 @@ export async function checkLiveUrlAllowed(urlString: string): Promise<UpstreamVe
   }
   if (allowLivePrivate()) return { ok: true };
   return checkUpstreamAllowed(urlString);
+}
+
+
+export interface SSRFProtectionContext {
+  active: boolean;
+  allowPrivate?: boolean;
+}
+
+const ssrfStorage = new AsyncLocalStorage<SSRFProtectionContext>();
+
+let connectionProtectionInstalled = false;
+
+/**
+ * 安装底层的 TCP 连接级 SSRF 与 DNS Rebinding 防护。
+ *
+ * 背景（#941）：
+ * checkUpstreamAllowed 通过 dns.lookup 预检 IP，但随后的 fetch 会执行独立的连接时 DNS 解析。
+ * 攻击者可通过 DNS Rebinding 让预检返回公网 IP、实际连接返回内网 IP，导致 SSRF。
+ *
+ * 本函数通过拦截 net.Socket.prototype.connect，在建立实际连接的瞬间挂载安全 lookup：
+ * 只要最终解析出的任何 IP 属于私有/保留网络（且未显式开启 allowPrivate），
+ * 立即在握手前抛出 ERR_SSRF_BLOCKED 中断连接，从底层杜绝 TOCTOU 绕过。
+ */
+export function installConnectionSSRFProtection(): void {
+  if (connectionProtectionInstalled) return;
+  connectionProtectionInstalled = true;
+
+  const originalConnect = net.Socket.prototype.connect;
+  type ConnectFn = (this: net.Socket, ...a: unknown[]) => net.Socket;
+  const rawConnect = originalConnect as unknown as ConnectFn;
+
+  net.Socket.prototype.connect = function (this: net.Socket, ...args: unknown[]) {
+    const ctx = ssrfStorage.getStore();
+    if (!ctx || !ctx.active) {
+      return rawConnect.apply(this, args);
+    }
+
+    let opts: Record<string, unknown> | null = null;
+    if (Array.isArray(args[0]) && args[0][0] && typeof args[0][0] === 'object') {
+      opts = args[0][0] as Record<string, unknown>;
+    } else if (args[0] && typeof args[0] === 'object') {
+      opts = args[0] as Record<string, unknown>;
+    }
+
+    if (opts) {
+      const host = typeof opts.host === 'string' ? stripBrackets(opts.host) : '';
+
+      // 1. 若目标是字面量 IP
+      if (host && (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':'))) {
+        if (!ctx.allowPrivate && isPrivateIP(host)) {
+          const blockErr = Object.assign(new Error(`目标地址属于私有/保留网络 (${host})`), {
+            code: 'ERR_SSRF_BLOCKED',
+          });
+          process.nextTick(() => this.destroy(blockErr));
+          return this;
+        }
+      }
+
+      // 2. 若目标为域名，挂载连接时实时 lookup 校验
+      type LookupCallback = (
+        err: Error | null,
+        address?: string | Array<{ address: string; family: number }>,
+        family?: number
+      ) => void;
+      type LookupFn = (hostname: string, options: unknown, cb: LookupCallback) => void;
+
+      const prevLookup = (typeof opts.lookup === 'function' ? opts.lookup : dns.lookup) as LookupFn;
+      opts.lookup = ((
+        hostname: string,
+        lookupOpts: unknown,
+        cb: LookupCallback
+      ) => {
+        const cleanHost = stripBrackets(hostname);
+        if (!ctx.allowPrivate && BLOCKED_HOSTNAMES.has(cleanHost.toLowerCase())) {
+          const blockErr = Object.assign(new Error(`目标主机名在黑名单中 (${hostname})`), {
+            code: 'ERR_SSRF_BLOCKED',
+          });
+          return cb(blockErr);
+        }
+
+        prevLookup(cleanHost, { all: true }, (err: Error | null, addresses) => {
+          if (err) return cb(err);
+          const list = Array.isArray(addresses) ? addresses : [];
+          if (list.length === 0) {
+            return cb(new Error(`未找到主机地址: ${hostname}`));
+          }
+          if (!ctx.allowPrivate) {
+            for (const item of list) {
+              if (isPrivateIP(item.address)) {
+                const blockErr = Object.assign(new Error(`目标地址解析到私有/保留网络 (${item.address})`), {
+                  code: 'ERR_SSRF_BLOCKED',
+                });
+                return cb(blockErr);
+              }
+            }
+          }
+          const isAll = lookupOpts && typeof lookupOpts === 'object' && (lookupOpts as { all?: boolean }).all;
+          if (isAll) {
+            cb(null, list);
+          } else {
+            cb(null, list[0].address, list[0].family);
+          }
+        });
+      }) as unknown;
+    }
+
+    return rawConnect.apply(this, args);
+  };
+}
+
+// 模块加载时自动激活连接层防护
+installConnectionSSRFProtection();
+
+/**
+ * 在受连接级 SSRF / DNS Rebinding 防护的作用域中执行异步请求
+ */
+export function runWithSSRFProtection<T>(
+  options: { allowPrivate?: boolean } = {},
+  fn: () => Promise<T>
+): Promise<T> {
+  return ssrfStorage.run({ active: true, allowPrivate: options.allowPrivate }, fn);
 }

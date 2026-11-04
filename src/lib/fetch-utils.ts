@@ -1,6 +1,6 @@
 /** 服务端上游请求工具：超时、重试、安全跳转、JSON 解析 */
 
-import { checkLiveUrlAllowed, checkUpstreamAllowed } from './ssrf';
+import { checkLiveUrlAllowed, checkUpstreamAllowed, runWithSSRFProtection } from './ssrf';
 
 export interface FetchOptions extends RequestInit {
   timeoutMs?: number;
@@ -52,33 +52,49 @@ export async function fetchWithSafeRedirects(
   options: SafeRedirectOptions = {}
 ): Promise<FetchResult> {
   const { allowPrivate = false, headerTimeoutMs } = options;
-  let current = url;
-  // headerTimeout 超时即 abort 内部 controller；外部 signal（调用方死线/客户端断开）链入同一 controller
-  const controller = new AbortController();
-  if (init.signal) {
-    if (init.signal.aborted) controller.abort(init.signal.reason);
-    else init.signal.addEventListener('abort', () => controller.abort(init.signal?.reason), { once: true });
-  }
-  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
-    const verdict = allowPrivate
-      ? await checkLiveUrlAllowed(current)
-      : await checkUpstreamAllowed(current);
-    if (!verdict.ok) {
-      throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
+  return runWithSSRFProtection({ allowPrivate }, async () => {
+    let current = url;
+    // headerTimeout 超时即 abort 内部 controller；外部 signal（调用方死线/客户端断开）链入同一 controller
+    const controller = new AbortController();
+    if (init.signal) {
+      if (init.signal.aborted) controller.abort(init.signal.reason);
+      else init.signal.addEventListener('abort', () => controller.abort(init.signal?.reason), { once: true });
     }
-    const timer = headerTimeoutMs ? setTimeout(() => controller.abort(), headerTimeoutMs) : null;
-    let res: Response;
-    try {
-      res = await fetch(current, { ...init, signal: controller.signal, redirect: 'manual' });
-    } finally {
-      if (timer) clearTimeout(timer);
+    for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+      const verdict = allowPrivate
+        ? await checkLiveUrlAllowed(current)
+        : await checkUpstreamAllowed(current);
+      if (!verdict.ok) {
+        throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
+      }
+      const timer = headerTimeoutMs ? setTimeout(() => controller.abort(), headerTimeoutMs) : null;
+      let res: Response;
+      try {
+        res = await fetch(current, { ...init, signal: controller.signal, redirect: 'manual' });
+      } catch (err: unknown) {
+        if (
+          err &&
+          typeof err === 'object' &&
+          'cause' in err &&
+          err.cause &&
+          typeof err.cause === 'object' &&
+          'code' in err.cause &&
+          (err.cause as { code?: string }).code === 'ERR_SSRF_BLOCKED'
+        ) {
+          const cause = err.cause as { message?: string };
+          throw new Error(`连接目标被拒绝: ${cause.message || '目标地址被拒绝'}`);
+        }
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
+      const location = res.headers.get('location');
+      if (!location) return { res, finalUrl: current };
+      current = new URL(location, current).href;
     }
-    if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
-    const location = res.headers.get('location');
-    if (!location) return { res, finalUrl: current };
-    current = new URL(location, current).href;
-  }
-  throw new Error('重定向次数过多');
+    throw new Error('重定向次数过多');
+  });
 }
 
 export async function fetchUpstream(url: string, options: FetchOptions = {}): Promise<Response> {
@@ -97,11 +113,13 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       if (!safeRedirects) {
-        const res = await fetch(url, {
-          ...init,
-          signal,
-          redirect: init.redirect ?? 'follow',
-        });
+        const res = await runWithSSRFProtection({ allowPrivate }, () =>
+          fetch(url, {
+            ...init,
+            signal,
+            redirect: init.redirect ?? 'follow',
+          })
+        );
         return { res, finalUrl: res.url || url };
       }
       // 手动逐跳跟随，每一跳重新过 SSRF 校验

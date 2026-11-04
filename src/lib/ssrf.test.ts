@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isPrivateIP, isValidProxyUrl } from './ssrf';
+import http from 'node:http';
+import { isPrivateIP, isValidProxyUrl, runWithSSRFProtection } from './ssrf';
 
 describe('isPrivateIP', () => {
   it.each([
@@ -66,5 +67,81 @@ describe('isValidProxyUrl', () => {
     expect(isValidProxyUrl('file:///etc/passwd')).toBe(false);
     expect(isValidProxyUrl('ftp://x.com/a')).toBe(false);
     expect(isValidProxyUrl('not a url')).toBe(false);
+  });
+});
+
+
+describe('DNS Rebinding & Connection SSRF Protection (#941)', () => {
+  it('在受保护上下文中拦截解析到私网 IP 的域名（防 DNS Rebinding）', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('internal secret data');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address(); if (!addr || typeof addr === 'string') throw new Error('意外的地址'); const port = addr.port;
+
+    try {
+      await expect(
+        runWithSSRFProtection({ allowPrivate: false }, async () => {
+          await fetch(`http://localhost:${port}/secret`);
+        })
+      ).rejects.toThrow();
+    } finally {
+      server.close();
+    }
+  });
+
+  it('在受保护上下文中拦截直接连接的字面量私网 IP', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('internal secret data');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address(); if (!addr || typeof addr === 'string') throw new Error('意外的地址'); const port = addr.port;
+
+    try {
+      await expect(
+        runWithSSRFProtection({ allowPrivate: false }, async () => {
+          await fetch(`http://127.0.0.1:${port}/secret`);
+        })
+      ).rejects.toThrow();
+    } finally {
+      server.close();
+    }
+  });
+
+  it('显式 allowPrivate: true 时放行内网（用于自建 IPTV 场景）', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('iptv stream data');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address(); if (!addr || typeof addr === 'string') throw new Error('意外的地址'); const port = addr.port;
+
+    try {
+      const text = await runWithSSRFProtection({ allowPrivate: true }, async () => {
+        const res = await fetch(`http://127.0.0.1:${port}/live.m3u8`);
+        return await res.text();
+      });
+      expect(text).toBe('iptv stream data');
+    } finally {
+      server.close();
+    }
+  });
+
+  it('在非受保护上下文中不干扰正常本地网络通信', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('normal local communication');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address(); if (!addr || typeof addr === 'string') throw new Error('意外的地址'); const port = addr.port;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/status`);
+      expect(await res.text()).toBe('normal local communication');
+    } finally {
+      server.close();
+    }
   });
 });

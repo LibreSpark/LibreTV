@@ -54,4 +54,12 @@ describe('fetchUpstream 安全跳转', () => {
     ));
     await expect(fetchUpstream(PUBLIC_URL)).rejects.toThrow(/重定向次数过多/);
   });
+
+  it('底层连接解析到私网 IP 时转换抛出友好错误 (连接目标被拒绝)', async () => {
+    const err = Object.assign(new Error('fetch failed'), {
+      cause: { code: 'ERR_SSRF_BLOCKED', message: '目标地址解析到私有/保留网络 (127.0.0.1)' },
+    });
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(err)));
+    await expect(fetchUpstream(PUBLIC_URL)).rejects.toThrow(/连接目标被拒绝: 目标地址解析到私有\/保留网络/);
+  });
 });
