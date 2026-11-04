@@ -107,8 +107,9 @@ export default function AIFloatingBall({
 
   const {
     listening, voiceEnabled, speaking, completed, voiceError, voiceSessionActive,
-    voiceSessionActiveRef, startListeningRef, clearVoiceResumeTimer, setVoiceSession,
-    stopRecognition, stopSpeech, stopAllVoice, speakText, toggleVoiceEnabled,
+    voiceSessionActiveRef, startListeningRef, scheduleVoiceResume, setSpeaking,
+    clearVoiceResumeTimer, setVoiceSession, stopRecognition, stopSpeech,
+    stopAllVoice, speakText, toggleVoiceEnabled,
     stopSpeechAndResume, toggleListening, setVoiceError, setCompleted,
     lastSpokenMessageRef,
   } = useFridayVoiceController({
