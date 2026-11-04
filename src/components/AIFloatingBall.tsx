@@ -19,24 +19,12 @@ import type { MessageLike, MovieItem } from "@/components/friday/FridayPanel";
 import { useFridayVoiceController } from "@/components/friday/useFridayVoiceController";
 import { useFridayFabController } from "@/components/friday/useFridayFabController";
 
-import {
-  useAppStore,
-  resolveSource,
-  isSourceDisabled,
-  isInDisabledSubscription,
-} from "@/lib/store";
+import { useFridaySources, type FridaySourceConfig } from "@/components/friday/useFridaySources";
 
-type SourceConfig = {
-  key: string;
-  name: string;
-  url: string;
-  detail?: string;
-  isAdult?: boolean;
-  [key: string]: unknown;
-};
+
 
 type FridayProps = {
-  sources?: SourceConfig[];
+  sources?: FridaySourceConfig[];
   filterAdult?: boolean;
   showFab?: boolean;
 };
@@ -57,7 +45,6 @@ export default function AIFloatingBall({
   filterAdult,
   showFab = true,
 }: FridayProps) {
-  const appStore = useAppStore();
   const [machineState, dispatchMachine] = useReducer(
     fridayReducer,
     initialFridayState,
@@ -101,36 +88,7 @@ export default function AIFloatingBall({
     busyRef, openRef, closingRef, dispatchMachine, setInput, handleSendRef,
   });
 
-  const storeSources = useMemo<SourceConfig[]>(() => {
-    const selectedKeys = Array.isArray(appStore.selectedKeys)
-      ? appStore.selectedKeys
-      : [];
-
-    const result: SourceConfig[] = [];
-
-    for (const key of selectedKeys) {
-      if (!key) continue;
-      if (isSourceDisabled(appStore, key)) continue;
-      if (isInDisabledSubscription(appStore, key)) continue;
-
-      const source = resolveSource(appStore, key);
-
-      if (source) {
-        result.push(source as SourceConfig);
-      }
-    }
-
-    return result;
-  }, [
-    appStore.selectedKeys,
-    appStore.customAPIs,
-    appStore.envSources,
-    appStore.sourceHealth,
-    appStore.subscriptions,
-  ]);
-
-  const activeSources = sources ?? storeSources;
-  const activeFilterAdult = filterAdult ?? Boolean(appStore.yellowFilter);
+  const { activeSources, activeFilterAdult } = useFridaySources(sources, filterAdult);
 
   const transport = useMemo(
     () =>
