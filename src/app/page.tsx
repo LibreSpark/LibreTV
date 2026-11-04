@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Header } from '@/components/header';
 import { HomeSearchSection } from '@/components/home/HomeSearchSection';
+import { FridayHero } from '@/components/friday/FridayHero';
 import { RecommendSection } from '@/components/douban-section';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
@@ -67,10 +68,15 @@ export default function HomePage() {
  * so enabling the flag does not change search, recommendations, or navigation.
  */
 function HomePageV2() {
-  return <HomeContent />;
+  return <HomeContent variant="v2" />;
 }
 
-function HomeContent() {
+type HomeContentProps = {
+  variant?: 'legacy' | 'v2';
+};
+
+function HomeContent({ variant = 'legacy' }: HomeContentProps) {
+  const isV2 = variant === 'v2';
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -83,6 +89,7 @@ function HomeContent() {
   const yellowFilter = useAppStore((s) => s.yellowFilter);
   const sourceHealth = useAppStore((s) => s.sourceHealth);
   const subscriptions = useAppStore((s) => s.subscriptions);
+  const doubanEnabled = useAppStore((s) => s.doubanEnabled);
 
   const [input, setInput] = useState(urlQuery);
   const [detailItem, setDetailItem] =
@@ -347,8 +354,8 @@ function HomeContent() {
   }, [groups]);
 
   return (
-    <div className="legacy-home min-h-screen flex flex-col">
-      <Header />
+    <div className={isV2 ? "home-v2 min-h-screen flex flex-col" : "legacy-home min-h-screen flex flex-col"}>
+      <Header showFridayFab={!isV2} />
       <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6">
         {!urlQuery && (
           <div
@@ -360,6 +367,9 @@ function HomeContent() {
             }}
           />
         )}
+        {!urlQuery && isV2 ? (
+          <FridayHero onSearchFocus={() => inputRef.current?.focus()} />
+        ) : null}
         <HomeSearchSection
           urlQuery={urlQuery}
           input={input}
@@ -368,6 +378,7 @@ function HomeContent() {
           searchHistory={searchHistory}
           runSearch={runSearch}
           pickHistory={pickHistory}
+          showBrandTitle={!isV2}
         />
         {urlQuery && (
           <section aria-label="搜索结果" className="mb-10">
@@ -452,12 +463,17 @@ function HomeContent() {
           </section>
         )}
         {!urlQuery && (
-          <RecommendSection
-            onPick={(title) => {
-              setInput(title);
-              runSearch(title);
-            }}
-          />
+          <>
+            {isV2 && doubanEnabled ? (
+              <h2 className="home-v2-trending-title">今日热门</h2>
+            ) : null}
+            <RecommendSection
+              onPick={(title) => {
+                setInput(title);
+                runSearch(title);
+              }}
+            />
+          </>
         )}
       </main>
       <SiteFooter />
