@@ -337,7 +337,7 @@ function HomeContent() {
   }, [groups]);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="legacy-home min-h-screen flex flex-col">
       <Header />
       <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6">
         {!urlQuery && (
