@@ -37,6 +37,7 @@ type SourceConfig = {
 type FridayProps = {
   sources?: SourceConfig[];
   filterAdult?: boolean;
+  showFab?: boolean;
 };
 
 type DragState = {
@@ -63,6 +64,7 @@ const MOVIE_CLOSE_DELAY = 250;
 export default function AIFloatingBall({
   sources,
   filterAdult,
+  showFab = true,
 }: FridayProps) {
   const appStore = useAppStore();
   const [machineState, dispatchMachine] = useReducer(
@@ -1616,7 +1618,7 @@ export default function AIFloatingBall({
       `}</style>
 
       <div className="friday-root">
-        {!open && !closing && !fabHidden ? (
+        {showFab && !open && !closing && !fabHidden ? (
           <button
             type="button"
             className="friday-fab"
@@ -1679,7 +1681,7 @@ export default function AIFloatingBall({
         ) : null}
       </div>
 
-      {fabHidden && !open ? (
+      {showFab && fabHidden && !open ? (
         <button
           type="button"
           className="friday-restore"
