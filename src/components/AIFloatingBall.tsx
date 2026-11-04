@@ -298,6 +298,11 @@ export default function AIFloatingBall({
   useEffect(() => {
     setMounted(true);
 
+    if (window.__FRIDAY_PENDING_OPEN__) {
+      window.__FRIDAY_PENDING_OPEN__ = false;
+      openPanel();
+    }
+
     return () => {
       openRef.current = false;
       closingRef.current = false;
@@ -305,7 +310,7 @@ export default function AIFloatingBall({
       clearMovieCloseTimer();
 
     };
-  }, [clearMovieCloseTimer]);
+  }, [clearMovieCloseTimer, openPanel]);
 
   const clearConversation = useCallback(() => {
     interrupt();
