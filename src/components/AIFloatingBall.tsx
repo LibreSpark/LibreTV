@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { fridayReducer, initialFridayState } from "@/lib/friday/state";
+import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
 
 import {
   useAppStore,
@@ -302,17 +303,6 @@ function MovieCards({
   );
 }
 
-function OrbVisual() {
-  return (
-    <div className="friday-orb-visual" aria-hidden="true">
-      <div className="friday-orb-inner" />
-      <div className="friday-orb-fluid" />
-      <div className="friday-orb-rim" />
-      <div className="friday-orb-glint" />
-      <div className="friday-orb-glint-small" />
-    </div>
-  );
-}
 
 export default function AIFloatingBall({
   sources,
@@ -2288,7 +2278,7 @@ export default function AIFloatingBall({
             onPointerCancel={handleFabPointerUp}
             onClick={handleFabClick}
           >
-            <OrbVisual />
+            <FridayOrbVisual />
           </button>
         ) : null}
 
@@ -2404,7 +2394,7 @@ export default function AIFloatingBall({
                           : "Friday 随时待命"}
               </span>
 
-              <OrbVisual />
+              <FridayOrbVisual />
             </div>
 
             <footer className="friday-input-area">
