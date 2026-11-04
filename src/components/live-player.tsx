@@ -6,6 +6,7 @@ import Hls, { type HlsConfig } from 'hls.js';
 import { Spinner } from './states';
 import { prefersTouchPointer } from '@/lib/touch-pointer';
 import { ART_DEFAULT_CONTROL_HIDE_MS, TOUCH_CONTROL_HIDE_MS } from '@/lib/control-hide';
+import { attachVolumeBoost, type VolumeBoostHandle } from '@/lib/volume-boost';
 
 /**
  * 直播播放器：与点播 player-shell 完全独立。
@@ -95,6 +96,8 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     let playbackStarted = false;
     let disposed = false;
     let destroyed = false;
+    /** 音量放大句柄（换台销毁播放器时释放） */
+    let volumeBoost: VolumeBoostHandle | null = null;
     /** 原生播放注册的 error 监听清理函数（切台/销毁时调用） */
     let nativeCleanup: (() => void) | null = null;
 
@@ -346,6 +349,11 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       setLoading(false);
       setShowPoster(false);
       setError('');
+      // 音量放大：起播后（src 已就绪）才挂增益图。跨域直连流会自动跳过，
+      // 代理/hls.js 的 blob: 源可安全放大；失败一律原样播放。
+      if (!volumeBoost) {
+        volumeBoost = attachVolumeBoost(art.video);
+      }
     });
     art.on('video:error', () => {
       // mpegts 走自身 ERROR 事件；这里兜底其它未知错误
@@ -371,6 +379,8 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       clearTimeout(startTimer);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
       cleanupEngines();
+      volumeBoost?.dispose();
+      volumeBoost = null;
       art.destroy();
       artRef.current = null;
       // CONTROL_HIDE_TIME 是全局 static：恢复库默认值，避免影响后续挂载的其它播放器
