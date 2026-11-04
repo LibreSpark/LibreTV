@@ -14,4 +14,10 @@ describe("Friday message parsing", () => {
   it("returns no movie cards when message parts are absent", () => {
     expect(getMovieDataForMessage({ id: "3", role: "assistant" })).toEqual([]);
   });
+
+  it("deduplicates movie search results by search ID", () => {
+    const data = { searchId: "search-1", keyword: "test", results: [{ name: "movie" }] };
+    const message = { id: "4", role: "assistant", parts: [{ type: "data-movies", data }, { type: "data-movies", data }] };
+    expect(getMovieDataForMessage(message)).toHaveLength(1);
+  });
 });
