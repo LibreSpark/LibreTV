@@ -16,6 +16,7 @@ type HomeSearchSectionProps = {
   runSearch: (query: string) => void;
   pickHistory: (text: string) => void;
   showBrandTitle?: boolean;
+  showQuickSearches?: boolean;
 };
 
 /** 首页搜索入口。搜索状态与 URL/数据请求仍由 HomeContent 协调。 */
@@ -28,6 +29,7 @@ export function HomeSearchSection({
   runSearch,
   pickHistory,
   showBrandTitle = true,
+  showQuickSearches = false,
 }: HomeSearchSectionProps) {
   return (
             <section
@@ -116,6 +118,23 @@ export function HomeSearchSection({
                     </button>
                   </div>
                 </form>
+                {showQuickSearches && !urlQuery && (
+                  <div
+                    className="home-v2-quick-searches"
+                    aria-label="热门搜索"
+                  >
+                    {['蜘蛛侠', '科幻', '悬疑', '动漫'].map((term) => (
+                      <button
+                        key={term}
+                        type="button"
+                        className="home-v2-quick-search"
+                        onClick={() => runSearch(term)}
+                      >
+                        {term}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {searchHistory.visible && (
                   <SearchHistoryDropdown
                     id="home-search-history"
