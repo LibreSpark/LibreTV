@@ -5,14 +5,16 @@ This document records the safe extraction boundaries for the homepage refactor. 
 ## Current composition
 
 - `AIFloatingBall` remains the single mounted orchestrator. It owns the Friday state machine, chat transport, app-store source selection, panel lifecycle, and the existing `toggle-friday-panel` / `friday-open-detail` event contracts.
-- `FridayOrbVisual` is extracted as a pure visual component. It renders the orb layers only; it must not own microphone access, speech recognition, chat state, or search behavior.
-- The conversation panel markup and its scoped styles are still hosted by `AIFloatingBall` in this first structural pass. Their extraction is intentionally deferred until the prop contract is tested.
+- `FridayOrbVisual` is a pure visual component. It renders the orb layers only and owns no microphone, speech-recognition, chat, or search state.
+- `useFridayVoiceController` now owns browser speech-recognition and speech-synthesis lifecycles, voice-session refs/timers, permission and recognition errors, and the callbacks/state returned to the orchestrator.
+- `AIFloatingBall` remains the single orchestrator for chat transport, request state, app-store source selection, panel lifecycle, and movie-detail events. It passes the current busy/open/closing refs and message callback into the voice controller.
+- The conversation panel markup and its scoped styles are still hosted by `AIFloatingBall`; panel extraction remains a separate follow-up after the new hook passes CI and behavior checks.
 
 ## Next extraction boundaries
 
 ### Voice controller
 
-Target: `useFridayVoiceController`
+Implemented: `useFridayVoiceController`
 
 Owns only browser voice lifecycle:
 - SpeechRecognition construction, start/stop/abort and event handlers
@@ -20,7 +22,7 @@ Owns only browser voice lifecycle:
 - voice-session refs, resume scheduling, permission and recognition error state
 - callbacks/state returned to the orchestrator
 
-It must not own `useChat`, movie search, app-store source selection, detail navigation, or panel layout. Keep the real user-gesture requirement for microphone start and preserve the current user-facing error/fallback behavior.
+It must not own `useChat`, movie search, app-store source selection, detail navigation, or panel layout. Keep the real user-gesture requirement for microphone start and preserve the current user-facing error/fallback behavior. The hook is wired into `AIFloatingBall`; it is not a dormant parallel implementation.
 
 ### Conversation panel
 
