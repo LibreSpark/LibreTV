@@ -63,7 +63,7 @@ export function getSpeechErrorMessage(error?: string): string {
     case "no-speech":
       return "没有检测到语音，请点击麦克风重新聆听。";
     case "language-not-supported":
-      return "当前浏览器暂不支持中文语音识别。";
+      return "当前浏览器暂不支持中文语音识别，请使用键盘输入。";
     case "aborted":
       return "";
     default:
