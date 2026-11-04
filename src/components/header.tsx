@@ -12,7 +12,7 @@ import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
 import AIFloatingBall from '@/components/AIFloatingBall';
 /** 顶部导航：Logo、搜索框（首页外）、历史、设置 */
-export function Header({ showSearch = false }: { showSearch?: boolean }) {
+export function Header({ showSearch = false, showFridayFab = true }: { showSearch?: boolean; showFridayFab?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -125,7 +125,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
         </div>
       </header>
 
-      <AIFloatingBall />
+      <AIFloatingBall showFab={showFridayFab} />
       <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </React.Fragment>
