@@ -51,7 +51,7 @@ type Options = {
 const MAX_INPUT_LENGTH = 1000;
 const VOICE_RESUME_DELAY = 700;
 
-function getSpeechErrorMessage(error?: string): string {
+export function getSpeechErrorMessage(error?: string): string {
   switch (error) {
     case "not-allowed":
     case "service-not-allowed":
