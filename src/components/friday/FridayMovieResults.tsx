@@ -10,13 +10,6 @@ export function FridayMovieResults({
   data: MovieData;
   onOpen: (movie: MovieItem) => void;
 }) {
-function FridayMovieResults({
-  data,
-  onOpen,
-}: {
-  data: MovieData;
-  onOpen: (movie: MovieItem) => void;
-}) {
   const total = data.totalFound ?? data.total ?? data.results.length;
 
   if (!data.results.length) {
@@ -93,5 +86,4 @@ function FridayMovieResults({
       </div>
     </div>
   );
-}
 }
