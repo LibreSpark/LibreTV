@@ -18,6 +18,7 @@ import { FridayPanel, getPartText, getMovieDataForMessage } from "@/components/f
 import type { MessageLike, MovieItem } from "@/components/friday/FridayPanel";
 import { useFridayVoiceController } from "@/components/friday/useFridayVoiceController";
 import { useFridayFabController } from "@/components/friday/useFridayFabController";
+import { useFridayResponseController } from "@/components/friday/useFridayResponseController";
 
 import { useFridaySources, type FridaySourceConfig } from "@/components/friday/useFridaySources";
 
@@ -63,7 +64,6 @@ export default function AIFloatingBall({
   const openRef = useRef(false);
   const closingRef = useRef(false);
   const busyRef = useRef(false);
-  const lastCompletedMessageRef = useRef("");
 
   const handleSendRef = useRef<
     (text?: string, keepVoiceSession?: boolean) => Promise<void>
@@ -399,70 +399,21 @@ export default function AIFloatingBall({
     }
   }, [stopAllVoice, stop]);
 
-  // 只在本轮 AI 回复真正完成后播报一次。
-  useEffect(() => {
-    if (status !== "ready" || !open) return;
-
-    const lastAssistant = [...typedMessages]
-      .reverse()
-      .find((message) => message?.role === "assistant");
-
-    if (!lastAssistant?.id) return;
-
-    if (lastCompletedMessageRef.current === lastAssistant.id) {
-      return;
-    }
-
-    const text = getPartText(lastAssistant);
-    const movieData = getMovieDataForMessage(lastAssistant);
-
-    if (!text.trim() && movieData.length === 0) return;
-
-    lastCompletedMessageRef.current = lastAssistant.id;
-
-    if (text.trim()) {
-      if (
-        voiceEnabled &&
-        lastSpokenMessageRef.current !== lastAssistant.id
-      ) {
-        speakText(text, lastAssistant.id);
-      } else {
-        setCompleted(true);
-        scheduleVoiceResume();
-      }
-    } else {
-      setCompleted(true);
-      scheduleVoiceResume();
-    }
-  }, [
-    typedMessages,
+  useFridayResponseController({
+    messages: typedMessages,
     status,
-    voiceEnabled,
     open,
+    error,
+    voiceEnabled,
+    completed,
+    voiceSessionActiveRef,
+    lastSpokenMessageRef,
     speakText,
     scheduleVoiceResume,
-  ]);
-
-  // 请求异常时，不让用户误以为麦克风仍在聆听。
-  useEffect(() => {
-    if (!error) return;
-
-    setSpeaking(false);
-
-    if (voiceSessionActiveRef.current) {
-      setVoiceError("Friday 请求失败，请检查网络后重新尝试。");
-    }
-  }, [error]);
-
-  useEffect(() => {
-    if (!completed) return;
-
-    const timer = window.setTimeout(() => {
-      setCompleted(false);
-    }, 1800);
-
-    return () => window.clearTimeout(timer);
-  }, [completed]);
+    setSpeaking,
+    setCompleted,
+    setVoiceError,
+  });
 
   useEffect(() => {
     if (!open) return;
