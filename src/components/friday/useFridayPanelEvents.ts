@@ -31,6 +31,7 @@ export function useFridayPanelEvents({
 
   useEffect(() => {
     const handleToggleFridayPanel = (event: Event) => {
+      window.__FRIDAY_PENDING_OPEN__ = false;
       const detail = (
         event as CustomEvent<{ reset?: boolean; listen?: boolean }>
       ).detail;
