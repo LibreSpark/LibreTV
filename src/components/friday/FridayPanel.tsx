@@ -4,7 +4,9 @@ import React from "react";
 import type { RefObject } from "react";
 import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
 
-type MovieItem = {
+const MAX_MOVIE_CARDS = 60;
+
+export type MovieItem = {
   sourceKey?: string;
   sourceName?: string;
   vodId?: string | number;
@@ -18,7 +20,7 @@ type MovieItem = {
   isAdult?: boolean;
 };
 
-type MovieData = {
+export type MovieData = {
   searchId: string;
   keyword: string;
   total?: number;
@@ -36,31 +38,19 @@ type MovieData = {
   createdAt?: number;
 };
 
-type MessagePartLike = {
+export type MessagePartLike = {
   type?: string;
   text?: string;
   data?: unknown;
 };
 
-type MessageLike = {
+export type MessageLike = {
   id: string;
   role: string;
   parts?: MessagePartLike[];
 };
 
 
-
-type MessageLike = {
-  id: string;
-  role: string;
-  parts?: MessagePartLike[];
-};
-
-type MessagePartLike = {
-  type?: string;
-  text?: string;
-  data?: unknown;
-};
 
 type FridayPanelProps = {
   expanded: boolean;
@@ -96,7 +86,7 @@ type FridayPanelProps = {
   onOpenMovie: (movie: MovieItem) => void;
 };
 
-function getPartText(message: MessageLike): string {
+export function getPartText(message: MessageLike): string {
   if (!Array.isArray(message.parts)) return "";
 
   return message.parts
@@ -105,7 +95,7 @@ function getPartText(message: MessageLike): string {
     .join("");
 }
 
-function getMovieDataForMessage(message: MessageLike): MovieData[] {
+export function getMovieDataForMessage(message: MessageLike): MovieData[] {
   if (!Array.isArray(message.parts)) return [];
 
   const output: MovieData[] = [];
