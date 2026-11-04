@@ -86,7 +86,7 @@ body { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%) !important;
 .dark .legacy-home [class*="bg-blue-50"], .dark .legacy-home [class*="bg-blue-100"], .dark .legacy-home [class*="bg-purple"], .dark .legacy-home [class*="bg-violet"], .dark .legacy-home [class*="bg-fuchsia"], .dark .legacy-home [class*="bg-pink"], .dark .legacy-home [class*="bg-amber"], .dark .legacy-home [class*="bg-yellow"], .dark .legacy-home [class*="bg-orange"], .dark .legacy-home [class*="text-purple"], .dark .legacy-home [class*="text-amber"] { background-color: #2a2a2a !important; color: #aaaaaa !important; }
 
 html, body, main { -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
-.movie-card, .grid > div:has(img), button, a { touch-action: manipulation !important; }
+.legacy-home .movie-card, .legacy-home .grid > div:has(img), .legacy-home button, .legacy-home a { touch-action: manipulation !important; }
 
 /* ==========================================
    4. 卡片毛玻璃与角标
