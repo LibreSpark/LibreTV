@@ -122,6 +122,22 @@ export default function AIFloatingBall({
   busyRef.current = busy;
   closingRef.current = closing;
 
+  const {
+    clearMovieCloseTimer,
+    resetPendingMovie,
+    handleOpenMovie,
+    handlePanelAnimationEnd,
+  } = useFridayMovieTransition<MovieItem>({
+    openRef,
+    closingRef,
+    busyRef,
+    setClosing,
+    setOpen,
+    setExpanded,
+    stopAllVoice,
+    stop,
+  });
+
   const auroraState: AuroraState = speaking
     ? "speaking"
     : listening
@@ -245,22 +261,6 @@ export default function AIFloatingBall({
     }
     setExpanded(false);
   }, [resetPendingMovie, stopAllVoice, stop, cancelActiveRequest]);
-
-  const {
-    clearMovieCloseTimer,
-    resetPendingMovie,
-    handleOpenMovie,
-    handlePanelAnimationEnd,
-  } = useFridayMovieTransition<MovieItem>({
-    openRef,
-    closingRef,
-    busyRef,
-    setClosing,
-    setOpen,
-    setExpanded,
-    stopAllVoice,
-    stop,
-  });
 
   const {
     fabHidden,
