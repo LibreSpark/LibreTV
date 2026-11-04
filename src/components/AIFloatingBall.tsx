@@ -460,7 +460,6 @@ export default function AIFloatingBall({
 
     setMessages([]);
     lastSpokenMessageRef.current = "";
-    lastCompletedMessageRef.current = "";
 
     setCompleted(false);
     setVoiceError("");
