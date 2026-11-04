@@ -5,6 +5,8 @@ import type { RefObject } from "react";
 import { FridayOrbVisual } from "@/components/friday/FridayOrbVisual";
 import { FridayConversation } from "@/components/friday/FridayConversation";
 import { FridayComposer } from "@/components/friday/FridayComposer";
+import { getMovieDataForMessage, getPartText } from "@/lib/friday/message";
+
 
 export type MovieItem = {
   sourceKey?: string;
