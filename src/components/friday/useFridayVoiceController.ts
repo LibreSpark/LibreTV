@@ -86,6 +86,7 @@ export function useFridayVoiceController({
   const [completed, setCompleted] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [voiceSessionActive, setVoiceSessionActive] = useState(false);
+  const lastSpokenMessageRef = useRef("");
 
   const listeningRef = useRef(false);
   const voiceSessionActiveRef = useRef(false);
@@ -468,8 +469,6 @@ export function useFridayVoiceController({
     toggleListening,
     setVoiceError,
     setCompleted,
+    lastSpokenMessageRef,
   };
 }
-
-// Updated by the orchestrator after a completed assistant response.
-const lastSpokenMessageRef: { current: string } = { current: "" };
