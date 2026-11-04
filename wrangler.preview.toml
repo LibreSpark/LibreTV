@@ -1,0 +1,19 @@
+name = "libretv-homepage-preview"
+main = ".open-next/worker.js"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+assets = { directory = ".open-next/assets" }
+
+# 安全默认：不启用 workers.dev，也不创建公开路由。
+# 先部署为不可公开访问的独立 Worker；确认 Cloudflare Access / 路由策略后再开放预览入口。
+workers_dev = false
+preview_urls = false
+
+[vars]
+# HOME_V2 在构建时通过 GitHub Actions 环境变量注入；此处保留运行时配置。
+CMS_SEARCH_API = "https://caiji.dyttzyapi.com/api.php/provide/vod"
+API_60S_BASE = "https://60s.bggdbh.workers.dev"
+LLM_MODEL = "glm-4-flash"
+
+# 不要在此文件写 PASSWORD、ZHIPU_API_KEY、METADATA_API_KEY 或其他密钥。
+# 请在 Cloudflare Worker 的 Secrets 中单独配置预览环境专用值。
