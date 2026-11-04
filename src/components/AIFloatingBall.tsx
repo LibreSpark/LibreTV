@@ -19,6 +19,7 @@ import type { MessageLike, MovieItem } from "@/components/friday/FridayPanel";
 import { useFridayVoiceController } from "@/components/friday/useFridayVoiceController";
 import { useFridayFabController } from "@/components/friday/useFridayFabController";
 import { useFridayResponseController } from "@/components/friday/useFridayResponseController";
+import { useFridayRequestLifecycle } from "@/components/friday/useFridayRequestLifecycle";
 
 import { useFridaySources, type FridaySourceConfig } from "@/components/friday/useFridaySources";
 
@@ -51,9 +52,6 @@ export default function AIFloatingBall({
     initialFridayState,
   );
 
-  const requestSequenceRef = useRef(0);
-  const activeRequestIdRef = useRef(0);
-  const observedBusyRef = useRef(false);
 
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -119,33 +117,8 @@ export default function AIFloatingBall({
   const typedMessages = messages as unknown as MessageLike[];
   const busy = status === "submitted" || status === "streaming";
 
-  useEffect(() => {
-    const requestId = activeRequestIdRef.current;
-    if (!requestId) return;
-
-    if (error) {
-      dispatchMachine({
-        type: "REQUEST_FAILED",
-        requestId,
-        code: "chat_request_failed",
-        message: error.message || "消息请求失败",
-      });
-      activeRequestIdRef.current = 0;
-      observedBusyRef.current = false;
-      return;
-    }
-
-    if (busy) {
-      observedBusyRef.current = true;
-      return;
-    }
-
-    if (observedBusyRef.current) {
-      dispatchMachine({ type: "RESPONSE_COMPLETED", requestId });
-      activeRequestIdRef.current = 0;
-      observedBusyRef.current = false;
-    }
-  }, [busy, error]);
+  const { beginRequest, failActiveRequest, cancelActiveRequest } =
+    useFridayRequestLifecycle({ busy, error, dispatchMachine });
 
   // 同步引用，避免回调读取到上一轮渲染的状态。
   busyRef.current = busy;
@@ -228,10 +201,7 @@ export default function AIFloatingBall({
       setCompleted(false);
       setInput("");
 
-      const requestId = ++requestSequenceRef.current;
-      activeRequestIdRef.current = requestId;
-      observedBusyRef.current = false;
-      dispatchMachine({ type: "MESSAGE_SUBMITTED", requestId });
+      beginRequest();
 
       if (inputRef.current) {
         inputRef.current.style.height = "auto";
@@ -242,15 +212,7 @@ export default function AIFloatingBall({
       } catch (sendError) {
         console.error("[Friday] Send failed:", sendError);
 
-        if (activeRequestIdRef.current) {
-          dispatchMachine({
-            type: "REQUEST_FAILED",
-            requestId: activeRequestIdRef.current,
-            code: "send-failed",
-            message: "消息发送失败，请检查网络后重试。",
-          });
-          activeRequestIdRef.current = 0;
-        }
+        failActiveRequest("send-failed", "消息发送失败，请检查网络后重试。");
         setVoiceError("消息发送失败，请检查网络后重试。");
 
         if (keepVoiceSession && voiceSessionActiveRef.current) {
@@ -261,6 +223,8 @@ export default function AIFloatingBall({
     [
       input,
       sendMessage,
+      beginRequest,
+      failActiveRequest,
       clearVoiceResumeTimer,
       stopRecognition,
       stopSpeech,
@@ -317,16 +281,11 @@ export default function AIFloatingBall({
     setClosing(false);
     setOpen(false);
     dispatchMachine({ type: "CLOSE" });
-    if (busyRef.current && activeRequestIdRef.current) {
-      dispatchMachine({
-        type: "REQUEST_CANCELLED",
-        requestId: activeRequestIdRef.current,
-      });
-      activeRequestIdRef.current = 0;
-      observedBusyRef.current = false;
+    if (busyRef.current) {
+      cancelActiveRequest();
     }
     setExpanded(false);
-  }, [clearMovieCloseTimer, stopAllVoice, stop]);
+  }, [clearMovieCloseTimer, stopAllVoice, stop, cancelActiveRequest]);
 
   const {
     fabHidden,
