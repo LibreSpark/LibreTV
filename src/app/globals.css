@@ -284,7 +284,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
    ========================================== */
 .home-v2 {
   min-height: 100svh;
-  color: var(--color-content, inherit);
+  color: var(--c-content, inherit);
 }
 
 .home-v2 main {
@@ -310,7 +310,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
 
 .home-v2 .friday-hero-eyebrow {
   margin: 0 0 7px;
-  color: var(--text-faint, #888);
+  color: var(--c-faint, #888);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: .22em;
@@ -318,7 +318,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
 
 .home-v2 .friday-hero-title {
   margin: 0;
-  color: var(--text-content, currentColor);
+  color: var(--c-content, currentColor);
   font-size: clamp(30px, 5vw, 44px);
   font-weight: 650;
   letter-spacing: -.045em;
@@ -328,7 +328,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
 .home-v2 .friday-hero-description {
   max-width: 330px;
   margin: 9px 0 12px;
-  color: var(--text-muted, #888);
+  color: var(--c-muted, #888);
   font-size: 12px;
   line-height: 1.65;
 }
@@ -341,7 +341,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-muted, #888);
+  color: var(--c-muted, #888);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -354,7 +354,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
 }
 
 .home-v2 .friday-hero-orb-label {
-  color: var(--text-content, currentColor);
+  color: var(--c-content, currentColor);
   font-size: 11px;
   font-weight: 600;
 }
@@ -364,13 +364,13 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
   padding: 5px 9px;
   border: 0;
   background: transparent;
-  color: var(--text-faint, #888);
+  color: var(--c-faint, #888);
   font-size: 10px;
   cursor: pointer;
 }
 
 .home-v2 .friday-hero-text-entry:hover {
-  color: var(--text-content, currentColor);
+  color: var(--c-content, currentColor);
 }
 
 .home-v2 .friday-hero-v2 + section {
@@ -380,7 +380,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
 
 .home-v2 .home-v2-trending-title {
   margin: 4px 0 12px;
-  color: var(--text-content, currentColor);
+  color: var(--c-content, currentColor);
   font-size: 16px;
   font-weight: 650;
   letter-spacing: -.02em;
