@@ -170,7 +170,7 @@ export default function AIFloatingBall({
     dispatchMachine({ type: "OPEN" });
     setExpanded(false);
     setVoiceError("");
-  }, [clearMovieCloseTimer, clearVoiceResumeTimer]);
+  }, [resetPendingMovie, clearVoiceResumeTimer, setVoiceError]);
 
   const openAndListen = useCallback(() => {
     openPanel();
