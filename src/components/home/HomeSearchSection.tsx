@@ -15,6 +15,7 @@ type HomeSearchSectionProps = {
   searchHistory: SearchHistoryState;
   runSearch: (query: string) => void;
   pickHistory: (text: string) => void;
+  showBrandTitle?: boolean;
 };
 
 /** 首页搜索入口。搜索状态与 URL/数据请求仍由 HomeContent 协调。 */
@@ -26,6 +27,7 @@ export function HomeSearchSection({
   searchHistory,
   runSearch,
   pickHistory,
+  showBrandTitle = true,
 }: HomeSearchSectionProps) {
   return (
             <section
@@ -34,7 +36,7 @@ export function HomeSearchSection({
                 urlQuery ? 'mb-6' : 'mt-8 mb-8'
               )}
             >
-              {!urlQuery && (
+              {!urlQuery && showBrandTitle && (
                 <header className="text-center mb-6">
                   <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">
                     LibreTV
