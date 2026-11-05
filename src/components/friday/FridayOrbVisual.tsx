@@ -98,7 +98,6 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     if (!canvas) return;
     const gl = canvas.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: false });
     if (!gl) return;
-    let frame = 0;
     let raf = 0;
     let program: WebGLProgram | null = null;
     let buffer: WebGLBuffer | null = null;
