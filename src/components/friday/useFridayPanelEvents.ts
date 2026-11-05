@@ -7,6 +7,7 @@ type FridayPanelEventsOptions = {
   closePanel: () => void;
   clearConversation: () => void;
   openAndListen: () => void;
+  openImmersiveAndListen: () => void;
   openPanel: () => void;
 };
 
@@ -16,6 +17,7 @@ export function useFridayPanelEvents({
   closePanel,
   clearConversation,
   openAndListen,
+  openImmersiveAndListen,
   openPanel,
 }: FridayPanelEventsOptions) {
   useEffect(() => {
@@ -33,12 +35,14 @@ export function useFridayPanelEvents({
     const handleToggleFridayPanel = (event: Event) => {
       window.__FRIDAY_PENDING_OPEN__ = false;
       const detail = (
-        event as CustomEvent<{ reset?: boolean; listen?: boolean }>
+        event as CustomEvent<{ reset?: boolean; listen?: boolean; immersive?: boolean }>
       ).detail;
 
       if (detail?.reset) clearConversation();
 
-      if (detail?.listen) {
+      if (detail?.listen && detail?.immersive) {
+        openImmersiveAndListen();
+      } else if (detail?.listen) {
         openAndListen();
       } else {
         openPanel();
@@ -49,5 +53,5 @@ export function useFridayPanelEvents({
     return () => {
       window.removeEventListener("toggle-friday-panel", handleToggleFridayPanel);
     };
-  }, [clearConversation, openAndListen, openPanel]);
+  }, [clearConversation, openAndListen, openImmersiveAndListen, openPanel]);
 }
