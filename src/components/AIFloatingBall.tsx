@@ -57,6 +57,7 @@ export default function AIFloatingBall({
   const [closing, setClosing] = useState(false);
   const [input, setInput] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [immersive, setImmersive] = useState(false);
 
   const openRef = useRef(false);
   const closingRef = useRef(false);
@@ -151,6 +152,7 @@ export default function AIFloatingBall({
     setOpen(true);
     dispatchMachine({ type: "OPEN" });
     setExpanded(false);
+    setImmersive(false);
     setVoiceError("");
   }, [resetPendingMovie, clearVoiceResumeTimer, setVoiceError]);
 
@@ -166,6 +168,17 @@ export default function AIFloatingBall({
     // 保留真实用户点击手势。
     startListening(false);
   }, [openPanel, startListening]);
+
+  const openImmersiveAndListen = useCallback(() => {
+    openPanel();
+    openRef.current = true;
+    closingRef.current = false;
+    setImmersive(true);
+    setExpanded(true);
+    setVoiceSession(true);
+    // 保留真实用户点击手势，直接启动现有语音识别器。
+    startListening(false);
+  }, [openPanel, startListening, setVoiceSession]);
 
   const handleSend = useCallback(
     async (text?: string, keepVoiceSession = false) => {
@@ -241,6 +254,7 @@ export default function AIFloatingBall({
       cancelActiveRequest();
     }
     setExpanded(false);
+    setImmersive(false);
   }, [resetPendingMovie, stopAllVoice, stop, cancelActiveRequest]);
 
   const {
@@ -332,6 +346,7 @@ export default function AIFloatingBall({
     closePanel,
     clearConversation,
     openAndListen,
+    openImmersiveAndListen,
     openPanel,
   });
 
@@ -383,6 +398,7 @@ export default function AIFloatingBall({
         {open || closing ? (
           <FridayPanel
             expanded={expanded}
+            immersive={immersive}
             closing={closing}
             auroraState={auroraState}
             agentState={machineState.agent}
