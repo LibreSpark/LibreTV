@@ -11,7 +11,7 @@ export function FridayHero({ onSearchFocus }: FridayHeroProps) {
   const startVoice = () => {
     window.dispatchEvent(
       new CustomEvent('toggle-friday-panel', {
-        detail: { reset: false, listen: true },
+        detail: { reset: false, listen: true, immersive: true },
       }),
     );
   };
@@ -33,7 +33,7 @@ export function FridayHero({ onSearchFocus }: FridayHeroProps) {
         <span className="friday-hero-orb">
           <FridayOrbVisual />
         </span>
-        <span className="friday-hero-orb-label">点击开始语音</span>
+        <span className="friday-hero-orb-label">进入沉浸式语音</span>
       </button>
 
       <button
