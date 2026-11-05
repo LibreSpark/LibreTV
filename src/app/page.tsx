@@ -308,9 +308,29 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
           <HomeRecommendationSection
             isV2={isV2}
             enabled={doubanEnabled}
-            onPick={(title) => {
-              setInput(title);
-              runSearch(title);
+            onPick={async (picked) => {
+              const title = picked.title.trim();
+              if (!title || selectedSources.length === 0) {
+                toast(selectedSources.length === 0 ? '请先在设置中添加并勾选点播源' : '影片标题为空', 'warning');
+                return;
+              }
+              try {
+                const result = await api.search(title, selectedSources, yellowFilter);
+                const normalized = (value: string) => value.replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+                const exact = result.list.find((candidate) => normalized(candidate.name) === normalized(title));
+                const match = exact ?? result.list[0];
+                if (match) {
+                  setDetailItem(match);
+                } else {
+                  setInput(title);
+                  runSearch(title);
+                  toast('暂未匹配到可播放片源，已为你搜索该影片', 'info');
+                }
+              } catch {
+                setInput(title);
+                runSearch(title);
+                toast('详情匹配暂不可用，已切换到常规搜索', 'info');
+              }
             }}
           />
         )}
