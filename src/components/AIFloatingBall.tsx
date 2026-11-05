@@ -130,8 +130,9 @@ export default function AIFloatingBall({
           ? "completed"
           : "standby";
 
-  const stateLabel =
-    auroraState === "listening"
+  const stateLabel = voiceError
+    ? "语音暂不可用，可重试或使用文字输入"
+    : auroraState === "listening"
       ? "正在聆听"
       : auroraState === "thinking"
         ? "正在寻找合适的影视资源"
