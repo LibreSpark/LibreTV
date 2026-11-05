@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { FridayOrbVisual } from '@/components/friday/FridayOrbVisual';
 
 type FridayHeroProps = {
@@ -8,6 +9,16 @@ type FridayHeroProps = {
 
 /** 首页 Friday 主入口。语音会话仍由唯一挂载的 AIFloatingBall 协调。 */
 export function FridayHero({ onSearchFocus }: FridayHeroProps) {
+  const [orbState, setOrbState] = useState<'standby' | 'listening' | 'thinking' | 'speaking' | 'completed'>('standby');
+
+  useEffect(() => {
+    const onVoiceState = (event: Event) => {
+      const detail = (event as CustomEvent<{ state?: typeof orbState }>).detail;
+      if (detail?.state) setOrbState(detail.state);
+    };
+    window.addEventListener('friday-voice-state', onVoiceState);
+    return () => window.removeEventListener('friday-voice-state', onVoiceState);
+  }, []);
   const startVoice = () => {
     window.dispatchEvent(
       new CustomEvent('toggle-friday-panel', {
@@ -31,7 +42,7 @@ export function FridayHero({ onSearchFocus }: FridayHeroProps) {
         aria-label="打开 Friday 并开始语音聆听"
       >
         <span className="friday-hero-orb">
-          <FridayOrbVisual />
+          <FridayOrbVisual state={orbState} />
         </span>
         <span className="friday-hero-orb-label">进入沉浸式语音</span>
       </button>
