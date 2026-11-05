@@ -15,7 +15,7 @@ import { HomeSearchSection } from '@/components/home/HomeSearchSection';
 import { HomeIntentCanvas } from '@/components/home/HomeIntentCanvas';
 import { useFridayDetailBridge } from '@/components/friday/useFridayDetailBridge';
 import { useHomeSearchController } from '@/components/home/useHomeSearchController';
-import { RecommendSection } from '@/components/douban-section';
+import { HomeRecommendationSection } from '@/components/home/HomeRecommendationSection';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
@@ -305,17 +305,14 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
           </section>
         )}
         {!urlQuery && (
-          <>
-            {isV2 && doubanEnabled ? (
-              <h2 className="home-v2-trending-title">今日热门</h2>
-            ) : null}
-            <RecommendSection
-              onPick={(title) => {
-                setInput(title);
-                runSearch(title);
-              }}
-            />
-          </>
+          <HomeRecommendationSection
+            isV2={isV2}
+            enabled={doubanEnabled}
+            onPick={(title) => {
+              setInput(title);
+              runSearch(title);
+            }}
+          />
         )}
       </main>
       <SiteFooter />
