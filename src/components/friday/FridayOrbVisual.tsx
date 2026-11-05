@@ -52,6 +52,8 @@ precision highp float;
 uniform float uTime;
 uniform float uSpeed;
 uniform vec2 uResolution;
+uniform sampler2D uEnvironment;
+uniform float uHasEnvironment;
 varying vec3 vNormal;
 varying vec3 vPosition;
 varying float vNoise;
@@ -64,6 +66,11 @@ float softBox(vec3 direction, vec3 center, float exponent, float intensity) {
 }
 vec3 environmentRadiance(vec3 direction, float time) {
   vec3 d = normalize(direction);
+  if (uHasEnvironment > 0.5) {
+    vec2 uv = vec2(atan(d.z, d.x) * 0.15915494 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+    vec3 hdr = texture2D(uEnvironment, uv).rgb;
+    return max(hdr, vec3(0.0)) * 1.15;
+  }
   float horizon = smoothstep(-0.75, 0.85, d.y);
   vec3 sky = mix(vec3(0.035, 0.055, 0.11), vec3(0.16, 0.24, 0.42), horizon);
   vec3 floorTint = vec3(0.025, 0.035, 0.075) * (1.0 - horizon);
@@ -134,6 +141,65 @@ function compile(gl: WebGLRenderingContext, type: number, source: string) {
   return shader;
 }
 
+
+// Decode Radiance RGBE scanlines into linear floating-point RGBA pixels.
+function decodeRadianceHDR(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let offset = 0;
+  const readLine = () => {
+    const start = offset;
+    while (offset < bytes.length && bytes[offset] !== 10) offset++;
+    const line = new TextDecoder().decode(bytes.subarray(start, offset)).replace(/\r$/, "");
+    offset++;
+    return line;
+  };
+  if (!readLine().startsWith("#?")) throw new Error("Invalid Radiance HDR header");
+  let line = "";
+  while (offset < bytes.length && (line = readLine()) !== "") {
+    if (line.startsWith("FORMAT=") && line !== "FORMAT=32-bit_rle_rgbe") {
+      throw new Error("Unsupported HDR pixel format");
+    }
+  }
+  const resolution = readLine().match(/^-Y\s+(\d+)\s+\+X\s+(\d+)$/);
+  if (!resolution) throw new Error("Unsupported HDR image orientation");
+  const height = Number(resolution[1]);
+  const width = Number(resolution[2]);
+  if (!width || !height || width > 4096 || height > 2048) throw new Error("HDR dimensions out of range");
+  const output = new Float32Array(width * height * 4);
+  const scanline = new Uint8Array(width * 4);
+  for (let y = 0; y < height; y++) {
+    if (bytes[offset++] !== 2 || bytes[offset++] !== 2) throw new Error("Unsupported HDR scanline encoding");
+    const scanWidth = (bytes[offset++] << 8) | bytes[offset++];
+    if (scanWidth !== width) throw new Error("HDR scanline width mismatch");
+    for (let channel = 0; channel < 4; channel++) {
+      let x = 0;
+      while (x < width) {
+        const code = bytes[offset++];
+        if (code > 128) {
+          const count = code - 128;
+          const value = bytes[offset++];
+          if (!count || x + count > width) throw new Error("Invalid HDR run");
+          for (let i = 0; i < count; i++) scanline[(x++ * 4) + channel] = value;
+        } else {
+          const count = code;
+          if (!count || x + count > width) throw new Error("Invalid HDR literal");
+          for (let i = 0; i < count; i++) scanline[(x++ * 4) + channel] = bytes[offset++];
+        }
+      }
+    }
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const exponent = scanline[x * 4 + 3];
+      const scale = exponent ? Math.pow(2, exponent - 136) : 0;
+      output[index] = scanline[x * 4] * scale;
+      output[index + 1] = scanline[x * 4 + 1] * scale;
+      output[index + 2] = scanline[x * 4 + 2] * scale;
+      output[index + 3] = 1;
+    }
+  }
+  return { width, height, data: output };
+}
+
 export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVisualProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const listening = isListening ?? state === "listening";
@@ -152,6 +218,8 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     let indexBuffer: WebGLBuffer | null = null;
     let vertexShader: WebGLShader | null = null;
     let fragmentShader: WebGLShader | null = null;
+    let environmentTexture: WebGLTexture | null = null;
+    let environmentAbort: AbortController | null = null;
     let disposed = false;
     const start = performance.now();
 
@@ -227,8 +295,46 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
       const time = gl.getUniformLocation(program, "uTime");
       const speed = gl.getUniformLocation(program, "uSpeed");
       const resolution = gl.getUniformLocation(program, "uResolution");
-      if (!projection || !time || !speed || !resolution) {
+      const environment = gl.getUniformLocation(program, "uEnvironment");
+      const hasEnvironment = gl.getUniformLocation(program, "uHasEnvironment");
+      if (!projection || !time || !speed || !resolution || !environment || !hasEnvironment) {
         throw new Error("Required shader uniforms are unavailable");
+      }
+
+      gl.uniform1i(environment, 0);
+      gl.uniform1f(hasEnvironment, 0);
+      const floatTextureSupport = gl.getExtension("OES_texture_float");
+      if (floatTextureSupport) {
+        environmentTexture = gl.createTexture();
+        if (environmentTexture) {
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, environmentTexture);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          const linearFloat = gl.getExtension("OES_texture_float_linear");
+          const filter = linearFloat ? gl.LINEAR : gl.NEAREST;
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+          environmentAbort = new AbortController();
+          fetch("https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_08_1k.hdr", {
+            mode: "cors",
+            signal: environmentAbort.signal,
+          }).then((response) => {
+            if (!response.ok) throw new Error(`HDR environment request failed: ${response.status}`);
+            return response.arrayBuffer();
+          }).then((buffer) => {
+            if (disposed || !gl || !environmentTexture) return;
+            const hdr = decodeRadianceHDR(buffer);
+            gl.bindTexture(gl.TEXTURE_2D, environmentTexture);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, hdr.width, hdr.height, 0, gl.RGBA, gl.FLOAT, hdr.data);
+            gl.uniform1f(hasEnvironment, 1);
+          }).catch((error: unknown) => {
+            if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
+              console.warn("[FridayOrbVisual] HDR environment unavailable; using procedural studio lighting.", error);
+            }
+          });
+        }
       }
 
       const draw = () => {
@@ -277,12 +383,14 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
 
     return () => {
       disposed = true;
+      environmentAbort?.abort();
       cancelAnimationFrame(raf);
       canvas.removeEventListener("webglcontextlost", onContextLost);
       if (gl) {
         if (vertexBuffer) gl.deleteBuffer(vertexBuffer);
         if (indexBuffer) gl.deleteBuffer(indexBuffer);
         if (program) gl.deleteProgram(program);
+        if (environmentTexture) gl.deleteTexture(environmentTexture);
         if (vertexShader) gl.deleteShader(vertexShader);
         if (fragmentShader) gl.deleteShader(fragmentShader);
       }
