@@ -872,8 +872,6 @@ export function FridayStyles() {
           .friday-root .friday-fab *,
         .friday-root .friday-panel,
         .friday-root .friday-orb-visual,
-        .friday-root .friday-orb-fluid,
-        .friday-root .friday-orb-rim,
         .friday-root .friday-status-dot,
         .friday-root .friday-message,
         .friday-root .friday-status{
