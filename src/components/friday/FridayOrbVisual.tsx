@@ -44,7 +44,7 @@ void main(){
  vec3 p=aPosition*(1.0+displacement);
  vNormal=normalize(aPosition+vec3(n*.035));
  vPosition=p;vNoise=n;
- gl_Position=uProjection*vec4(p,1.0);
+ gl_Position=uProjection*vec4(p+vec3(0.0,0.0,-2.8),1.0);
 }`;
 
 const FRAGMENT_SHADER = `
