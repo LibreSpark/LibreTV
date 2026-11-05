@@ -563,3 +563,247 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
     transition: none;
   }
 }
+
+
+/* HOME V2 — homepage orb styles (kept outside .friday-root so the hero orb is visible). */
+.home-v2 .friday-hero-v2 {
+  height: auto;
+  min-height: 0;
+  padding: 10px 8px 0;
+  gap: 0;
+}
+.home-v2 .friday-hero-description,
+.home-v2 .friday-hero-orb-button,
+.home-v2 .friday-hero-orb-label,
+.home-v2 .friday-hero-text-entry { display: none !important; }
+.home-v2 .friday-hero-orb {
+  display: block;
+  width: 132px;
+  height: 132px;
+  flex: 0 0 132px;
+  margin: 12px auto 0;
+  filter: drop-shadow(0 8px 26px rgba(91,151,255,.22));
+}
+.home-v2 .friday-hero-orb .friday-orb-visual {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 132px;
+  min-height: 132px;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateZ(0);
+  border: 1px solid rgba(255,255,255,.62);
+  border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
+  background:
+    radial-gradient(ellipse at 28% 17%,rgba(255,255,255,.34),transparent 24%),
+    radial-gradient(ellipse at 75% 80%,rgba(92,95,160,.28),transparent 46%),
+    radial-gradient(ellipse at 50% 52%,rgba(25,35,60,.94),rgba(7,10,22,.98) 70%);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.12),
+    0 0 22px rgba(111,194,255,.24),
+    0 0 38px rgba(190,117,255,.18),
+    inset 0 1px 4px rgba(255,255,255,.6),
+    inset 0 -8px 18px rgba(0,0,0,.42);
+  animation: home-friday-orb-breathe 4.8s ease-in-out infinite;
+  -webkit-transform: translateZ(0);
+}
+.home-v2 .friday-hero-orb .friday-orb-inner {
+  position: absolute;
+  z-index: 0;
+  inset: 3px;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 29% 18%,rgba(255,255,255,.22),transparent 25%),
+    radial-gradient(ellipse at 70% 72%,rgba(113,99,183,.2),transparent 43%),
+    radial-gradient(ellipse at 50% 52%,rgba(17,23,38,.12),rgba(3,5,12,.38) 100%);
+}
+.home-v2 .friday-hero-orb .friday-orb-fluid {
+  position: absolute;
+  z-index: 1;
+  inset: 8%;
+  border-radius: 48% 52% 57% 43% / 55% 43% 57% 45%;
+  background:
+    radial-gradient(ellipse at 20% 38%,rgba(102,231,255,.78),transparent 39%),
+    radial-gradient(ellipse at 82% 32%,rgba(183,132,255,.72),transparent 38%),
+    radial-gradient(ellipse at 55% 90%,rgba(255,180,135,.58),transparent 44%),
+    radial-gradient(ellipse at 12% 78%,rgba(119,48,177,.52),transparent 40%);
+  mix-blend-mode: screen;
+  opacity: 1;
+  animation: home-friday-fluid-drift 7s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.home-v2 .friday-hero-orb .friday-orb-rim {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from 15deg,rgba(120,220,255,.98),rgba(185,151,255,.96),rgba(255,211,180,.94),rgba(255,255,255,.98),rgba(104,233,221,.96),rgba(115,155,255,.98),rgba(120,220,255,.98));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: home-friday-orb-spectrum 12s linear infinite;
+  pointer-events: none;
+}
+.home-v2 .friday-hero-orb .friday-orb-glint,
+.home-v2 .friday-hero-orb .friday-orb-glint-small {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  pointer-events: none;
+}
+.home-v2 .friday-hero-orb .friday-orb-glint {
+  top: 10%;
+  left: 17%;
+  width: 29%;
+  height: 11%;
+  border-radius: 50%;
+  transform: rotate(-32deg);
+  background: linear-gradient(90deg,rgba(255,255,255,.98),rgba(255,255,255,.48) 60%,transparent);
+  opacity: 1;
+}
+.home-v2 .friday-hero-orb .friday-orb-glint-small {
+  top: 23%;
+  left: 13%;
+  width: 8%;
+  height: 4%;
+  border-radius: 50%;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 0 8px rgba(255,255,255,.8);
+}
+@keyframes home-friday-orb-breathe {
+  0%,100% { transform: translateZ(0) scale(.97); filter: brightness(1); }
+  50% { transform: translateZ(0) scale(1.045); filter: brightness(1.18); }
+}
+@keyframes home-friday-orb-spectrum {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(360deg); }
+}
+@keyframes home-friday-fluid-drift {
+  0% { transform: translate(-3%,2%) rotate(-8deg) scale(.94); }
+  50% { transform: translate(3%,-2%) rotate(8deg) scale(1.08); }
+  100% { transform: translate(-1%,3%) rotate(3deg) scale(1.02); }
+}
+
+/* AI search: icon-first controls, with a stable Safari-friendly microphone state. */
+.home-v2 .home-v2-ai-search {
+  min-height: 56px;
+  gap: 2px;
+  padding: 5px 7px 5px 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.72);
+  box-shadow: 0 8px 28px rgba(30,45,75,.09), inset 0 1px 0 rgba(255,255,255,.82);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.dark .home-v2 .home-v2-ai-search {
+  background: rgba(20,27,41,.84);
+  box-shadow: 0 8px 28px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.home-v2 .home-v2-search-leading {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  flex: 0 0 30px;
+  color: var(--c-muted,#888);
+}
+.home-v2 .home-v2-ai-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 7px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--c-content,currentColor);
+  font-size: 14px;
+  -webkit-appearance: none;
+}
+.home-v2 .home-v2-ai-search-input::placeholder { color: var(--c-faint,#888); opacity: 1; }
+.home-v2 .home-v2-search-clear,
+.home-v2 .home-v2-mic-button,
+.home-v2 .home-v2-search-submit {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-muted,#888);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.home-v2 .home-v2-mic-button {
+  color: #a9d9ff;
+  background: rgba(77,151,224,.15);
+}
+.home-v2 .home-v2-mic-button.is-listening {
+  color: #fff;
+  background: rgba(239,68,68,.92);
+  box-shadow: 0 0 0 0 rgba(239,68,68,.4);
+  animation: home-v2-mic-pulse 1.25s ease-out infinite;
+}
+.home-v2 .home-v2-ai-search.is-listening {
+  border-color: rgba(239,68,68,.65);
+  box-shadow: 0 0 0 3px rgba(239,68,68,.1),0 8px 28px rgba(30,45,75,.09);
+}
+.home-v2 .home-v2-search-submit {
+  color: #fff;
+  background: #2469c8;
+}
+.home-v2 .home-v2-search-submit:active,
+.home-v2 .home-v2-mic-button:active { transform: scale(.92); }
+.home-v2 .home-v2-voice-error,
+.home-v2 .home-v2-voice-status {
+  margin: 7px 6px 0;
+  color: var(--c-muted,#888);
+  font-size: 11px;
+  text-align: center;
+}
+.home-v2 .home-v2-voice-error { color: #dc5555; }
+.home-v2 .home-v2-voice-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #6db9f2;
+}
+.home-v2 .home-v2-voice-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6db9f2;
+  box-shadow: 0 0 0 4px rgba(109,185,242,.14);
+  animation: home-v2-mic-pulse 1.25s ease-out infinite;
+}
+@keyframes home-v2-mic-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(109,185,242,.36); }
+  100% { box-shadow: 0 0 0 9px rgba(109,185,242,0); }
+}
+.home-v2 .home-v2-quick-searches { margin-top: 8px; }
+.home-v2 .friday-hero-v2 + section { margin-top: 0 !important; margin-bottom: 12px !important; }
+.home-v2 .home-v2-trending-title { margin-top: 0; margin-bottom: 8px; }
+
+@media (max-width: 430px) {
+  .home-v2 .friday-hero-orb { width: 112px; height: 112px; flex-basis: 112px; }
+  .home-v2 .friday-hero-orb .friday-orb-visual { min-width: 112px; min-height: 112px; }
+  .home-v2 .friday-hero-v2 { padding-top: 5px; }
+}
+@media (max-height: 700px) and (max-width: 767px) {
+  .home-v2 .friday-hero-orb { width: 88px; height: 88px; flex-basis: 88px; margin-top: 7px; }
+  .home-v2 .friday-hero-orb .friday-orb-visual { min-width: 88px; min-height: 88px; }
+  .home-v2 .home-v2-ai-search { min-height: 50px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-v2 .friday-hero-orb .friday-orb-visual,
+  .home-v2 .friday-hero-orb .friday-orb-fluid,
+  .home-v2 .friday-hero-orb .friday-orb-rim,
+  .home-v2 .home-v2-mic-button.is-listening,
+  .home-v2 .home-v2-voice-pulse { animation: none !important; }
+}
