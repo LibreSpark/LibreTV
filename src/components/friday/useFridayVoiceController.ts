@@ -288,6 +288,8 @@ export function useFridayVoiceController({
 
       recognitionErrorRef.current = event.error || "unknown";
       const message = getSpeechErrorMessage(event.error);
+      listeningRef.current = false;
+      setListening(false);
       if (message) {
         dispatchMachine({
           type: "VOICE_FAILED",
@@ -427,6 +429,7 @@ export function useFridayVoiceController({
       utteranceRef.current = null;
       setSpeakingState(false);
       setCompleted(true);
+      setVoiceError("语音播报中断，请继续使用文字或重新开启语音。");
       scheduleVoiceResume();
     };
 
