@@ -230,7 +230,21 @@ export function useFridayVoiceController({
     recognitionErrorRef.current = "";
     manualVoiceStopRef.current = false;
 
-    const recognition = new SpeechRecognitionClass();
+    let recognition: SpeechRecognitionLike;
+    try {
+      recognition = new SpeechRecognitionClass();
+    } catch (recognitionError) {
+      setVoiceSession(false);
+      dispatchMachine({
+        type: "VOICE_FAILED",
+        sessionId: voiceSessionIdRef.current,
+        code: "constructor-failed",
+        message: "无法初始化语音识别，请检查浏览器兼容性或改用键盘输入。",
+      });
+      setVoiceError("无法初始化语音识别，请检查浏览器兼容性或改用键盘输入。");
+      return;
+    }
+
     recognition.lang = "zh-CN";
     recognition.continuous = false;
     recognition.interimResults = true;
@@ -344,11 +358,18 @@ export function useFridayVoiceController({
       });
       listeningRef.current = false;
       setListening(false);
-      setVoiceError(
-        automatic
-          ? "浏览器未允许自动恢复麦克风，请点击麦克风继续聆听。"
-          : "语音识别启动失败，请检查麦克风权限后重试。",
-      );
+      const errorName =
+        recognitionError instanceof Error ? recognitionError.name : "";
+      const startErrorMessage =
+        errorName === "NotAllowedError" || errorName === "SecurityError"
+          ? "浏览器未授予麦克风权限，请在网站设置中允许麦克风访问。"
+          : errorName === "InvalidStateError"
+            ? "语音识别仍在启动，请稍后再点击麦克风。"
+            : automatic
+              ? "浏览器未允许自动恢复麦克风，请点击麦克风继续聆听。"
+              : "语音识别启动失败，请检查麦克风权限后重试。";
+      setVoiceSession(false);
+      setVoiceError(startErrorMessage);
     }
   }, [
     busyRef,
