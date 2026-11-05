@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from './theme';
 import { SourceManagerDrawer } from './source-manager';
@@ -10,9 +10,9 @@ import { requestShowDownloadManager } from './download-manager';
 import { Icon } from './icon';
 import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
-
+import AIFloatingBall from '@/components/AIFloatingBall';
 /** 顶部导航：Logo、搜索框（首页外）、历史、设置 */
-export function Header({ showSearch = false }: { showSearch?: boolean }) {
+export function Header({ showSearch = false, showFridayFab = true, minimalFridayNav = false }: { showSearch?: boolean; showFridayFab?: boolean; minimalFridayNav?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -36,15 +36,14 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   };
 
   return (
-    <>
-      <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
+    <React.Fragment>
+<header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
           <Link href="/" aria-label="LibreTV 首页" className="flex items-center shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/icons/icon-512.png" alt="LibreTV" className="w-7 h-7 rounded-lg" />
           </Link>
-
-          {showSearch && (
+{showSearch && (
             <form
               className="flex-1 max-w-xl hidden sm:block"
               onSubmit={(e) => {
@@ -96,33 +95,44 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
 
           <div className="flex-1 sm:hidden" />
 
-          <nav className="flex items-center gap-1 ml-auto">
-            <HeaderLink href="/live" active={pathname === '/live'}>
-              直播
-            </HeaderLink>
-            <HeaderLink href="/about" active={pathname === '/about'}>
-              关于
-            </HeaderLink>
-            <ThemeToggle />
-            <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
-              <Icon name="clock" />
-            </IconButton>
-            <IconButton label="下载管理" onClick={requestShowDownloadManager}>
-              <Icon name="download" />
-            </IconButton>
-            <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
-              <Icon name="gear" />
-            </IconButton>
-          </nav>
+         <button
+          onClick={() => {
+            if (typeof window !== 'undefined') window.__FRIDAY_PENDING_OPEN__ = true;
+            window.dispatchEvent(new CustomEvent('toggle-friday-panel', { detail: { reset: false } }));
+          }}
+          className="text-sm font-bold text-primary hover:text-primary-hover transition-colors cursor-pointer mr-2"
+        >
+          Friday
+        </button> 
+          {!minimalFridayNav && (
+            <nav className="flex items-center gap-1 ml-auto">
+              <HeaderLink href="/live" active={pathname === '/live'}>
+                直播
+              </HeaderLink>
+              <HeaderLink href="/about" active={pathname === '/about'}>
+                关于
+              </HeaderLink>
+              <ThemeToggle />
+              <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
+                <Icon name="clock" />
+              </IconButton>
+              <IconButton label="下载管理" onClick={requestShowDownloadManager}>
+                <Icon name="download" />
+              </IconButton>
+              <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
+                <Icon name="gear" />
+              </IconButton>
+            </nav>
+          )}
         </div>
       </header>
 
+      <AIFloatingBall showFab={showFridayFab} />
       <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
-    </>
+    </React.Fragment>
   );
 }
-
 function HeaderLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
     <Link

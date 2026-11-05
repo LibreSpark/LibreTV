@@ -1,4 +1,5 @@
-import dns from 'node:dns/promises';
+import { resolve4, resolve6 } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 /** 去掉 URL.hostname 对 IPv6 附加的方括号（"[::1]" → "::1"） */
 function stripBrackets(host: string): string {
@@ -20,21 +21,62 @@ function toIPv4(ip: string): string | null {
   return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
 }
 
-/** 判断 IP 是否为私有/回环/链路本地/保留地址（SSRF 防护） */
+/** IPv4 地址转无符号整数；输入必须是标准点分十进制。 */
+function ipv4ToNumber(ip: string): number {
+  return ip.split('.').reduce((value, part) => ((value << 8) | Number(part)) >>> 0, 0);
+}
+
+/** 判断 IPv4 是否落在 CIDR 网段内。 */
+function ipv4InCidr(ip: string, network: string, prefix: number): boolean {
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return (ipv4ToNumber(ip) & mask) === (ipv4ToNumber(network) & mask);
+}
+
+const BLOCKED_IPV4_CIDRS: Array<[string, number]> = [
+  ['0.0.0.0', 8],       // 当前网络
+  ['10.0.0.0', 8],      // 私有
+  ['100.64.0.0', 10],   // 运营商级 NAT
+  ['127.0.0.0', 8],     // 回环
+  ['169.254.0.0', 16],  // 链路本地 / 云元数据
+  ['172.16.0.0', 12],   // 私有
+  ['192.0.0.0', 24],    // IETF 协议分配
+  ['192.0.2.0', 24],    // 文档示例
+  ['192.88.99.0', 24],  // 6to4 中继（已弃用）
+  ['192.168.0.0', 16],  // 私有
+  ['198.18.0.0', 15],   // 基准测试
+  ['198.51.100.0', 24], // 文档示例
+  ['203.0.113.0', 24],  // 文档示例
+  ['224.0.0.0', 4],     // 多播
+  ['240.0.0.0', 4],     // 保留 / 广播
+];
+
+/** 判断 IP 是否为私有、回环、链路本地、多播或特殊用途保留地址。 */
 export function isPrivateIP(ip: string): boolean {
-  let v = stripBrackets(ip.trim());
-  v = toIPv4(v) ?? v;
-  if (/^(127\.|0\.0\.0\.0$|::1$|::$|fe80:|fc|fd)/i.test(v)) return true;
-  if (v.startsWith('10.')) return true;
-  if (v.startsWith('192.168.')) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(v)) return true;
-  if (v.startsWith('169.254.')) return true; // 链路本地（含云元数据 169.254.169.254）
-  if (v.startsWith('100.64.')) return true; // CGNAT
-  if (v.startsWith('192.0.0.')) return true; // 协议分配块
+  let value = stripBrackets(ip.trim()).toLowerCase();
+  if (!value) return true;
+
+  // IPv4-mapped IPv6 先还原，再统一按 IPv4 CIDR 判断。
+  value = toIPv4(value) ?? value;
+
+  if (isIP(value) === 4) {
+    return BLOCKED_IPV4_CIDRS.some(([network, prefix]) =>
+      ipv4InCidr(value, network, prefix),
+    );
+  }
+
+  if (isIP(value) !== 6) return true;
+
+  // IPv6 未指定、回环、唯一本地、链路本地、多播及文档示例网段。
+  if (value === '::' || value === '::1') return true;
+  if (/^(fc|fd)/i.test(value)) return true;       // fc00::/7
+  if (/^fe[89ab]/i.test(value)) return true;      // fe80::/10
+  if (/^ff/i.test(value)) return true;            // ff00::/8
+  if (/^2001:db8:/i.test(value)) return true;     // 2001:db8::/32
   return false;
 }
 
 const BLOCKED_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+const DNS_LOOKUP_TIMEOUT_MS = 4000;
 
 /** URL 字面量校验：协议白名单 + 主机名/字面量 IP 黑名单 */
 export function isValidProxyUrl(urlString: string): boolean {
@@ -59,10 +101,43 @@ export async function isBlockedByDNS(urlString: string): Promise<boolean> {
     if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':')) {
       return isPrivateIP(hostname);
     }
-    const result = await dns.lookup(hostname, { all: true });
-    return result.some((r) => isPrivateIP(r.address));
+    // Cloudflare Workers 不实现 dns.lookup；resolve4/resolve6 使用 Workers DNS API。
+    // ENODATA 只表示该地址族没有记录；其他解析错误一律 fail-closed。
+    const resolveFamily = async (resolver: typeof resolve4 | typeof resolve6) => {
+      try {
+        return await resolver(hostname);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException)?.code;
+        if (code === 'ENODATA') return [];
+        throw error;
+      }
+    };
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let resolved: [string[], string[]];
+    try {
+      const lookup = Promise.all([
+        resolveFamily(resolve4),
+        resolveFamily(resolve6),
+      ]) as Promise<[string[], string[]]>;
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('DNS 查询超时')),
+          DNS_LOOKUP_TIMEOUT_MS,
+        );
+      });
+      resolved = await Promise.race([lookup, timeout]);
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
+    const [ipv4, ipv6] = resolved;
+    const addresses = [...ipv4, ...ipv6];
+    // 没有任何 A/AAAA 记录时无法确认目标安全，拒绝请求。
+    if (addresses.length === 0) return true;
+    return addresses.some((address) => isPrivateIP(address));
   } catch {
-    return false; // 解析失败不阻断，交给后续请求处理
+    // DNS 失败必须 fail-closed：无法证明目标是公网地址时，不发起上游请求。
+    return true;
   }
 }
 

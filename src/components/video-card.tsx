@@ -83,9 +83,8 @@ export function AggregatedCard({
 }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
-  const [imgFailed, setImgFailed] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const showImg = !!group.pic && !imgFailed;
+  const showImg = !!group.pic;
 
   const multi = group.items.length > 1;
   const adult = useMemo(() => group.items.some((i) => i.isAdult), [group.items]);
@@ -169,7 +168,6 @@ export function AggregatedCard({
               customProxy={customImageProxy}
               alt={group.name}
               className="absolute inset-0 h-full w-full object-cover"
-              onExhausted={() => setImgFailed(true)}
             />
             <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
             {multi && (
@@ -196,7 +194,7 @@ export function AggregatedCard({
             <h3 className="font-semibold text-sm text-content mb-1.5 line-clamp-2" title={group.name}>
               {group.name}
             </h3>
-            <div className="flex flex-wrap gap-1 mb-1.5">
+            <div className="flex flex-wrap gap-1.5 mb-1.5">
               {group.typeName && <span className="tag bg-accent/15 text-accent">{group.typeName}</span>}
               {group.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{group.year}</span>}
               {adult && <span className="tag bg-pink-500/15 text-pink-600 dark:text-pink-400">(18+)</span>}
@@ -206,15 +204,18 @@ export function AggregatedCard({
                   entry={qualities[singleKey]}
                   loading={probing[singleKey]}
                   onRetry={singleItem ? () => retry([singleItem]) : undefined}
+                  className="!bg-chip !text-muted text-[10px]"
                 />
               )}
             </div>
             <p className="text-xs text-muted line-clamp-2 mb-2">{group.remarks || '暂无介绍'}</p>
           </div>
-          <div className="flex items-center justify-between gap-1.5 mt-auto pt-1.5 border-t border-line">
-            <span className="tag bg-chip text-muted truncate max-w-[80%]">
-              {multi ? `${group.items.length} 个来源` : group.items[0].sourceName}
-            </span>
+          <div className={cn('flex items-center justify-between gap-1.5 mt-auto pt-1.5 border-t border-line', !multi && 'hidden')}>
+            {multi && (
+              <span className="tag bg-chip text-muted truncate max-w-[80%]">
+                {group.items.length} 个来源
+              </span>
+            )}
             {multi && (
               <span className="flex items-center gap-1 shrink-0">
                 {/* 收起态先给结论：最高画质比「N 个来源」更影响要不要点开 */}
@@ -335,8 +336,7 @@ export function AggregatedCard({
 export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: () => void }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
-  const [imgFailed, setImgFailed] = useState(false);
-  const showImg = !!item.pic && !imgFailed;
+  const showImg = !!item.pic;
 
   return (
     <div
@@ -361,7 +361,6 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
               customProxy={customImageProxy}
               alt={item.name}
               className="h-full w-full object-cover"
-              onExhausted={() => setImgFailed(true)}
             />
             <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
           </div>
@@ -384,9 +383,6 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
             </div>
             <p className="text-xs text-muted line-clamp-2 mb-2">{formatRemarks(item.remarks) || '暂无介绍'}</p>
           </div>
-          <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-line">
-            <span className="tag bg-chip text-muted truncate max-w-[80%]">{item.sourceName}</span>
-          </div>
         </div>
       </div>
     </div>
@@ -394,11 +390,56 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 }
 
 /** 豆瓣推荐卡片（无来源徽章，点击直接搜索） */
-export function DoubanCard({ item, onClick }: { item: { title: string; cover: string; rating?: string }; onClick: () => void }) {
+export function DoubanCard({
+  item,
+  onClick,
+  enableTmdbFallback = false,
+  isTv = false,
+}: {
+  item: { title: string; cover: string; rating?: string };
+  onClick: () => void;
+  /** 仅豆瓣热门与影视热榜启用，Bangumi 等其它入口保持原行为 */
+  enableTmdbFallback?: boolean;
+  isTv?: boolean;
+}) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
-  useEffect(() => setImgFailed(false), [item.cover]);
+  const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
+  const [tmdbFailed, setTmdbFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+    setTmdbPoster(null);
+    setTmdbFailed(false);
+  }, [item.cover, item.title, isTv]);
+
+  const loadTmdbFallback = async () => {
+    if (!enableTmdbFallback || tmdbPoster || tmdbFailed) {
+      setImgFailed(true);
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ title: item.title, type: isTv ? 'tv' : 'movie' });
+      const response = await fetch(`/api/poster-fallback?${params.toString()}`);
+      if (!response.ok) throw new Error('TMDB fallback unavailable');
+      const data = (await response.json()) as { poster?: string | null };
+      if (data.poster) {
+        setTmdbPoster(data.poster);
+        return;
+      }
+    } catch {
+      // TMDB 不可用时回到原占位图，不影响列表和点击播放
+    }
+    setTmdbFailed(true);
+    setImgFailed(true);
+  };
+
+  // 原始数据本身没有封面时也直接尝试 TMDB；有封面时仍严格等原图候选链失败后再兜底
+  useEffect(() => {
+    if (!item.cover && enableTmdbFallback) void loadTmdbFallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.cover, item.title, isTv, enableTmdbFallback]);
 
   return (
     <div
@@ -415,14 +456,18 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
       }}
     >
       <div className="relative aspect-[2/3] bg-chip">
-        {item.cover && !imgFailed ? (
+        {tmdbPoster ? (
+          // TMDB 图片为 HTTPS 静态 CDN 地址；只在豆瓣原图候选链耗尽后显示
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={tmdbPoster} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+        ) : item.cover && !imgFailed ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
             className="w-full h-full object-cover"
-            onExhausted={() => setImgFailed(true)}
+            onExhausted={loadTmdbFallback}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-chip">

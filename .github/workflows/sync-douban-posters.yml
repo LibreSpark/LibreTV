@@ -1,0 +1,44 @@
+name: Sync Douban poster index
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: douban-poster-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sync public Douban poster URLs
+        run: npm run syncDoubanPosters
+
+      - name: Commit updated poster index
+        run: |
+          if git diff --quiet -- src/data/douban-posters.json; then
+            echo "Poster index is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/douban-posters.json
+          git commit -m "chore: sync Douban poster index"
+          git push origin HEAD:main

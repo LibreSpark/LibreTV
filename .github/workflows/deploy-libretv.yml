@@ -1,0 +1,50 @@
+name: Deploy LibreTV to Cloudflare Workers
+
+on:
+  workflow_dispatch:
+    inputs:
+      home_v2:
+        description: "生产首页版本（默认启用 Friday 新首页；选择 false 可回滚旧版）"
+        required: true
+        type: choice
+        options:
+          - "true"
+          - "false"
+        default: "true"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-libretv
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy LibreTV
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build OpenNext for Cloudflare
+        env:
+          NEXT_PUBLIC_HOME_V2: ${{ inputs.home_v2 }}
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npx opennextjs-cloudflare build
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy

@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { buildImageCandidates } from '@/lib/utils';
 
+const DEFAULT_POSTER_SRC =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 450'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%231b2940'/%3E%3Cstop offset='1' stop-color='%23090f1c'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='300' height='450' fill='url(%23g)'/%3E%3Crect x='105' y='165' width='90' height='90' rx='18' fill='none' stroke='%237d91ad' stroke-width='7'/%3E%3Cpath d='M135 185v50l42-25z' fill='%237d91ad'/%3E%3Ctext x='150' y='310' text-anchor='middle' fill='%2393a4bb' font-size='17' font-family='Arial,sans-serif'%3ELibreTV%3C/text%3E%3C/svg%3E";
+
 interface SmartImageProps {
   /** 原始图片地址（未经代理加工，降级链由本组件按加载方式生成） */
   url?: string;
@@ -32,15 +35,15 @@ export function SmartImage({
 }: SmartImageProps) {
   const candidates = buildImageCandidates(url, mode, customProxy);
   const [idx, setIdx] = useState(0);
+  const [fallback, setFallback] = useState(false);
 
   // 地址或加载方式变化时重置降级进度
-  useEffect(() => setIdx(0), [url, mode, customProxy]);
   useEffect(() => {
-    if (idx >= candidates.length) onExhausted?.();
-    // 候选数组随 url/mode 变化，length 是充分的稳定信号
-  }, [idx, candidates.length, onExhausted]);
+    setIdx(0);
+    setFallback(false);
+  }, [url, mode, customProxy]);
 
-  const src = candidates[idx];
+  const src = fallback ? DEFAULT_POSTER_SRC : candidates[idx];
   if (!src) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -50,7 +53,16 @@ export function SmartImage({
       className={className}
       loading={loading}
       referrerPolicy="no-referrer"
-      onError={() => setIdx((i) => i + 1)}
+      onError={() => {
+        if (fallback) return;
+        if (idx + 1 < candidates.length) {
+          setIdx((current) => current + 1);
+          return;
+        }
+        // 所有原图/代理候选都失败时，显示内置 SVG 海报，避免浏览器碎图图标。
+        setFallback(true);
+        onExhausted?.();
+      }}
     />
   );
 }

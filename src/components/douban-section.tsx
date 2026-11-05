@@ -13,7 +13,7 @@ const TV_TAGS = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧', 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 /** 首页推荐区：数据源由设置决定（豆瓣热门 / Bangumi 新番放送 / 影视热榜），二选一展示 */
-export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
+export function RecommendSection({ onPick }: { onPick: (item: DoubanItem) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
 
@@ -28,7 +28,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
  * 一次性渲染全部条目：数据本就一次拉全（50 条），卡片图片又是 lazy 加载，
  * 视口外的图不会请求，因此不需要「加载更多」这类本地切片分页来打断浏览。
  */
-function DoubanView({ onPick }: { onPick: (title: string) => void }) {
+function DoubanView({ onPick }: { onPick: (item: DoubanItem) => void }) {
   const [type, setType] = useState<'movie' | 'tv'>('movie');
   const [tag, setTag] = useState('热门');
 
@@ -77,7 +77,7 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试或在设置中关闭</p>
+        <QueryError error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : items.length === 0 ? (
@@ -85,7 +85,13 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard
+              key={item.id}
+              item={item}
+              isTv={type === 'tv'}
+              enableTmdbFallback
+              onClick={() => onPick(item)}
+            />
           ))}
         </div>
       )}
@@ -94,7 +100,7 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
 }
 
 /** Bangumi 每日放送：星期筛选，一次拉全量无分页 */
-function BangumiView({ onPick }: { onPick: (title: string) => void }) {
+function BangumiView({ onPick }: { onPick: (item: DoubanItem) => void }) {
   const [weekday, setWeekday] = useState<number | 'all'>('all');
 
   const query = useQuery({
@@ -129,7 +135,13 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard
+              key={item.id}
+              item={item}
+              isTv={item.isTv ?? true}
+              enableTmdbFallback
+              onClick={() => onPick(item)}
+            />
           ))}
         </div>
       )}
@@ -143,11 +155,10 @@ const HOT_LISTS = [
   { id: 'douban_tv_global', label: '海外剧周榜' },
   { id: 'douban_show_chinese', label: '国内综艺' },
   { id: 'douban_show_global', label: '海外综艺' },
-  { id: 'baidu_teleplay', label: '百度热播剧' },
 ];
 
-/** 影视热榜（60s API）：豆瓣五个周榜 + 百度热播剧，chips 切换 */
-function HotListView({ onPick }: { onPick: (title: string) => void }) {
+/** 影视热榜（60s API）：豆瓣电影/剧集/综艺榜单，chips 切换 */
+function HotListView({ onPick }: { onPick: (item: DoubanItem) => void }) {
   const [listId, setListId] = useState(HOT_LISTS[0].id);
 
   const query = useQuery({
@@ -168,17 +179,33 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试或在设置中关闭</p>
+        <QueryError error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item)} />
           ))}
         </div>
       )}
     </section>
+  );
+}
+
+function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const message = error instanceof Error ? error.message.slice(0, 180) : '未知错误';
+  return (
+    <div className="flex flex-col items-center gap-2 text-center py-8">
+      <p className="text-sm text-faint">推荐内容加载失败：{message}</p>
+      <button
+        type="button"
+        className="px-3 py-1.5 rounded-md text-sm bg-chip text-content hover:bg-hover"
+        onClick={onRetry}
+      >
+        重试
+      </button>
+    </div>
   );
 }
 

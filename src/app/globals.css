@@ -2,189 +2,808 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
- * 语义化配色（RGB 三元组，供 Tailwind 以 <alpha-value> 注入透明度）：
- * 深色主题沿用旧版 LibreTV 配色；浅色主题为对应的白底变体。
- */
+/* ==========================================
+   1. 全局变量与配色
+   ========================================== */
 :root {
-  --c-page: 246 247 249;           /* #f6f7f9 */
-  --c-surface: 255 255 255;        /* #ffffff */
+  --c-page: 246 247 249;
+  --c-surface: 255 255 255;
   --c-surface-raised: 255 255 255;
   --c-card: 255 255 255;
-  --c-chip: 238 240 243;           /* #eef0f3 */
-  --c-hover: 233 236 240;          /* #e9ecf0 */
-  --c-line: 224 227 232;           /* #e0e3e8 */
-  --c-content: 26 26 26;           /* #1a1a1a */
-  --c-muted: 95 99 104;            /* #5f6368 */
-  --c-faint: 107 114 128;          /* #6b7280（原 #8a8f98 对白底仅 3.2:1，加深后达到 AA 4.5:1） */
-  --c-accent: 37 99 235;           /* blue-600 */
-  --c-accent-hover: 29 78 216;     /* blue-700 */
-  --c-on-accent: 255 255 255;      /* accent 实心底上的文字色 */
-  /* 语义状态色（亮色主题取偏深值，保证浅底上的对比度） */
-  --c-danger: 220 38 38;           /* red-600 */
-  --c-danger-hover: 185 28 28;     /* red-700 */
-  --c-success: 22 163 74;          /* green-600 */
-  --c-warning: 217 119 6;          /* amber-600 */
-  --c-info: 37 99 235;             /* blue-600 */
-  --c-rating: 245 158 11;          /* amber-500 */
-  /* 实心状态底色（配白字）：比「文字用」色更深一档，保证白字对比度 ≥ 4.5:1 */
-  --c-danger-solid: 185 28 28;     /* red-700 */
-  --c-success-solid: 21 128 61;    /* green-700 */
-  --c-warning-solid: 180 83 9;     /* amber-700 */
-  --c-info-solid: 29 78 216;       /* blue-700 */
-  color-scheme: light;
+  --c-chip: 238 240 243;
+  --c-hover: 233 236 240;
+  --c-line: 224 227 232;
+  --c-content: 26 26 26;
+  --c-muted: 95 99 104;
+  --c-faint: 107 114 128;
+  --c-accent: 0 0 0;
+  --c-accent-hover: 51 51 51;
+  --c-on-accent: 255 255 255;
+  --c-danger: 220 38 38;
+  --c-danger-hover: 185 28 28;
+  --c-success: 22 163 74;
+  --c-warning: 217 119 6;
+  --c-info: 37 99 235;
+  --c-rating: 245 158 11;
 }
 
 .dark {
-  /* 旧版 LibreTV（backup-2025）赛博影视主题（整体调深一档）：深蓝黑底 + 霓虹蓝/粉点缀 */
-  --c-page: 11 16 26;              /* #0b101a 深蓝黑页面底色 */
-  --c-surface: 20 28 41;           /* #141c29 弹窗/抽屉底色 */
+  --c-page: 0 0 0;
+  --c-surface: 26 26 26;
   --c-surface-raised: 20 28 41;
-  --c-card: 13 20 31;              /* #0d141f 卡片底色 */
-  --c-chip: 22 32 46;              /* #16202e 卡片/输入框底色 */
-  --c-hover: 29 42 61;             /* #1d2a3d 悬停态（chip 提亮） */
-  --c-line: 34 48 69;              /* #223045 边框（近似旧版 rgba(0,204,255,.15) 观感） */
-  --c-content: 230 242 255;        /* #e6f2ff 蓝白主文本（--text-color） */
-  --c-muted: 133 153 178;          /* #8599b2 次级文本（--text-muted） */
-  --c-faint: 122 140 166;          /* #7a8ca6 三级文本（原 #6b7f99 在抽屉底色 #141c29 上仅 4.17:1，12px 小字不达标；提亮后 4.99:1） */
-  --c-accent: 0 184 230;           /* #00b8e6 霓虹蓝主色（--primary-color 调深一档） */
-  --c-accent-hover: 51 214 255;    /* #33d6ff 霓虹蓝浅变体（--primary-light） */
-  /* 霓虹蓝底亮度过高（对白字仅 2.35:1），暗色下实心底改用深色文字 */
-  --c-on-accent: 8 19 31;
-  /* 语义状态色（暗色主题取中等明度值，保证深蓝黑底上的对比度） */
-  --c-danger: 239 68 68;           /* red-500 */
-  --c-danger-hover: 248 113 113;   /* red-400 */
-  --c-success: 34 197 94;          /* green-500 */
-  --c-warning: 245 158 11;         /* amber-500 */
-  --c-info: 59 130 246;            /* blue-500 */
-  --c-rating: 251 191 36;          /* amber-400 */
-  /* 实心状态底色（配白字）：与亮色一致取深档，避免琥珀/绿色底白字对比度不足 */
-  --c-danger-solid: 185 28 28;     /* red-700 */
-  --c-success-solid: 21 128 61;    /* green-700 */
-  --c-warning-solid: 180 83 9;     /* amber-700 */
-  --c-info-solid: 29 78 216;       /* blue-700 */
-  color-scheme: dark;
+  --c-card: 26 26 26;
+  --c-chip: 22 32 46;
+  --c-hover: 29 42 61;
+  --c-line: 34 48 69;
+  --c-content: 230 242 255;
+  --c-muted: 133 153 178;
+  --c-faint: 122 140 166;
+  --c-accent: 255 255 255;
+  --c-accent-hover: 204 204 204;
+  --c-on-accent: 0 0 0;
 }
 
-html,
-body {
-  @apply bg-page text-content antialiased;
+body { background-color: rgb(var(--c-page)); color: rgb(var(--c-content)); }
+html { background-color: #f5f7fa !important; }
+html.dark { background-color: #000000 !important; }
+body, main, #__next { background-color: transparent !important; }
+body { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%) !important; }
+.dark body { background: linear-gradient(135deg, #111111 0%, #000000 100%) !important; }
+
+/* ==========================================
+   2. 基础背景与页头定制
+   ========================================== */
+.legacy-home main h1, .legacy-home .text-transparent.bg-clip-text.text-4xl, .legacy-home .text-transparent.bg-clip-text.text-5xl, .legacy-home .text-transparent.bg-clip-text.text-6xl { display: none !important; }
+.legacy-home main { padding-top: 10px !important; }
+.legacy-home header a[href="/"] > * { display: none !important; }
+.legacy-home header a[href="/"] { display: flex !important; align-items: center !important; background: transparent !important; box-shadow: none !important; font-size: 0 !important; }
+.legacy-home header a[href="/"]::before {
+  content: "L"; display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; background-color: #0d1117; color: #ffffff;
+  font-weight: bold; font-size: 18px !important; line-height: 1;
+  border-radius: 8px; margin-right: 8px; flex-shrink: 0 !important;
 }
 
-/* 暗色主题：模拟旧版 .page-bg 的深蓝黑纵向渐变 */
-.dark body {
-  background: linear-gradient(180deg, rgb(11 16 26), rgb(20 28 41)) fixed;
+/* ==========================================
+   3. 搜索框、去彩标签与防缩放
+   ========================================== */
+.legacy-home input[type="text"], .legacy-home input[type="search"] {
+  border-radius: 9999px 0 0 9999px !important; padding-left: 20px !important;
+  border-right: none !important; outline: none !important; margin-right: -1px !important;
+  background-color: rgba(255, 255, 255, 0.6) !important; backdrop-filter: blur(10px) !important;
+  font-size: 16px !important; position: relative !important; z-index: 2 !important;
+}
+.legacy-home button[type="submit"], .legacy-home button:has(svg.lucide-search) {
+  border-radius: 0 9999px 9999px 0 !important; padding: 0 24px !important;
+  border-left: none !important; background-color: #000000 !important; color: #ffffff !important;
+  position: relative !important; z-index: 1 !important;
+}
+.dark .legacy-home button[type="submit"], .dark .legacy-home button:has(svg.lucide-search) { background-color: #27272a !important; }
+
+.legacy-home button[aria-selected="true"], .legacy-home button[aria-selected="false"] { border-radius: 9999px !important; padding: 6px 20px !important; }
+
+.legacy-home [class*="bg-blue-50"], .legacy-home [class*="bg-blue-100"], .legacy-home [class*="bg-purple"], .legacy-home [class*="bg-violet"], .legacy-home [class*="bg-fuchsia"], .legacy-home [class*="bg-pink"], .legacy-home [class*="bg-amber"], .legacy-home [class*="bg-yellow"], .legacy-home [class*="bg-orange"], .legacy-home [class*="text-purple"], .legacy-home [class*="text-amber"] { background-color: #f3f4f6 !important; color: #333333 !important; border: none !important; opacity: 1 !important; }
+.dark .legacy-home [class*="bg-blue-50"], .dark .legacy-home [class*="bg-blue-100"], .dark .legacy-home [class*="bg-purple"], .dark .legacy-home [class*="bg-violet"], .dark .legacy-home [class*="bg-fuchsia"], .dark .legacy-home [class*="bg-pink"], .dark .legacy-home [class*="bg-amber"], .dark .legacy-home [class*="bg-yellow"], .dark .legacy-home [class*="bg-orange"], .dark .legacy-home [class*="text-purple"], .dark .legacy-home [class*="text-amber"] { background-color: #2a2a2a !important; color: #aaaaaa !important; }
+
+html, body, main { -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
+.legacy-home .movie-card, .legacy-home .grid > div:has(img), .legacy-home button, .legacy-home a { touch-action: manipulation !important; }
+
+/* ==========================================
+   4. 卡片毛玻璃与角标
+   ========================================== */
+.legacy-home .grid > div:has(img), .legacy-home .movie-card {
+  background-color: rgba(255, 255, 255, 0.55) !important; backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important; border-radius: 16px !important; overflow: hidden !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04) !important;
+}
+.legacy-home .grid > div:has(img) img, .legacy-home .movie-card img { border-radius: 16px 16px 0 0 !important; }
+.dark .legacy-home .grid > div:has(img), .dark .legacy-home .movie-card { background-color: rgba(26, 26, 26, 0.55) !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; }
+
+.legacy-home .grid > div:has(img) .absolute.left-0, .legacy-home .grid > div:has(img) .absolute.left-2,
+.legacy-home .movie-card .absolute.left-0, .legacy-home .movie-card .absolute.left-2 { display: none !important; }
+
+.legacy-home .grid > div:has(img) .absolute.right-0, .legacy-home .grid > div:has(img) .absolute.right-2,
+.legacy-home .movie-card .absolute.right-0, .legacy-home .movie-card .absolute.right-2 {
+  background-color: rgba(0, 0, 0, 0.6) !important; color: #fff !important;
+  border-radius: 9999px !important; border: none !important; width: auto !important; 
+  display: inline-flex !important; padding: 2px 8px !important; z-index: 10 !important;
+}
+.dark .legacy-home .grid > div:has(img) .absolute.right-0, .dark .legacy-home .grid > div:has(img) .absolute.right-2,
+.dark .legacy-home .movie-card .absolute.right-0, .dark .legacy-home .movie-card .absolute.right-2 {
+  background-color: rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(6px) !important; -webkit-backdrop-filter: blur(6px) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5) !important; color: #fff !important;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+@media (max-width: 768px) {
+  .legacy-home .grid > div:has(img), .legacy-home .movie-card { backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important; background-color: rgba(255, 255, 255, 0.65) !important; }
+  .dark .legacy-home .grid > div:has(img), .dark .legacy-home .movie-card { background-color: rgba(26, 26, 26, 0.65) !important; }
+}
+@media (hover: hover) and (min-width: 769px) {
+  .legacy-home .grid > div:has(img):hover, .legacy-home .movie-card:hover { transform: translateY(-6px) !important; box-shadow: 0 16px 32px rgba(0, 0, 0, 0.15) !important; }
 }
 
-@layer components {
-  .card {
-    @apply bg-card border border-line rounded-lg overflow-hidden transition-all duration-200;
+/* ==========================================
+   5. 播放器与选集
+   ========================================== */
+button[class*="episode"], .episode-btn { border-radius: 12px !important; padding: 8px 16px !important; font-weight: 500 !important; }
+button[class*="episode"]:hover, .episode-btn:hover { opacity: 0.72 !important; }
+button[class*="episode"].active, .episode-btn.active { background-color: #e63921 !important; color: #fff !important; opacity: 1 !important; }
+.art-video-player .art-bottom { background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 80%) !important; }
+.art-video-player.art-fullscreen .art-bottom { border-radius: 0 !important; }
+.art-video-player .art-progress-bar { height: 6px !important; }
+.art-setting-panel, .art-notice { border-radius: 16px !important; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2) !important; border: 1px solid rgba(0, 0, 0, 0.1) !important; background-color: rgba(255, 255, 255, 0.9) !important; backdrop-filter: blur(16px) !important; }
+.dark .art-setting-panel, .dark .art-notice { border: 1px solid rgba(255, 255, 255, 0.1) !important; background-color: rgba(30, 30, 30, 0.9) !important; }
+
+/* ==========================================
+   6. AI 聊天面板
+   ========================================== */
+.ai-chat-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: transparent; z-index: 99995; }
+.ai-chat-panel {
+  position: fixed; bottom: 100px; left: 0; right: 0; margin: 0 auto; width: calc(100vw - 40px); max-width: 360px;
+  height: auto; max-height: calc(var(--app-height, 100vh) - 180px); 
+  background-color: rgba(28, 28, 30, 0.75) !important; backdrop-filter: blur(30px) saturate(180%) !important; -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important; border-radius: 24px !important; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5) !important;
+  z-index: 99996; display: flex; flex-direction: column; overflow: hidden; isolation: isolate; transition: height 0.3s ease;
+}
+.ai-chat-header { padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); font-weight: bold; color: #ffffff; font-size: 15px; }
+.ai-chat-messages { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 120px; }
+.ai-chat-messages::-webkit-scrollbar { width: 4px; }
+.ai-chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+.ai-msg-user, .ai-msg-assistant { padding: 10px 16px; border-radius: 18px; max-width: 85%; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+.ai-msg-user { background-color: #3a3a3c; color: #ffffff; align-self: flex-end; border-bottom-right-radius: 4px; }
+.ai-msg-assistant { background-color: rgba(255, 255, 255, 0.1); color: #eeeeee; align-self: flex-start; border-bottom-left-radius: 4px; }
+.ai-chat-input-area { padding: 12px; display: flex; align-items: center; gap: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08); background: rgba(0, 0, 0, 0.2); }
+.ai-chat-input-area input { flex: 1; padding: 10px 16px; border-radius: 9999px; border: 1px solid rgba(255, 255, 255, 0.1); outline: none; background-color: rgba(0, 0, 0, 0.3); color: #ffffff; font-size: 16px !important; }
+
+/* ==========================================
+   7. 🍎 iOS 极致纯透玻璃球
+   ========================================== */
+.ai-orb-container {
+  position: fixed; 
+  width: 100px; 
+  height: 75px; 
+  z-index: 99990; 
+  cursor: grab; 
+  user-select: none; 
+  -webkit-user-select: none;
+  isolation: isolate; 
+  bottom: max(30px, env(safe-area-inset-bottom, 0px) + 16px); 
+  right: 20px;
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.ai-orb-container:active { cursor: grabbing; }
+
+.ai-orb {
+  width: 100%; 
+  height: 100%; 
+  border-radius: 50%; 
+  position: relative; 
+  overflow: hidden; 
+  pointer-events: none;
+  background: linear-gradient(
+    180deg, 
+    #000000 0%, 
+    #111111 30%, 
+    #888888 65%, 
+    #e0e0e0 85%, 
+    #ffffff 100%
+  ) !important; 
+  box-shadow: 
+    inset 0 -2px 6px rgba(255, 255, 255, 1),    
+    inset 0 2px 5px rgba(255, 255, 255, 0.2),    
+    inset 0 -20px 30px rgba(255, 255, 255, 0.6), 
+    inset 0 25px 40px rgba(0, 0, 0, 1),          
+    0 15px 35px rgba(0, 0, 0, 0.4);              
+  border: 1px solid rgba(255, 255, 255, 0.15); 
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
+  animation: orb-breathe 5s ease-in-out infinite alternate;
+}
+
+.ai-orb::after {
+  content: '';
+  position: absolute;
+  top: 46%; 
+  left: 15%;
+  width: 70%; 
+  height: 12px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(255, 255, 255, 0.5) 20%, 
+    rgba(180, 220, 255, 0.8) 40%, 
+    #ffffff 50%, 
+    rgba(180, 220, 255, 0.8) 60%, 
+    rgba(255, 255, 255, 0.5) 80%, 
+    transparent 100%
+  );
+  filter: blur(4px);
+  border-radius: 50%;
+  transform: scaleY(0.4);
+  animation: reflection-drift 4s ease-in-out infinite alternate;
+}
+
+.ai-orb-container:hover .ai-orb,
+.ai-orb-container:hover .ai-orb::after,
+.ai-orb-container.is-dragging .ai-orb,
+.ai-orb-container.is-dragging .ai-orb::after {
+  animation-play-state: paused !important; 
+}
+
+@keyframes orb-breathe { 
+  0% { transform: scale(1); } 
+  100% { transform: scale(1.03); } 
+}
+@keyframes reflection-drift { 
+  0% { transform: scaleY(0.4) scaleX(1) translateY(0); opacity: 0.8; } 
+  100% { transform: scaleY(0.5) scaleX(1.1) translateY(-1px); opacity: 1; } 
+}
+
+@media (max-width: 430px) {
+  .ai-orb-container { width: 85px; height: 64px; bottom: max(20px, env(safe-area-inset-bottom, 0px) + 12px); right: 15px; }
+}
+@media (max-width: 340px) {
+  .ai-orb-container { width: 75px; height: 56px; }
+}
+
+/* ==========================================
+   8. 语音面板和麦克风按钮
+   ========================================== */
+.voice-btn {
+  background-color: #ffffff !important; color: #000000 !important;
+  border: none !important; border-radius: 20px !important; 
+  width: 44px; height: 36px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-right: 8px; transition: all 0.2s;
+}
+.voice-btn.recording {
+  background-color: #ff3b30 !important; color: #ffffff !important;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+.ai-voice-settings { padding: 12px; background: rgba(255, 255, 255, 0.05); border-bottom: 1px solid rgba(255, 255, 255, 0.1); font-size: 13px; color: #ddd; }
+.ai-voice-settings select { background: rgba(0,0,0,0.5); color: white; border: 1px solid #444; border-radius: 4px; padding: 4px; width: 60%; }
+.ai-voice-settings input[type="range"] { flex: 1; accent-color: #fff; }
+
+/* ==========================================
+   9. ✅ 无障碍关闭动画
+   ========================================== */
+@media (prefers-reduced-motion: reduce) {
+  .ai-orb, .ai-orb::before, .ai-orb::after, .voice-btn.recording {
+    animation: none !important;
+    transition: none !important;
   }
-  .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
-    /* 统一焦点环：键盘用户可见，与 .input 同一规格 */
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40;
+  .ai-chat-panel { transition: none !important; }
+}
+.friday-popup-lock { overflow: hidden !important; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+
+/* ==========================================
+   HOME V2 — Friday-first cinema lobby
+   Scoped to .home-v2; legacy homepage styles remain untouched.
+   ========================================== */
+.home-v2 {
+  min-height: 100svh;
+  color: var(--c-content, inherit);
+}
+
+.home-v2 main {
+  padding-top: 8px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+.home-v2 .friday-hero-v2 {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: clamp(236px, 34svh, 310px);
+  min-height: 0;
+  padding: 8px 8px 4px;
+  text-align: center;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(94, 139, 220, .12), transparent 48%),
+    radial-gradient(ellipse at 50% 72%, rgba(178, 106, 220, .08), transparent 52%);
+}
+
+.home-v2 .friday-hero-eyebrow {
+  margin: 0 0 7px;
+  color: var(--c-faint, #888);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .22em;
+}
+
+.home-v2 .friday-hero-title {
+  margin: 0;
+  color: var(--c-content, currentColor);
+  font-size: clamp(25px, 4.2vw, 40px);
+  font-weight: 650;
+  letter-spacing: -.045em;
+  line-height: 1.05;
+}
+
+.home-v2 .friday-hero-description {
+  max-width: 330px;
+  margin: 7px 0 9px;
+  color: var(--c-muted, #888);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.home-v2 .friday-hero-orb-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-muted, #888);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-v2 .friday-hero-orb {
+  display: block;
+  width: 116px;
+  height: 116px;
+  filter: drop-shadow(0 10px 28px rgba(91, 151, 255, .18));
+}
+
+.home-v2 .friday-hero-orb-label {
+  color: var(--c-content, currentColor);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.home-v2 .friday-hero-text-entry {
+  margin-top: 9px;
+  padding: 5px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--c-faint, #888);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.home-v2 .friday-hero-text-entry:hover {
+  color: var(--c-content, currentColor);
+}
+
+.home-v2 .friday-hero-v2 + section {
+  margin-top: 0 !important;
+  margin-bottom: 20px !important;
+}
+
+.home-v2 .home-v2-quick-searches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin: 9px 2px 0;
+}
+
+.home-v2 .home-v2-quick-search {
+  min-height: 30px;
+  padding: 5px 12px;
+  border: 1px solid var(--c-line, rgba(128, 128, 128, .2));
+  border-radius: 999px;
+  background: var(--c-chip, rgba(128, 128, 128, .08));
+  color: var(--c-muted, currentColor);
+  font-size: 11px;
+  line-height: 1;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.home-v2 .home-v2-quick-search:hover,
+.home-v2 .home-v2-quick-search:focus-visible {
+  border-color: var(--c-accent, currentColor);
+  color: var(--c-content, currentColor);
+  outline: none;
+}
+
+.home-v2 .home-v2-trending-title {
+  margin: 4px 0 12px;
+  color: var(--c-content, currentColor);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -.02em;
+}
+
+.home-v2 .friday-hero-v2 + section > div {
+  width: 100%;
+}
+
+@media (max-height: 667px) {
+  .home-v2 .friday-hero-v2 {
+    height: clamp(218px, 36svh, 245px);
+    padding-top: 4px;
   }
-  .btn-primary {
-    @apply btn bg-accent text-on-accent hover:bg-accent-hover;
+
+  .home-v2 .friday-hero-orb {
+    width: 104px;
+    height: 104px;
   }
-  .btn-ghost {
-    @apply btn bg-chip text-muted hover:bg-hover hover:text-content border border-line;
-  }
-  .input {
-    @apply bg-chip border border-line rounded-md px-3 py-2 text-sm text-content placeholder:text-faint;
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent;
-  }
-  .tag {
-    @apply inline-flex items-center text-xs px-1.5 py-0.5 rounded-full;
-  }
-  /* 小尺寸按钮：定义在 .btn-* 之后，确保尺寸覆盖生效（与 .btn-primary / .btn-ghost 组合使用） */
-  .btn-sm {
-    @apply btn px-2.5 py-1 text-xs;
-  }
-  /* 胶囊控件（筛选、分类标签）：统一内边距与圆角 */
-  .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors;
-  }
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-line rounded-full;
+
+  .home-v2 .friday-hero-description {
+    margin-top: 5px;
+    margin-bottom: 7px;
   }
 }
 
-/* 行数截断 */
-.line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-
-/* 播放器集数激活态 */
-.episode-active {
-  background: rgb(var(--c-accent)) !important;
-  border-color: rgb(var(--c-accent)) !important;
-  /* 暗色下霓虹蓝底对白字对比度不足，统一用 on-accent（亮色白 / 暗色深） */
-  color: rgb(var(--c-on-accent)) !important;
-}
-
-/* 品牌渐变字（沿用旧版 LibreTV 的霓虹蓝→霓虹粉） */
-.brand-gradient {
-  background: linear-gradient(to right, #00ccff, #ff3c78);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-/* LIVE 呼吸红点（直播页标识） */
-.live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background: #ef4444;
-  animation: live-breathe 2s ease-in-out infinite;
-}
-@keyframes live-breathe {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-  50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
-}
-
-/*
- * 播放器控制条在窄屏没有多余横向空间：
- * 上/下集控件会把右侧的「网页全屏」「全屏」挤出可视区（手机上表现为图标显示不全）。
- * 只在窄于 640px 时收起这两个控件——手机横屏、平板仍有空间，可以保留。
- * 切集在任何情况下都还能用播放器下方的按钮。
- */
-@media (max-width: 640px) {
-  /* 竖屏空间只够放「播放 + 时间 + 设置 + 网页全屏 + 全屏」：
-     音量交给系统按键，截图与画中画在手机上很少用，一并收起，
-     保证最右侧的全屏按钮完整可见 */
-  .art-control-prev-episode,
-  .art-control-next-episode,
-  .art-control-volume,
-  .art-control-screenshot,
-  .art-control-pip {
-    display: none !important;
+@media (min-height: 668px) and (max-height: 812px) {
+  .home-v2 .friday-hero-v2 {
+    height: clamp(236px, 34svh, 276px);
   }
 
-  /* 00:04 / 01:26:30 这种长文本占宽最多，缩字号再收紧内边距 */
-  .art-control-time {
+  .home-v2 .friday-hero-orb {
+    width: 116px;
+    height: 116px;
+  }
+}
+
+@media (min-height: 813px) and (max-width: 1023px) {
+  .home-v2 .friday-hero-v2 {
+    height: clamp(260px, 34svh, 310px);
+  }
+
+  .home-v2 .friday-hero-orb {
+    width: 124px;
+    height: 124px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .home-v2 .friday-hero-v2 {
+    height: 58svh;
+    max-height: 65svh;
+  }
+
+  .home-v2 .friday-hero-orb {
+    width: 180px;
+    height: 180px;
+  }
+
+  .home-v2 .friday-hero-description {
+    max-width: 440px;
+    font-size: 13px;
+  }
+
+  .home-v2 .home-v2-trending-title {
+    font-size: 19px;
+  }
+}
+
+
+/* HOME V2 — compact first-screen budget for short mobile viewports */
+.home-v2-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home-v2-main > .friday-hero-v2 {
+  flex: 0 0 auto;
+}
+
+@media (max-height: 700px) and (max-width: 767px) {
+  .home-v2-main {
+    padding-top: 4px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .home-v2 .friday-hero-v2 {
+    height: 204px;
+    padding: 3px 8px 2px;
+  }
+
+  .home-v2 .friday-hero-eyebrow {
+    margin-bottom: 5px;
+    font-size: 8px;
+  }
+
+  .home-v2 .friday-hero-title {
+    font-size: 24px;
+  }
+
+  .home-v2 .friday-hero-description {
+    margin: 4px 0 5px;
     font-size: 11px;
-    padding: 0 2px;
+    line-height: 1.4;
   }
 
-  /* 默认每个图标 46px，竖屏下收到 40px —— 省出的宽度正好让最后一个全屏按钮不贴边 */
-  .art-control-playAndPause,
-  .art-control-setting,
-  .art-control-fullscreenWeb,
-  .art-control-fullscreen {
-    width: 40px !important;
-    min-width: 40px !important;
+  .home-v2 .friday-hero-orb {
+    width: 88px;
+    height: 88px;
   }
+
+  .home-v2 .friday-hero-orb-button {
+    gap: 5px;
+  }
+
+  .home-v2 .friday-hero-text-entry {
+    margin-top: 4px;
+    padding: 3px 8px;
+  }
+
+  .home-v2 .friday-hero-v2 + section {
+    margin-bottom: 14px !important;
+  }
+
+  .home-v2 .home-v2-quick-searches {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 2px 3px;
+    scrollbar-width: none;
+  }
+
+  .home-v2 .home-v2-quick-searches::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-v2 .home-v2-quick-search {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 5px 10px;
+  }
+
+  .home-v2 .home-v2-trending-title {
+    margin-top: 0;
+    margin-bottom: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-v2 .home-v2-quick-search {
+    transition: none;
+  }
+}
+
+
+/* HOME V2 — homepage orb styles (kept outside .friday-root so the hero orb is visible). */
+.home-v2 .friday-hero-v2 {
+  height: auto;
+  min-height: 0;
+  padding: 10px 8px 0;
+  gap: 0;
+}
+.home-v2 .friday-hero-description,
+.home-v2 .friday-hero-orb-button,
+.home-v2 .friday-hero-orb-label,
+.home-v2 .friday-hero-text-entry { display: none !important; }
+.home-v2 .friday-hero-orb {
+  display: block;
+  width: 132px;
+  height: 132px;
+  flex: 0 0 132px;
+  margin: 12px auto 0;
+  filter: drop-shadow(0 8px 26px rgba(91,151,255,.22));
+}
+.home-v2 .friday-hero-orb .friday-orb-visual {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 132px;
+  min-height: 132px;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateZ(0);
+  border: 1px solid rgba(255,255,255,.62);
+  border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
+  background:
+    radial-gradient(ellipse at 28% 17%,rgba(255,255,255,.34),transparent 24%),
+    radial-gradient(ellipse at 75% 80%,rgba(92,95,160,.28),transparent 46%),
+    radial-gradient(ellipse at 50% 52%,rgba(25,35,60,.94),rgba(7,10,22,.98) 70%);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.12),
+    0 0 22px rgba(111,194,255,.24),
+    0 0 38px rgba(190,117,255,.18),
+    inset 0 1px 4px rgba(255,255,255,.6),
+    inset 0 -8px 18px rgba(0,0,0,.42);
+  animation: home-friday-orb-breathe 4.8s ease-in-out infinite;
+  -webkit-transform: translateZ(0);
+}
+.home-v2 .friday-hero-orb .friday-orb-inner {
+  position: absolute;
+  z-index: 0;
+  inset: 3px;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 29% 18%,rgba(255,255,255,.22),transparent 25%),
+    radial-gradient(ellipse at 70% 72%,rgba(113,99,183,.2),transparent 43%),
+    radial-gradient(ellipse at 50% 52%,rgba(17,23,38,.12),rgba(3,5,12,.38) 100%);
+}
+.home-v2 .friday-hero-orb .friday-orb-fluid {
+  position: absolute;
+  z-index: 1;
+  inset: 8%;
+  border-radius: 48% 52% 57% 43% / 55% 43% 57% 45%;
+  background:
+    radial-gradient(ellipse at 20% 38%,rgba(102,231,255,.78),transparent 39%),
+    radial-gradient(ellipse at 82% 32%,rgba(183,132,255,.72),transparent 38%),
+    radial-gradient(ellipse at 55% 90%,rgba(255,180,135,.58),transparent 44%),
+    radial-gradient(ellipse at 12% 78%,rgba(119,48,177,.52),transparent 40%);
+  mix-blend-mode: screen;
+  opacity: 1;
+  animation: home-friday-fluid-drift 7s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.home-v2 .friday-hero-orb .friday-orb-rim {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from 15deg,rgba(120,220,255,.98),rgba(185,151,255,.96),rgba(255,211,180,.94),rgba(255,255,255,.98),rgba(104,233,221,.96),rgba(115,155,255,.98),rgba(120,220,255,.98));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: home-friday-orb-spectrum 12s linear infinite;
+  pointer-events: none;
+}
+.home-v2 .friday-hero-orb .friday-orb-glint,
+.home-v2 .friday-hero-orb .friday-orb-glint-small {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  pointer-events: none;
+}
+.home-v2 .friday-hero-orb .friday-orb-glint {
+  top: 10%;
+  left: 17%;
+  width: 29%;
+  height: 11%;
+  border-radius: 50%;
+  transform: rotate(-32deg);
+  background: linear-gradient(90deg,rgba(255,255,255,.98),rgba(255,255,255,.48) 60%,transparent);
+  opacity: 1;
+}
+.home-v2 .friday-hero-orb .friday-orb-glint-small {
+  top: 23%;
+  left: 13%;
+  width: 8%;
+  height: 4%;
+  border-radius: 50%;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 0 8px rgba(255,255,255,.8);
+}
+@keyframes home-friday-orb-breathe {
+  0%,100% { transform: translateZ(0) scale(.97); filter: brightness(1); }
+  50% { transform: translateZ(0) scale(1.045); filter: brightness(1.18); }
+}
+@keyframes home-friday-orb-spectrum {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(360deg); }
+}
+@keyframes home-friday-fluid-drift {
+  0% { transform: translate(-3%,2%) rotate(-8deg) scale(.94); }
+  50% { transform: translate(3%,-2%) rotate(8deg) scale(1.08); }
+  100% { transform: translate(-1%,3%) rotate(3deg) scale(1.02); }
+}
+
+/* AI search: icon-first controls, with a stable Safari-friendly microphone state. */
+.home-v2 .home-v2-ai-search {
+  min-height: 56px;
+  gap: 2px;
+  padding: 5px 7px 5px 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.72);
+  box-shadow: 0 8px 28px rgba(30,45,75,.09), inset 0 1px 0 rgba(255,255,255,.82);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.dark .home-v2 .home-v2-ai-search {
+  background: rgba(20,27,41,.84);
+  box-shadow: 0 8px 28px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.home-v2 .home-v2-search-leading {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  flex: 0 0 30px;
+  color: rgb(var(--c-muted));
+}
+.home-v2 .home-v2-ai-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 7px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgb(var(--c-content));
+  font-size: 14px;
+  -webkit-appearance: none;
+}
+.home-v2 .home-v2-ai-search-input::placeholder { color: rgb(var(--c-faint)); opacity: 1; }
+.home-v2 .home-v2-search-clear,
+.home-v2 .home-v2-mic-button,
+.home-v2 .home-v2-search-submit {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgb(var(--c-muted));
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.home-v2 .home-v2-mic-button {
+  color: #a9d9ff;
+  background: rgba(77,151,224,.15);
+}
+.home-v2 .home-v2-mic-button.is-listening {
+  color: #fff;
+  background: rgba(239,68,68,.92);
+  box-shadow: 0 0 0 0 rgba(239,68,68,.4);
+  animation: home-v2-mic-pulse 1.25s ease-out infinite;
+}
+.home-v2 .home-v2-ai-search.is-listening {
+  border-color: rgba(239,68,68,.65);
+  box-shadow: 0 0 0 3px rgba(239,68,68,.1),0 8px 28px rgba(30,45,75,.09);
+}
+.home-v2 .home-v2-search-submit {
+  color: #fff;
+  background: #2469c8;
+}
+.home-v2 .home-v2-search-submit:active,
+.home-v2 .home-v2-mic-button:active { transform: scale(.92); }
+.home-v2 .home-v2-voice-error,
+.home-v2 .home-v2-voice-status {
+  margin: 7px 6px 0;
+  color: rgb(var(--c-muted));
+  font-size: 11px;
+  text-align: center;
+}
+.home-v2 .home-v2-voice-error { color: #dc5555; }
+.home-v2 .home-v2-voice-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #6db9f2;
+}
+.home-v2 .home-v2-voice-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6db9f2;
+  box-shadow: 0 0 0 4px rgba(109,185,242,.14);
+  animation: home-v2-mic-pulse 1.25s ease-out infinite;
+}
+@keyframes home-v2-mic-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(109,185,242,.36); }
+  100% { box-shadow: 0 0 0 9px rgba(109,185,242,0); }
+}
+.home-v2 .home-v2-quick-searches { margin-top: 8px; }
+.home-v2 .friday-hero-v2 + section { margin-top: 0 !important; margin-bottom: 12px !important; }
+.home-v2 .home-v2-trending-title { margin-top: 0; margin-bottom: 8px; }
+
+@media (max-width: 430px) {
+  .home-v2 .friday-hero-orb { width: 112px; height: 112px; flex-basis: 112px; }
+  .home-v2 .friday-hero-orb .friday-orb-visual { min-width: 112px; min-height: 112px; }
+  .home-v2 .friday-hero-v2 { padding-top: 5px; }
+}
+@media (max-height: 700px) and (max-width: 767px) {
+  .home-v2 .friday-hero-orb { width: 88px; height: 88px; flex-basis: 88px; margin-top: 7px; }
+  .home-v2 .friday-hero-orb .friday-orb-visual { min-width: 88px; min-height: 88px; }
+  .home-v2 .home-v2-ai-search { min-height: 50px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-v2 .friday-hero-orb .friday-orb-visual,
+  .home-v2 .friday-hero-orb .friday-orb-fluid,
+  .home-v2 .friday-hero-orb .friday-orb-rim,
+  .home-v2 .home-v2-mic-button.is-listening,
+  .home-v2 .home-v2-voice-pulse { animation: none !important; }
 }
