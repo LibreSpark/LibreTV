@@ -101,7 +101,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     let raf = 0;
     let program: WebGLProgram | null = null;
     let buffer: WebGLBuffer | null = null;
-    let start = performance.now();
+    const start = performance.now();
 
     try {
       const vs = compile(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
