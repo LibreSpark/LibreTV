@@ -317,14 +317,17 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
               try {
                 const result = await api.search(title, selectedSources, yellowFilter);
                 const normalized = (value: string) => value.replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
-                const exact = result.list.find((candidate) => normalized(candidate.name) === normalized(title));
-                const match = exact ?? result.list[0];
-                if (match) {
-                  setDetailItem(match);
+                // 推荐卡片只允许打开标题精确匹配的片源，不能把搜索结果第一项
+                // 当作兜底详情，否则同名/近似标题会误开另一部影片。
+                const exact = result.list.find(
+                  (candidate) => normalized(candidate.name) === normalized(title)
+                );
+                if (exact) {
+                  setDetailItem(exact);
                 } else {
                   setInput(title);
                   runSearch(title);
-                  toast('暂未匹配到可播放片源，已为你搜索该影片', 'info');
+                  toast('没有找到标题完全匹配的片源，已为你展示搜索结果', 'info');
                 }
               } catch {
                 setInput(title);
