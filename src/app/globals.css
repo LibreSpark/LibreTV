@@ -476,3 +476,90 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
     font-size: 19px;
   }
 }
+
+
+/* HOME V2 — compact first-screen budget for short mobile viewports */
+.home-v2-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home-v2-main > .friday-hero-v2 {
+  flex: 0 0 auto;
+}
+
+@media (max-height: 700px) and (max-width: 767px) {
+  .home-v2-main {
+    padding-top: 4px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .home-v2 .friday-hero-v2 {
+    height: 204px;
+    padding: 3px 8px 2px;
+  }
+
+  .home-v2 .friday-hero-eyebrow {
+    margin-bottom: 5px;
+    font-size: 8px;
+  }
+
+  .home-v2 .friday-hero-title {
+    font-size: 24px;
+  }
+
+  .home-v2 .friday-hero-description {
+    margin: 4px 0 5px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .home-v2 .friday-hero-orb {
+    width: 88px;
+    height: 88px;
+  }
+
+  .home-v2 .friday-hero-orb-button {
+    gap: 5px;
+  }
+
+  .home-v2 .friday-hero-text-entry {
+    margin-top: 4px;
+    padding: 3px 8px;
+  }
+
+  .home-v2 .friday-hero-v2 + section {
+    margin-bottom: 14px !important;
+  }
+
+  .home-v2 .home-v2-quick-searches {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 2px 3px;
+    scrollbar-width: none;
+  }
+
+  .home-v2 .home-v2-quick-searches::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-v2 .home-v2-quick-search {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 5px 10px;
+  }
+
+  .home-v2 .home-v2-trending-title {
+    margin-top: 0;
+    margin-bottom: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-v2 .home-v2-quick-search {
+    transition: none;
+  }
+}
