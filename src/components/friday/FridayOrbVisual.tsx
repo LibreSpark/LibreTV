@@ -224,6 +224,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     let fragmentShader: WebGLShader | null = null;
     let environmentTexture: WebGLTexture | null = null;
     let environmentAbort: AbortController | null = null;
+    let onVisibilityChange: (() => void) | null = null;
     let disposed = false;
     const start = performance.now();
     const dprLimit = window.matchMedia("(max-width: 768px)").matches ? 1.5 : 2;
@@ -394,7 +395,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
         if (!document.hidden) raf = requestAnimationFrame(draw);
       };
 
-      const onVisibilityChange = () => {
+      onVisibilityChange = () => {
         if (document.hidden) {
           cancelAnimationFrame(raf);
           raf = 0;
@@ -416,7 +417,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
       environmentAbort?.abort();
       cancelAnimationFrame(raf);
       canvas.removeEventListener("webglcontextlost", onContextLost);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (onVisibilityChange) document.removeEventListener("visibilitychange", onVisibilityChange);
       if (gl) {
         if (vertexBuffer) gl.deleteBuffer(vertexBuffer);
         if (indexBuffer) gl.deleteBuffer(indexBuffer);
