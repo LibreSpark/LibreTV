@@ -500,6 +500,27 @@ export function FridayStyles() {
           filter: brightness(1.28);
         }
 
+        .friday-root .friday-orb-visual[data-state="listening"] .friday-orb-fluid{
+          opacity: .98;
+          animation-duration: 2.4s;
+          filter: saturate(1.35) brightness(1.12);
+        }
+
+        .friday-root .friday-orb-visual[data-state="thinking"] .friday-orb-fluid{
+          opacity: .92;
+          animation-duration: 1.8s;
+          filter: hue-rotate(28deg) saturate(1.45);
+        }
+
+        .friday-root .friday-orb-visual[data-state="speaking"] .friday-orb-glint{
+          opacity: 1;
+          filter: blur(.1px) brightness(1.3);
+        }
+
+        .friday-root .friday-orb-visual[data-state="completed"] .friday-orb-rim{
+          filter: drop-shadow(0 0 4px rgba(167,220,255,.8));
+        }
+
         .friday-root .friday-input-area{
           position: relative;
           z-index: 4;
