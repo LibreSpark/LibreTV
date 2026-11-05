@@ -233,14 +233,14 @@ export function useFridayVoiceController({
     let recognition: SpeechRecognitionLike;
     try {
       recognition = new SpeechRecognitionClass();
-    } catch (recognitionError) {
-      setVoiceSession(false);
+    } catch {
       dispatchMachine({
         type: "VOICE_FAILED",
         sessionId: voiceSessionIdRef.current,
         code: "constructor-failed",
         message: "无法初始化语音识别，请检查浏览器兼容性或改用键盘输入。",
       });
+      setVoiceSession(false);
       setVoiceError("无法初始化语音识别，请检查浏览器兼容性或改用键盘输入。");
       return;
     }
