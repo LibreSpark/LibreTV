@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
@@ -31,19 +31,31 @@ export function RecommendSection({ onPick }: { onPick: (item: DoubanItem) => voi
 function DoubanView({ onPick }: { onPick: (item: DoubanItem) => void }) {
   const [type, setType] = useState<'movie' | 'tv'>('movie');
   const [tag, setTag] = useState('热门');
+  const [pageStart, setPageStart] = useState(0);
+  const [allItems, setAllItems] = useState<DoubanItem[]>([]);
 
   const query = useQuery({
-    queryKey: ['douban', type, tag],
-    queryFn: ({ signal }) => api.douban(type, tag, 0, 50, signal),
+    queryKey: ['douban', type, tag, pageStart],
+    queryFn: ({ signal }) => api.douban(type, tag, pageStart, 50, signal),
   });
 
+  useEffect(() => {
+    if (!query.data?.items) return;
+    setAllItems((previous) => {
+      const seen = new Set(previous.map((item) => item.id));
+      return [...previous, ...query.data.items.filter((item) => !seen.has(item.id))];
+    });
+  }, [query.data]);
+
   const tags = type === 'movie' ? MOVIE_TAGS : TV_TAGS;
-  const items = query.data?.items ?? [];
+  const items = allItems;
 
   const switchType = (t: 'movie' | 'tv') => {
     if (t === type) return;
     setType(t);
     setTag('热门');
+    setPageStart(0);
+    setAllItems([]);
   };
 
   return (
@@ -69,7 +81,7 @@ function DoubanView({ onPick }: { onPick: (item: DoubanItem) => void }) {
               'px-2.5 py-1 rounded-full text-xs transition-colors',
               t === tag ? 'bg-accent text-on-accent' : 'bg-chip text-muted hover:text-content hover:bg-hover'
             )}
-            onClick={() => setTag(t)}
+            onClick={() => { setTag(t); setPageStart(0); setAllItems([]); }}
           >
             {t}
           </button>
@@ -83,7 +95,7 @@ function DoubanView({ onPick }: { onPick: (item: DoubanItem) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-8">该分类暂无推荐内容</p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2.5">
           {items.map((item) => (
             <DoubanCard
               key={item.id}
@@ -93,6 +105,18 @@ function DoubanView({ onPick }: { onPick: (item: DoubanItem) => void }) {
               onClick={() => onPick(item)}
             />
           ))}
+        </div>
+      )}
+      {!query.isError && query.data?.items?.length === 50 && (
+        <div className="flex justify-center mt-5">
+          <button
+            type="button"
+            className="btn-ghost btn-sm"
+            disabled={query.isFetching}
+            onClick={() => setPageStart((current) => current + 50)}
+          >
+            {query.isFetching ? '正在加载…' : '加载更多影片'}
+          </button>
         </div>
       )}
     </section>
