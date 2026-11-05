@@ -235,6 +235,17 @@ export default function AIFloatingBall({
     handleSendRef.current = handleSend;
   }, [handleSend]);
 
+  useEffect(() => {
+    if (!immersive) return;
+    const wasAlreadyLocked = document.body.classList.contains("friday-popup-lock");
+    document.body.classList.add("friday-popup-lock");
+    return () => {
+      if (!wasAlreadyLocked) {
+        document.body.classList.remove("friday-popup-lock");
+      }
+    };
+  }, [immersive]);
+
   const closePanel = useCallback(() => {
     resetPendingMovie();
 
