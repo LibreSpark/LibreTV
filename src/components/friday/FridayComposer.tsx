@@ -85,6 +85,7 @@ export function FridayComposer({
             ? "停止本次聆听"
             : "开始语音输入或恢复连续对话"
         }
+        aria-describedby={voiceError ? "friday-voice-error" : undefined}
         onClick={onToggleListening}
       >
         {listening ? "Ⅱ" : "♩"}
@@ -102,7 +103,13 @@ export function FridayComposer({
     </div>
     
     {voiceError ? (
-      <div className="friday-voice-error" role="status">
+      <div
+        id="friday-voice-error"
+        className="friday-voice-error"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+      >
         {voiceError}
       </div>
     ) : null}
