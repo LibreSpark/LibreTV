@@ -47,139 +47,28 @@ export function FridayStyles() {
         .friday-root .friday-fab:active{ cursor: grabbing; }
 
         .friday-root .friday-orb-visual{
-          position: relative;
-          isolation: isolate;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          border: 1px solid rgba(255,255,255,.55);
-          border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%;
-          background:
-            radial-gradient(ellipse at 28% 17%,rgba(255,255,255,.22),transparent 24%),
-            radial-gradient(ellipse at 75% 80%,rgba(92,95,160,.14),transparent 46%),
-            rgba(15,18,29,.19);
-          box-shadow:
-            0 0 0 1px rgba(255,255,255,.08),
-            0 0 16px rgba(111,194,255,.16),
-            0 0 25px rgba(190,117,255,.12),
-            inset 0 1px 2px rgba(255,255,255,.5),
-            inset 0 -2px 7px rgba(0,0,0,.16);
-          -webkit-backdrop-filter: blur(2px) saturate(175%);
-          backdrop-filter: blur(2px) saturate(175%);
-          animation: friday-orb-morph 9s ease-in-out infinite,
-            friday-orb-breathe 4.8s ease-in-out infinite;
-          transition: border-radius .45s ease, transform .45s ease;
+          position:relative;isolation:isolate;width:100%;height:100%;
+          overflow:visible;border:0;border-radius:50%;background:transparent;
+          box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
         }
-
-        .friday-root .friday-orb-inner{
-          position: absolute;
-          z-index: 0;
-          inset: 3px;
-          border-radius: inherit;
-          background:
-            radial-gradient(ellipse at 29% 18%,rgba(255,255,255,.17),transparent 25%),
-            radial-gradient(ellipse at 70% 72%,rgba(113,99,183,.13),transparent 43%),
-            radial-gradient(ellipse at 50% 52%,rgba(17,23,38,.18),rgba(9,13,25,.11) 60%,rgba(3,5,12,.24) 100%);
-          box-shadow: inset 0 0 8px rgba(0,0,0,.16),
-            inset 0 1px 3px rgba(255,255,255,.22);
+        .friday-root .friday-orb-visual::before{
+          content:"";position:absolute;z-index:-1;left:-30%;right:-30%;bottom:-15%;
+          height:48%;border-radius:50%;
+          background:radial-gradient(ellipse,rgba(8,18,42,.48) 0%,rgba(39,74,122,.22) 35%,rgba(125,101,190,.10) 56%,transparent 76%);
+          filter:blur(13px);pointer-events:none;
         }
-
-        .friday-root .friday-orb-fluid{
-          position: absolute;
-          z-index: 1;
-          inset: 8%;
-          border-radius: 48% 52% 57% 43% / 55% 43% 57% 45%;
-          background:
-            radial-gradient(ellipse at 20% 38%,rgba(102,231,255,.28),transparent 39%),
-            radial-gradient(ellipse at 82% 32%,rgba(183,132,255,.25),transparent 38%),
-            radial-gradient(ellipse at 55% 90%,rgba(255,180,135,.2),transparent 44%),
-            radial-gradient(ellipse at 12% 78%,rgba(119,48,77,.16),transparent 40%);
-          mix-blend-mode: screen;
-          opacity: .78;
-          animation: friday-fluid-drift 8s ease-in-out infinite alternate;
-          pointer-events: none;
+        .friday-root .friday-orb-webgl{
+          display:block;width:100%;height:100%;overflow:visible;
+          filter:drop-shadow(0 0 7px rgba(105,210,255,.28)) drop-shadow(0 0 15px rgba(174,117,255,.18));
         }
-
-        .friday-root .friday-orb-rim{
-          position: absolute;
-          z-index: 2;
-          inset: 0;
-          padding: 1.7px;
-          border-radius: inherit;
-          background: conic-gradient(
-            from 15deg,
-            rgba(120,220,255,.95),
-            rgba(185,151,255,.92),
-            rgba(255,211,180,.94),
-            rgba(255,255,255,.98),
-            rgba(104,233,221,.94),
-            rgba(115,155,255,.95),
-            rgba(120,220,255,.95)
-          );
-          -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
-          mask-composite: exclude;
-          filter: drop-shadow(0 0 2px rgba(167,220,255,.55));
-          pointer-events: none;
-          animation: friday-orb-spectrum 12s linear infinite;
+        .friday-root .friday-orb-listening{
+          position:absolute;right:-8px;bottom:-10px;z-index:4;
+          color:rgba(255,255,255,.78);font-size:8px;letter-spacing:.12em;
+          text-shadow:0 1px 8px rgba(20,32,64,.8);white-space:nowrap;
+          animation:friday-listening-pulse 1.2s ease-in-out infinite;
         }
-
-        .friday-root .friday-orb-glint{
-          position: absolute;
-          z-index: 3;
-          top: 10%;
-          left: 17%;
-          width: 29%;
-          height: 11%;
-          border-radius: 50%;
-          transform: rotate(-32deg);
-          background: linear-gradient(90deg,rgba(255,255,255,.94),rgba(255,255,255,.38) 60%,transparent);
-          filter: blur(.25px);
-          opacity: .9;
-          pointer-events: none;
-        }
-
-        .friday-root .friday-orb-glint-small{
-          position: absolute;
-          z-index: 3;
-          top: 23%;
-          left: 13%;
-          width: 8%;
-          height: 4%;
-          border-radius: 50%;
-          background: rgba(255,255,255,.9);
-          box-shadow: 0 0 6px rgba(255,255,255,.65);
-          transform: rotate(-32deg);
-          pointer-events: none;
-        }
-
-        @keyframes friday-orb-morph {
-          0%,100% { border-radius: 46% 54% 52% 48% / 49% 44% 56% 51%; }
-          35% { border-radius: 55% 45% 44% 56% / 44% 56% 44% 56%; }
-          70% { border-radius: 43% 57% 58% 42% / 55% 45% 55% 45%; }
-        }
-
-        @keyframes friday-orb-breathe {
-          0%,100% { transform: scale(.97); filter: brightness(1); }
-          50% { transform: scale(1.045); filter: brightness(1.16); }
-        }
-
-        @keyframes friday-orb-spectrum {
-          from { filter: hue-rotate(0deg); }
-          to { filter: hue-rotate(360deg); }
-        }
-
-        @keyframes friday-fluid-drift {
-          0% { transform: translate(-3%,2%) rotate(-8deg) scale(.94); }
-          50% { transform: translate(3%,-2%) rotate(8deg) scale(1.08); }
-          100% { transform: translate(-1%,3%) rotate(3deg) scale(1.02); }
-        }
-
-        .friday-root .friday-fab:active .friday-orb-visual{
-          transform: scale(.86);
-          border-radius: 42% 58% 60% 40% / 57% 43% 57% 43%;
-        }
+        @keyframes friday-listening-pulse{0%,100%{opacity:.55}50%{opacity:1}}
+        .friday-root .friday-fab:active .friday-orb-visual{transform:scale(.9)}
 
         .friday-root .friday-restore{
           position: fixed;
