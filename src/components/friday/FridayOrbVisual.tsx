@@ -55,25 +55,70 @@ uniform vec2 uResolution;
 varying vec3 vNormal;
 varying vec3 vPosition;
 varying float vNoise;
-void main(){
- vec3 N=normalize(vNormal); vec3 V=normalize(vec3(0.0,0.0,2.8)-vPosition);
- float fresnel=pow(1.0-max(dot(N,V),0.0),2.35);
- float t=uTime*uSpeed;
- float flow=sin(vPosition.y*5.0+t*.42+vNoise*2.0)*.5+.5;
- vec3 deep=vec3(.025,.055,.105);
- vec3 cyan=vec3(.28,.88,1.0);
- vec3 violet=vec3(.72,.48,1.0);
- vec3 rose=vec3(1.0,.48,.72);
- float dispersion=pow(fresnel,1.35);
- vec3 spectral=mix(cyan,violet,clamp(.5+.5*sin(atan(N.y,N.x)*2.0+t*.12),0.0,1.0));
- spectral=mix(spectral,rose,clamp(.5+.5*sin(atan(N.z,N.x)*2.7-1.2),0.0,1.0)*.55);
- vec3 col=mix(deep,spectral,dispersion*.88);
- col+=cyan*pow(max(dot(reflect(-V,N),normalize(vec3(-.7,.8,1.0))),0.0),28.0)*.65;
- col+=vec3(.75,.88,1.0)*pow(max(dot(reflect(-V,N),normalize(vec3(.75,.55,1.0))),0.0),65.0)*.85;
- col+=mix(cyan,violet,flow)*(.035+flow*.055)*(1.0-fresnel);
- col+=spectral*pow(fresnel,4.0)*.38;
- float alpha=clamp(.22+fresnel*.72+pow(fresnel,5.0)*.2,0.0,.96);
- gl_FragColor=vec4(col,alpha);
+
+// Procedural high-dynamic-range studio environment. Bright emitters are
+// evaluated above display range, then tone-mapped only at final output.
+float softBox(vec3 direction, vec3 center, float exponent, float intensity) {
+  float alignment = max(dot(normalize(direction), normalize(center)), 0.0);
+  return pow(alignment, exponent) * intensity;
+}
+vec3 environmentRadiance(vec3 direction, float time) {
+  vec3 d = normalize(direction);
+  float horizon = smoothstep(-0.75, 0.85, d.y);
+  vec3 sky = mix(vec3(0.035, 0.055, 0.11), vec3(0.16, 0.24, 0.42), horizon);
+  vec3 floorTint = vec3(0.025, 0.035, 0.075) * (1.0 - horizon);
+  vec3 radiance = sky + floorTint;
+  radiance += vec3(0.52, 0.86, 1.0) * softBox(d, vec3(-0.72, 0.52, 0.48), 34.0, 5.5);
+  radiance += vec3(0.72, 0.48, 1.0) * softBox(d, vec3(0.78, 0.18, 0.58), 25.0, 4.2);
+  radiance += vec3(1.0, 0.48, 0.72) * softBox(d, vec3(0.12, -0.72, 0.68), 38.0, 3.4);
+  radiance += vec3(0.38, 0.78, 1.0) * softBox(d, vec3(-0.18, 0.92, -0.3), 18.0, 2.0);
+  float studioStrip = pow(max(0.0, 1.0 - abs(d.y - 0.08) * 8.0), 7.0);
+  radiance += vec3(0.16, 0.32, 0.62) * studioStrip * (0.55 + 0.12 * sin(time * 0.18));
+  return radiance;
+}
+vec3 toneMap(vec3 color) {
+  color = max(color, vec3(0.0));
+  return clamp((color * (2.51 * color + 0.03)) /
+    (color * (2.43 * color + 0.59) + 0.14), 0.0, 1.0);
+}
+void main() {
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(vec3(0.0, 0.0, 2.8) - vPosition);
+  vec3 I = -V;
+  float t = uTime * uSpeed;
+
+  // Glass interface: Schlick Fresnel, internal transmission and RGB dispersion.
+  float ndv = clamp(dot(N, V), 0.0, 1.0);
+  float fresnel = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
+  vec3 reflected = reflect(I, N);
+  vec3 reflection = environmentRadiance(reflected, t);
+
+  vec3 refractedR = refract(I, N, 1.0 / 1.46);
+  vec3 refractedG = refract(I, N, 1.0 / 1.50);
+  vec3 refractedB = refract(I, N, 1.0 / 1.54);
+  vec3 transmission;
+  transmission.r = environmentRadiance(refractedR, t).r;
+  transmission.g = environmentRadiance(refractedG, t).g;
+  transmission.b = environmentRadiance(refractedB, t).b;
+
+  float thickness = 0.5 + 0.5 * sin(vPosition.y * 3.8 + vNoise * 2.2 + t * 0.32);
+  vec3 internalColor = mix(vec3(0.035, 0.09, 0.17), transmission, 0.72);
+  internalColor += vec3(0.10, 0.22, 0.34) * thickness * (1.0 - fresnel);
+  vec3 glass = mix(internalColor, reflection, fresnel);
+
+  // Thin-film iridescence follows the view angle and shifts gently over time.
+  float film = 0.5 + 0.5 * sin((1.0 - ndv) * 13.0 + t * 0.16 + vNoise * 1.4);
+  vec3 spectral = mix(vec3(0.20, 0.86, 1.0), vec3(0.82, 0.46, 1.0), film);
+  spectral = mix(spectral, vec3(1.0, 0.48, 0.72), 0.5 + 0.5 * sin(film * 6.2831 + 1.2));
+  glass += spectral * pow(1.0 - ndv, 3.2) * 0.22;
+
+  float glintA = pow(max(dot(reflected, normalize(vec3(-0.72, 0.52, 0.48))), 0.0), 70.0);
+  float glintB = pow(max(dot(reflected, normalize(vec3(0.78, 0.18, 0.58))), 0.0), 54.0);
+  glass += vec3(0.62, 0.9, 1.0) * glintA * 0.65;
+  glass += vec3(0.86, 0.58, 1.0) * glintB * 0.5;
+
+  float alpha = clamp(0.48 + fresnel * 0.46, 0.0, 0.96);
+  gl_FragColor = vec4(toneMap(glass), alpha);
 }`;
 
 function compile(gl: WebGLRenderingContext, type: number, source: string) {
