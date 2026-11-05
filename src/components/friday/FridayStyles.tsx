@@ -919,6 +919,73 @@ export function FridayStyles() {
         .friday-root .friday-movie-card{ background: rgba(35,37,44,.96); }
         }
       
+
+        .friday-root .friday-orb-visual{
+          position:relative;isolation:isolate;overflow:visible;
+          background:transparent;border:0;box-shadow:none;
+          animation:friday-orb-float 4.8s cubic-bezier(.45,0,.55,1) infinite,
+                    friday-orb-tilt 8s ease-in-out infinite;
+          transition:filter .55s ease-in-out,transform .55s ease-in-out;
+        }
+        .friday-root .friday-orb-media{
+          display:block;width:100%;height:100%;object-fit:contain;
+          mix-blend-mode:screen;border-radius:50%;
+          filter:drop-shadow(0 0 8px rgba(105,210,255,.35))
+                 drop-shadow(0 0 18px rgba(174,117,255,.22));
+          pointer-events:none;
+        }
+        .friday-root .friday-orb-fallback{
+          position:absolute;inset:8%;border-radius:50%;
+          background:
+            radial-gradient(circle at 34% 25%,rgba(255,255,255,.98) 0 3%,rgba(179,246,255,.92) 9%,rgba(103,174,255,.72) 24%,rgba(144,105,255,.58) 43%,rgba(255,132,210,.38) 60%,rgba(9,20,48,.08) 74%,transparent 76%);
+          box-shadow:inset -8px -10px 22px rgba(30,35,100,.28),
+                     inset 5px 5px 14px rgba(255,255,255,.76),
+                     0 0 24px rgba(128,180,255,.34);
+        }
+        .friday-root .friday-orb-visual::before{
+          content:"";position:absolute;z-index:-1;left:-35%;right:-35%;bottom:-18%;
+          height:46%;border-radius:50%;
+          background:radial-gradient(ellipse,rgba(5,12,28,.78) 0%,rgba(10,25,52,.5) 35%,rgba(15,25,50,.18) 60%,transparent 78%);
+          filter:blur(14px);pointer-events:none;
+        }
+        .friday-root .friday-orb-visual[data-state="listening"]{
+          animation-duration:1.15s,2.6s;
+          filter:brightness(1.34) saturate(1.42)
+                 drop-shadow(0 0 12px rgba(91,210,255,.5));
+        }
+        .friday-root .friday-orb-visual[data-state="thinking"]{
+          animation-duration:3.2s,5s;filter:hue-rotate(18deg) saturate(1.2);
+        }
+        .friday-root .friday-orb-visual[data-state="speaking"]{
+          animation-duration:1.7s,3.2s;filter:brightness(1.28) saturate(1.3);
+        }
+        .friday-root .friday-orb-visual[data-state="completed"]{
+          animation-duration:6s,10s;filter:brightness(1.08) saturate(.9);
+        }
+        .friday-root .friday-orb-visual[data-state="listening"] .friday-orb-media{
+          filter:brightness(1.28) saturate(1.5)
+                 drop-shadow(0 0 12px rgba(91,210,255,.62))
+                 drop-shadow(0 0 24px rgba(190,110,255,.34));
+        }
+        .friday-root .friday-orb-listening{
+          position:absolute;right:-8px;bottom:-10px;z-index:4;
+          color:rgba(255,255,255,.92);font-size:8px;letter-spacing:.12em;
+          text-shadow:0 1px 8px rgba(5,12,28,.95);white-space:nowrap;
+          animation:friday-listening-pulse 1.2s ease-in-out infinite;
+        }
+        @keyframes friday-orb-float{
+          0%,100%{transform:translateY(0) scale(1)}
+          50%{transform:translateY(-4px) scale(1.05)}
+        }
+        @keyframes friday-orb-tilt{
+          0%,100%{rotate:-2deg}
+          50%{rotate:2deg}
+        }
+        @media (prefers-reduced-motion:reduce){
+          .friday-root .friday-orb-visual,
+          .friday-root .friday-orb-listening{animation:none!important}
+        }
+
       `}</style>
     </>
   );
