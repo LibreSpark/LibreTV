@@ -1,11 +1,12 @@
 'use client';
 
 import { RecommendSection } from '@/components/douban-section';
+import type { DoubanItem } from '@/lib/types';
 
 type HomeRecommendationSectionProps = {
   isV2: boolean;
   enabled: boolean;
-  onPick: (title: string) => void;
+  onPick: (item: DoubanItem) => void;
 };
 
 /**
