@@ -157,7 +157,7 @@ function BangumiView({ onPick }: { onPick: (item: DoubanItem) => void }) {
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2.5">
           {items.map((item) => (
             <DoubanCard
               key={item.id}
@@ -208,7 +208,7 @@ function HotListView({ onPick }: { onPick: (item: DoubanItem) => void }) {
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2.5">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item)} />
           ))}
@@ -236,7 +236,7 @@ function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void })
 
 function GridSkeleton() {
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2.5">
       {Array.from({ length: 16 }).map((_, i) => (
         <div key={i}>
           <div className="aspect-[2/3] rounded-lg bg-chip animate-pulse" />
