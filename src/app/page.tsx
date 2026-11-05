@@ -14,6 +14,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { HomeSearchSection } from '@/components/home/HomeSearchSection';
 import { FridayHero } from '@/components/friday/FridayHero';
+import { useFridayDetailBridge } from '@/components/friday/useFridayDetailBridge';
 import { RecommendSection } from '@/components/douban-section';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
@@ -39,19 +40,8 @@ import {
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
-import { normalizeFridayMovieId } from '@/lib/friday/movie-detail';
 
 const RESULT_PAGE_SIZE = 60;
-
-function isRecord(
-  value: unknown
-): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  );
-}
 
 const HOME_V2_ENABLED = process.env.NEXT_PUBLIC_HOME_V2 === 'true';
 
@@ -104,141 +94,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
     if (urlQuery) setInput(urlQuery);
   }, [urlQuery]);
 
-  // 🚨 终极修复版监听器：直接信任搜索结果的 sourceUrl，不再读客户端环境变量
-  useEffect(() => {
-    const handleFridayOpenDetail = (event: Event) => {
-      const raw = (event as CustomEvent<unknown>).detail;
-      if (!isRecord(raw)) return;
-      
-      const {
-        sourceKey,
-        sourceName,
-        sourceUrl,
-        vodId,
-        name,
-        pic,
-        typeName,
-        year,
-        area,
-        remarks,
-        isAdult,
-      } = raw;
-
-      const normalizedVodId = normalizeFridayMovieId(vodId);
-      const normalizedYear =
-        typeof year === 'number' && Number.isFinite(year)
-          ? String(year)
-          : year;
-
-      if (
-        typeof sourceKey !== 'string' ||
-        !sourceKey.trim() ||
-        sourceKey.length > 100 ||
-        (sourceName !== undefined &&
-          (typeof sourceName !== 'string' || sourceName.length > 100)) ||
-        !normalizedVodId ||
-        typeof name !== 'string' ||
-        !name.trim() ||
-        name.length > 100
-      ) {
-        toast('影片详情参数无效，无法打开详情', 'warning');
-        return;
-      }
-
-      if (sourceUrl !== undefined && typeof sourceUrl !== 'string') {
-        toast('影片详情来源地址格式无效', 'warning');
-        return;
-      }
-
-      const suppliedSourceUrl =
-        typeof sourceUrl === 'string'
-          ? sourceUrl.trim()
-          : '';
-
-      if (suppliedSourceUrl && !validateSourceUrl(suppliedSourceUrl)) {
-        toast('影片详情来源地址未通过安全校验', 'warning');
-        return;
-      }
-
-      if (
-        (pic !== undefined && typeof pic !== 'string') ||
-        (typeName !== undefined && typeof typeName !== 'string') ||
-        (normalizedYear !== undefined && typeof normalizedYear !== 'string') ||
-        (area !== undefined && typeof area !== 'string') ||
-        (remarks !== undefined && typeof remarks !== 'string') ||
-        (isAdult !== undefined && typeof isAdult !== 'boolean')
-      ) {
-        toast('影片详情附加参数格式无效', 'warning');
-        return;
-      }
-
-      const normalizedSourceKey = sourceKey.trim();
-      const suppliedSourceName =
-        typeof sourceName === 'string' ? sourceName.trim() : '';
-      const currentStore = useAppStore.getState();
-
-      // 先读取本地配置，普通数据源仍然保持原有行为。
-      const localSource = resolveSource(currentStore, normalizedSourceKey);
-      const normalizedSourceName =
-        suppliedSourceName || localSource?.name || normalizedSourceKey;
-      let source = localSource;
-      
-      // Friday 搜索结果携带的 sourceUrl 是本次搜索实际使用的地址。
-      // 必须优先使用它，不能被本地旧 friday-cms 配置覆盖。
-      if (normalizedSourceKey === 'friday-cms' && suppliedSourceUrl) {
-        source = {
-          ...(localSource ?? {}),
-          key: normalizedSourceKey,
-          name: normalizedSourceName,
-          url: suppliedSourceUrl,
-          detail: undefined,
-        };
-      } else if (!source && suppliedSourceUrl) {
-        // 普通数据源仅在本地配置不存在时使用事件携带的地址。
-        source = {
-          key: normalizedSourceKey,
-          name: normalizedSourceName,
-          url: suppliedSourceUrl,
-        };
-      }
-
-      if (!source || !source.url) {
-        toast(
-          normalizedSourceKey === 'friday-cms'
-            ? 'Friday CMS 数据源地址缺失，请检查搜索结果或本地配置'
-            : '本地数据源配置不存在，请检查数据源设置',
-          'error'
-        );
-        return;
-      }
-
-      if (!validateSourceUrl(source.url)) {
-        toast('数据源地址未通过安全校验', 'error');
-        return;
-      }
-
-      const item: SearchResultItem = {
-        sourceKey: source.key,
-        sourceName: normalizedSourceName || source.name,
-        sourceUrl: source.url,
-        vodId: normalizedVodId,
-        name: name.trim(),
-        ...(typeof pic === 'string' && pic ? { pic } : {}),
-        ...(typeof typeName === 'string' && typeName ? { typeName } : {}),
-        ...(typeof normalizedYear === 'string' && normalizedYear ? { year: normalizedYear } : {}),
-        ...(typeof area === 'string' && area ? { area } : {}),
-        ...(typeof remarks === 'string' && remarks ? { remarks } : {}),
-        ...(typeof isAdult === 'boolean' ? { isAdult } : source.isAdult !== undefined ? { isAdult: source.isAdult } : {}),
-      };
-      
-      setDetailItem(item);
-    };
-
-    window.addEventListener('friday-open-detail', handleFridayOpenDetail);
-    return () => {
-      window.removeEventListener('friday-open-detail', handleFridayOpenDetail);
-    };
-  }, [toast]);
+  useFridayDetailBridge(setDetailItem, toast);
 
   const sourceName = (key: string) =>
     customAPIs.find((a) => a.key === key)?.name ??
