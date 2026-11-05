@@ -57,11 +57,7 @@ export function FridayStyles() {
           background:radial-gradient(ellipse,rgba(8,18,42,.48) 0%,rgba(39,74,122,.22) 35%,rgba(125,101,190,.10) 56%,transparent 76%);
           filter:blur(13px);pointer-events:none;
         }
-        .friday-root .friday-orb-webgl{
-          display:block;width:100%;height:100%;overflow:visible;
-          filter:drop-shadow(0 0 7px rgba(105,210,255,.28)) drop-shadow(0 0 15px rgba(174,117,255,.18));
-        }
-        .friday-root .friday-orb-listening{
+
           position:absolute;right:-8px;bottom:-10px;z-index:4;
           color:rgba(255,255,255,.78);font-size:8px;letter-spacing:.12em;
           text-shadow:0 1px 8px rgba(20,32,64,.8);white-space:nowrap;
@@ -389,28 +385,7 @@ export function FridayStyles() {
           filter: brightness(1.28);
         }
 
-        .friday-root .friday-orb-visual[data-state="listening"] .friday-orb-fluid{
-          opacity: .98;
-          animation-duration: 2.4s;
-          filter: saturate(1.35) brightness(1.12);
-        }
 
-        .friday-root .friday-orb-visual[data-state="thinking"] .friday-orb-fluid{
-          opacity: .92;
-          animation-duration: 1.8s;
-          filter: hue-rotate(28deg) saturate(1.45);
-        }
-
-        .friday-root .friday-orb-visual[data-state="speaking"] .friday-orb-glint{
-          opacity: 1;
-          filter: blur(.1px) brightness(1.3);
-        }
-
-        .friday-root .friday-orb-visual[data-state="completed"] .friday-orb-rim{
-          filter: drop-shadow(0 0 4px rgba(167,220,255,.8));
-        }
-
-        .friday-root .friday-input-area{
           position: relative;
           z-index: 4;
           flex: 0 0 auto;
