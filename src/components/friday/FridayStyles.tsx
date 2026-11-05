@@ -894,7 +894,7 @@ export function FridayStyles() {
           background:transparent;border:0;box-shadow:none;
           animation:friday-orb-float 4.8s cubic-bezier(.45,0,.55,1) infinite,
                     friday-orb-tilt 8s ease-in-out infinite;
-          transition:filter .55s ease-in-out,transform .55s ease-in-out;
+          transition:transform .55s ease-in-out;
         }
         .friday-root .friday-orb-media{
           display:block;width:100%;height:100%;object-fit:contain;
@@ -908,24 +908,17 @@ export function FridayStyles() {
         }
         .friday-root .friday-orb-visual[data-state="listening"]{
           animation-duration:1.15s,2.6s;
-          filter:brightness(1.34) saturate(1.42)
-                 drop-shadow(0 0 12px rgba(91,210,255,.5));
         }
         .friday-root .friday-orb-visual[data-state="thinking"]{
-          animation-duration:3.2s,5s;filter:hue-rotate(18deg) saturate(1.2);
+          animation-duration:3.2s,5s;
         }
         .friday-root .friday-orb-visual[data-state="speaking"]{
-          animation-duration:1.7s,3.2s;filter:brightness(1.28) saturate(1.3);
+          animation-duration:1.7s,3.2s;
         }
         .friday-root .friday-orb-visual[data-state="completed"]{
-          animation-duration:6s,10s;filter:brightness(1.08) saturate(.9);
+          animation-duration:6s,10s;
         }
-        .friday-root .friday-orb-visual[data-state="listening"] .friday-orb-media{
-          filter:brightness(1.28) saturate(1.5)
-                 drop-shadow(0 0 12px rgba(91,210,255,.62))
-                 drop-shadow(0 0 24px rgba(190,110,255,.34));
-        }
-        .friday-root .friday-orb-listening{
+         .friday-root .friday-orb-listening{
           position:absolute;right:-8px;bottom:-10px;z-index:4;
           color:rgba(255,255,255,.92);font-size:8px;letter-spacing:.12em;
           text-shadow:0 1px 8px rgba(5,12,28,.95);white-space:nowrap;
