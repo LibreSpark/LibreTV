@@ -403,7 +403,7 @@ export default function AIFloatingBall({
             onPointerCancel={handleFabPointerUp}
             onClick={handleFabClick}
           >
-            <FridayOrbVisual />
+            <FridayOrbVisual state={auroraState} />
           </button>
         ) : null}
 
