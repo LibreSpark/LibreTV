@@ -92,81 +92,186 @@ function compile(gl: WebGLRenderingContext, type: number, source: string) {
 export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVisualProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const listening = isListening ?? state === "listening";
+  const listeningRef = useRef(listening);
+  const [fallback, setFallback] = React.useState(false);
+  listeningRef.current = listening;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const gl = canvas.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: false });
-    if (!gl) return;
+
+    let gl: WebGLRenderingContext | null = null;
     let raf = 0;
     let program: WebGLProgram | null = null;
-    let buffer: WebGLBuffer | null = null;
+    let vertexBuffer: WebGLBuffer | null = null;
+    let indexBuffer: WebGLBuffer | null = null;
+    let vertexShader: WebGLShader | null = null;
+    let fragmentShader: WebGLShader | null = null;
+    let disposed = false;
     const start = performance.now();
 
+    const onContextLost = (event: Event) => {
+      event.preventDefault();
+      setFallback(true);
+    };
+    canvas.addEventListener("webglcontextlost", onContextLost, false);
+
     try {
-      const vs = compile(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
-      const fs = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
+      gl = canvas.getContext("webgl", {
+        alpha: true,
+        antialias: true,
+        premultipliedAlpha: false,
+        powerPreference: "low-power",
+      });
+      if (!gl) throw new Error("WebGL is unavailable");
+
+      vertexShader = compile(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
+      fragmentShader = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
       program = gl.createProgram();
       if (!program) throw new Error("Unable to create WebGL program");
-      gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || "Program link failed");
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(program) || "Program link failed");
+      }
       gl.useProgram(program);
 
       const positions: number[] = [];
-      const latitudes = 128, longitudes = 128;
-      for (let y=0;y<=latitudes;y++) {
-        const v=y/latitudes, phi=v*Math.PI;
-        for(let x=0;x<=longitudes;x++){
-          const u=x/longitudes, theta=u*Math.PI*2;
-          positions.push(-Math.cos(theta)*Math.sin(phi),Math.cos(phi),Math.sin(theta)*Math.sin(phi));
+      const latitudes = 128;
+      const longitudes = 128;
+      for (let y = 0; y <= latitudes; y++) {
+        const v = y / latitudes;
+        const phi = v * Math.PI;
+        for (let x = 0; x <= longitudes; x++) {
+          const u = x / longitudes;
+          const theta = u * Math.PI * 2;
+          positions.push(
+            -Math.cos(theta) * Math.sin(phi),
+            Math.cos(phi),
+            Math.sin(theta) * Math.sin(phi),
+          );
         }
       }
-      const indices: number[]=[];
-      for(let y=0;y<latitudes;y++) for(let x=0;x<longitudes;x++){
-        const a=y*(longitudes+1)+x,b=a+longitudes+1;
-        indices.push(a,b,a+1,b,b+1,a+1);
+
+      const indices: number[] = [];
+      for (let y = 0; y < latitudes; y++) {
+        for (let x = 0; x < longitudes; x++) {
+          const a = y * (longitudes + 1) + x;
+          const b = a + longitudes + 1;
+          indices.push(a, b, a + 1, b, b + 1, a + 1);
+        }
       }
-      const vertexData=new Float32Array(positions);
-      const indexData=new Uint16Array(indices);
-      buffer=gl.createBuffer();
-      const ib=gl.createBuffer();
-      if(!buffer||!ib) throw new Error("Unable to create geometry buffers");
-      gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,vertexData,gl.STATIC_DRAW);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indexData,gl.STATIC_DRAW);
-      const pos=gl.getAttribLocation(program,"aPosition");gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,3,gl.FLOAT,false,0,0);
-      const projection=gl.getUniformLocation(program,"uProjection");
-      const time=gl.getUniformLocation(program,"uTime");
-      const speed=gl.getUniformLocation(program,"uSpeed");
-      const resolution=gl.getUniformLocation(program,"uResolution");
-      const draw=()=>{
-        const rect=canvas.getBoundingClientRect(), dpr=Math.min(window.devicePixelRatio||1,2);
-        const w=Math.max(1,Math.round(rect.width*dpr)),h=Math.max(1,Math.round(rect.height*dpr));
-        if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
-        const aspect=w/h, f=1.0/Math.tan(Math.PI/8), near=.1, far=10;
-        const proj=new Float32Array(16);
-        proj[0]=f/Math.max(aspect,1);proj[5]=f*Math.min(aspect,1);proj[10]=(far+near)/(near-far);proj[11]=-1;proj[14]=(2*far*near)/(near-far);
-        gl.uniformMatrix4fv(projection,false,proj);
-        gl.uniform1f(time,(performance.now()-start)/1000);
-        gl.uniform1f(speed,listening?2.65:1.0);
-        gl.uniform2f(resolution,w,h);
-        gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-        gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
-        gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
-        gl.drawElements(gl.TRIANGLES,indexData.length,gl.UNSIGNED_SHORT,0);
-        raf=requestAnimationFrame(draw);
+
+      const indexData = new Uint16Array(indices);
+      vertexBuffer = gl.createBuffer();
+      indexBuffer = gl.createBuffer();
+      if (!vertexBuffer || !indexBuffer) throw new Error("Unable to create geometry buffers");
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW);
+
+      const positionLocation = gl.getAttribLocation(program, "aPosition");
+      gl.enableVertexAttribArray(positionLocation);
+      gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+
+      const projection = gl.getUniformLocation(program, "uProjection");
+      const time = gl.getUniformLocation(program, "uTime");
+      const speed = gl.getUniformLocation(program, "uSpeed");
+      const resolution = gl.getUniformLocation(program, "uResolution");
+      if (!projection || !time || !speed || !resolution) {
+        throw new Error("Required shader uniforms are unavailable");
+      }
+
+      const draw = () => {
+        if (disposed || !gl || !program) return;
+        const rect = canvas.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.max(1, Math.round(rect.width * dpr));
+        const height = Math.max(1, Math.round(rect.height * dpr));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+          gl.viewport(0, 0, width, height);
+        }
+
+        const aspect = width / height;
+        const f = 1 / Math.tan(Math.PI / 8);
+        const near = 0.1;
+        const far = 10;
+        const matrix = new Float32Array(16);
+        matrix[0] = f / Math.max(aspect, 1);
+        matrix[5] = f * Math.min(aspect, 1);
+        matrix[10] = (far + near) / (near - far);
+        matrix[11] = -1;
+        matrix[14] = (2 * far * near) / (near - far);
+
+        gl.uniformMatrix4fv(projection, false, matrix);
+        gl.uniform1f(time, (performance.now() - start) / 1000);
+        gl.uniform1f(speed, listeningRef.current ? 2.65 : 1);
+        gl.uniform2f(resolution, width, height);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.drawElements(gl.TRIANGLES, indexData.length, gl.UNSIGNED_SHORT, 0);
+        raf = requestAnimationFrame(draw);
       };
+
+      setFallback(false);
       draw();
-      return ()=>{cancelAnimationFrame(raf);gl.deleteBuffer(buffer);gl.deleteBuffer(ib);if(program)gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs);};
     } catch (error) {
-      console.error("[FridayOrbVisual] WebGL initialization failed:",error);
-      return ()=>{cancelAnimationFrame(raf);if(buffer)gl.deleteBuffer(buffer);if(program)gl.deleteProgram(program);};
+      console.error("[FridayOrbVisual] WebGL initialization failed:", error);
+      setFallback(true);
     }
-  }, [listening]);
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      if (gl) {
+        if (vertexBuffer) gl.deleteBuffer(vertexBuffer);
+        if (indexBuffer) gl.deleteBuffer(indexBuffer);
+        if (program) gl.deleteProgram(program);
+        if (vertexShader) gl.deleteShader(vertexShader);
+        if (fragmentShader) gl.deleteShader(fragmentShader);
+      }
+    };
+  }, []);
 
   return (
     <div className="friday-orb-visual" data-state={state} aria-hidden="true">
-      <canvas ref={canvasRef} className="friday-orb-webgl" />
+      <canvas
+        ref={canvasRef}
+        className="friday-orb-webgl"
+        style={{ display: fallback ? "none" : "block" }}
+      />
+      {fallback ? (
+        <span
+          className="friday-orb-fallback"
+          style={{
+            position: "absolute",
+            inset: "8%",
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle at 34% 27%, rgba(255,255,255,.98) 0 3%, rgba(160,239,255,.82) 9%, rgba(105,166,255,.42) 27%, rgba(160,105,255,.34) 48%, rgba(255,132,202,.22) 62%, rgba(22,38,76,.08) 74%, transparent 76%)",
+            boxShadow:
+              "inset -8px -10px 22px rgba(58,52,122,.2), inset 5px 5px 14px rgba(255,255,255,.72), 0 0 22px rgba(128,180,255,.28)",
+            animation: "friday-orb-fallback-breathe 4.2s ease-in-out infinite",
+          }}
+        />
+      ) : null}
       {listening ? <span className="friday-orb-listening">Listening...</span> : null}
+      <style jsx global>{`
+        @keyframes friday-orb-fallback-breathe {
+          0%, 100% { transform: scale(.96); filter: hue-rotate(0deg); }
+          50% { transform: scale(1.04); filter: hue-rotate(24deg); }
+        }
+      `}</style>
     </div>
   );
 }
