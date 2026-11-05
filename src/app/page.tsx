@@ -4,17 +4,17 @@ import {
   Suspense,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 import { Header } from '@/components/header';
 import { HomeSearchSection } from '@/components/home/HomeSearchSection';
 import { FridayHero } from '@/components/friday/FridayHero';
 import { useFridayDetailBridge } from '@/components/friday/useFridayDetailBridge';
+import { useHomeSearchController } from '@/components/home/useHomeSearchController';
 import { RecommendSection } from '@/components/douban-section';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
@@ -29,9 +29,6 @@ import type {
   SearchResultItem,
   SourceSearchOutcome,
 } from '@/lib/types';
-import {
-  useSearchHistory,
-} from '@/components/search-history';
 import {
   cn,
   formatDisableTtl,
@@ -69,7 +66,6 @@ type HomeContentProps = {
 function HomeContent({ variant = 'legacy' }: HomeContentProps) {
   const isV2 = variant === 'v2';
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { toast } = useToast();
 
   const urlQuery = searchParams.get('q') ?? searchParams.get('s') ?? '';
@@ -82,17 +78,10 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
   const subscriptions = useAppStore((s) => s.subscriptions);
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
 
-  const [input, setInput] = useState(urlQuery);
   const [detailItem, setDetailItem] =
     useState<SearchResultItem | null>(null);
   const [streamedOutcomes, setStreamedOutcomes] =
     useState<SourceSearchOutcome[]>([]);
-
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (urlQuery) setInput(urlQuery);
-  }, [urlQuery]);
 
   useFridayDetailBridge(setDetailItem, toast);
 
@@ -115,6 +104,15 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
       .filter((s) => !isSourceDisabled({ sourceHealth }, s.key))
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
+
+  const {
+    input,
+    setInput,
+    inputRef,
+    searchHistory,
+    runSearch,
+    pickHistory,
+  } = useHomeSearchController(urlQuery, selectedSources.length, toast);
 
   const disabledSources = useMemo(
     () => selectedKeys.filter((key) => isSourceDisabled({ sourceHealth }, key)),
@@ -158,29 +156,6 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
     enabled: Boolean(urlQuery) && selectedSources.length > 0,
     staleTime: 300_000,
   });
-
-  const searchHistory = useSearchHistory(input);
-
-  const runSearch = (q: string) => {
-    const query = q.trim().slice(0, 100);
-    if (!query) {
-      toast('请输入搜索内容', 'info');
-      inputRef.current?.focus();
-      return;
-    }
-    if (selectedSources.length === 0) {
-      toast('请先在设置中添加并勾选点播源', 'warning');
-      return;
-    }
-    router.push(`/?q=${encodeURIComponent(query)}`, { scroll: false });
-    searchHistory.record(query);
-  };
-
-  const pickHistory = (text: string) => {
-    setInput(text);
-    searchHistory.close();
-    runSearch(text);
-  };
 
   const isSearching = Boolean(urlQuery) && searchQuery.isFetching && !searchQuery.data;
 
