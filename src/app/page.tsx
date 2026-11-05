@@ -40,23 +40,12 @@ import { SiteFooter } from '@/components/site-footer';
 
 const RESULT_PAGE_SIZE = 60;
 
-const HOME_V2_ENABLED = process.env.NEXT_PUBLIC_HOME_V2 === 'true';
-
 export default function HomePage() {
   return (
     <Suspense>
-      {HOME_V2_ENABLED ? <HomePageV2 /> : <HomeContent />}
+      <HomeContent variant="v2" />
     </Suspense>
   );
-}
-
-/**
- * Feature-flag entry for the Friday-first homepage.
- * The V2 shell reuses HomeContent's existing search, recommendations,
- * detail modal, and navigation data flow; only the presentation variant changes.
- */
-function HomePageV2() {
-  return <HomeContent variant="v2" />;
 }
 
 type HomeContentProps = {
@@ -194,7 +183,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
 
   return (
     <div className={isV2 ? "home-v2 min-h-screen flex flex-col" : "legacy-home min-h-screen flex flex-col"}>
-      <Header showFridayFab={!isV2} />
+      <Header showFridayFab={!isV2} minimalFridayNav={isV2} />
       <main className={cn("relative flex-1 max-w-6xl w-full mx-auto px-4 py-6", isV2 && "home-v2-main")}>
         {!urlQuery && (
           <div
