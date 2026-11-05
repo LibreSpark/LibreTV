@@ -170,7 +170,7 @@ export function FridayPanel({
                               : "Friday 随时待命"}
                   </span>
     
-                  <FridayOrbVisual />
+                  <FridayOrbVisual state={auroraState as "standby" | "listening" | "thinking" | "speaking" | "completed"} />
                 </div>
     
                 <FridayComposer
