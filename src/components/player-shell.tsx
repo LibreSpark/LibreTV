@@ -10,6 +10,7 @@ import {
   getVideoPrefetcher,
   getNextEpisodePrefetcher,
 } from '@/lib/video-prefetcher';
+import { attachVolumeBoost, type VolumeBoostHandle } from '@/lib/volume-boost';
 import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
 import { prefersTouchPointer } from '@/lib/touch-pointer';
@@ -128,6 +129,7 @@ export function PlayerShell({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const volumeBoostRef = useRef<VolumeBoostHandle | null>(null);
   const [error, setError] = useState('');
   const [hint, setHint] = useState('');
   // 起播前的品牌占位图（沿用旧版 nomedia 素材），实际开始播放后隐藏
@@ -564,6 +566,14 @@ export function PlayerShell({
     });
     artRef.current = art;
 
+    // 音量放大：起播后（src 已就绪）才挂 Web Audio 增益图，避免空 src / CORS 误判。
+    // 纯附加：不改动 ArtPlayer 的 volume/滑块/快捷键；失败时原样播放。
+    art.on('video:playing', () => {
+      if (!volumeBoostRef.current) {
+        volumeBoostRef.current = attachVolumeBoost(art.video);
+      }
+    });
+
     // 进度条区间可视化：初始渲染一次，换集 duration 变化时重绘
     renderSkipMarks();
     art.on('video:durationchange', renderSkipMarks);
@@ -915,6 +925,8 @@ export function PlayerShell({
       }
       document.removeEventListener('keydown', shortcuts);
       document.removeEventListener('visibilitychange', saveOnHide);
+      volumeBoostRef.current?.dispose();
+      volumeBoostRef.current = null;
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       el?.removeEventListener('touchstart', onTouchStart);
