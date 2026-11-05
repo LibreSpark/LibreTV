@@ -72,6 +72,17 @@ describe('isValidProxyUrl', () => {
 
 
 describe('DNS Rebinding & Connection SSRF Protection (#941)', () => {
+  it('a request to a public origin inside the protected scope must succeed', async () => {
+    const res = await runWithSSRFProtection({ allowPrivate: false }, async () => {
+      return await fetch('https://example.com', {
+        signal: AbortSignal.timeout(10000),
+      });
+    });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text.length).toBeGreaterThan(0);
+  });
+
   it('在受保护上下文中拦截解析到私网 IP 的域名（防 DNS Rebinding）', async () => {
     const server = http.createServer((_req, res) => {
       res.writeHead(200);
@@ -124,6 +135,33 @@ describe('DNS Rebinding & Connection SSRF Protection (#941)', () => {
         return await res.text();
       });
       expect(text).toBe('iptv stream data');
+    } finally {
+      server.close();
+    }
+  });
+
+  it('同一域名多次请求不会因连接池复用绕过连接层校验', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('pool test data');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address(); if (!addr || typeof addr === 'string') throw new Error('意外的地址'); const port = addr.port;
+
+    try {
+      // 1. 先在 allowPrivate: true 作用域内请求该端口建立连接
+      const text = await runWithSSRFProtection({ allowPrivate: true }, async () => {
+        const res = await fetch(`http://127.0.0.1:${port}/first`);
+        return await res.text();
+      });
+      expect(text).toBe('pool test data');
+
+      // 2. 随后在 strict 作用域（allowPrivate: false）请求同一源，必须重新拦截，不得复用已有 socket
+      await expect(
+        runWithSSRFProtection({ allowPrivate: false }, async () => {
+          await fetch(`http://127.0.0.1:${port}/second`);
+        })
+      ).rejects.toThrow();
     } finally {
       server.close();
     }

@@ -41,6 +41,23 @@ export interface SafeRedirectOptions {
   headerTimeoutMs?: number;
 }
 
+/** 归一化连接层 SSRF 拦截错误为用户友好提示 */
+function normalizeSSRFError(err: unknown): never {
+  if (
+    err &&
+    typeof err === 'object' &&
+    'cause' in err &&
+    err.cause &&
+    typeof err.cause === 'object' &&
+    'code' in err.cause &&
+    (err.cause as { code?: string }).code === 'ERR_SSRF_BLOCKED'
+  ) {
+    const cause = err.cause as { message?: string };
+    throw new Error(`连接目标被拒绝: ${cause.message || '目标地址被拒绝'}`);
+  }
+  throw err;
+}
+
 /**
  * 手动逐跳跟随重定向，每一跳重新执行 SSRF 校验。
  * 不能用 redirect:'follow'——预检之后 fetch 自动跟随的 3xx 可把请求
@@ -72,19 +89,7 @@ export async function fetchWithSafeRedirects(
       try {
         res = await fetch(current, { ...init, signal: controller.signal, redirect: 'manual' });
       } catch (err: unknown) {
-        if (
-          err &&
-          typeof err === 'object' &&
-          'cause' in err &&
-          err.cause &&
-          typeof err.cause === 'object' &&
-          'code' in err.cause &&
-          (err.cause as { code?: string }).code === 'ERR_SSRF_BLOCKED'
-        ) {
-          const cause = err.cause as { message?: string };
-          throw new Error(`连接目标被拒绝: ${cause.message || '目标地址被拒绝'}`);
-        }
-        throw err;
+        normalizeSSRFError(err);
       } finally {
         if (timer) clearTimeout(timer);
       }
@@ -113,14 +118,18 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       if (!safeRedirects) {
-        const res = await runWithSSRFProtection({ allowPrivate }, () =>
-          fetch(url, {
-            ...init,
-            signal,
-            redirect: init.redirect ?? 'follow',
-          })
-        );
-        return { res, finalUrl: res.url || url };
+        try {
+          const res = await runWithSSRFProtection({ allowPrivate }, () =>
+            fetch(url, {
+              ...init,
+              signal,
+              redirect: init.redirect ?? 'follow',
+            })
+          );
+          return { res, finalUrl: res.url || url };
+        } catch (err: unknown) {
+          normalizeSSRFError(err);
+        }
       }
       // 手动逐跳跟随，每一跳重新过 SSRF 校验
       return await fetchWithSafeRedirects(url, { ...init, signal }, { allowPrivate });
