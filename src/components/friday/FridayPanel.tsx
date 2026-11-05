@@ -158,8 +158,10 @@ export function FridayPanel({
     
                 <div className="friday-orb-stage">
                   <span className="friday-orb-status" role="status" aria-live="polite" aria-atomic="true">
-                    {listening
-                      ? "请说出你想看的影片"
+                    {voiceError
+                      ? "语音暂时不可用，可重试或使用文字输入"
+                      : listening
+                        ? "请说出你想看的影片"
                       : busy
                         ? "正在连接影视资源"
                         : speaking
