@@ -207,7 +207,7 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
           />
         )}
         <HomeIntentCanvas
-          variant={isV2 ? 'v2' : 'legacy'}
+          variant={isV2 && !urlQuery ? 'v2' : 'legacy'}
           onSearchFocus={() => inputRef.current?.focus()}
         >
           <HomeSearchSection
