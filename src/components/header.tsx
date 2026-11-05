@@ -12,7 +12,7 @@ import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
 import AIFloatingBall from '@/components/AIFloatingBall';
 /** 顶部导航：Logo、搜索框（首页外）、历史、设置 */
-export function Header({ showSearch = false, showFridayFab = true }: { showSearch?: boolean; showFridayFab?: boolean }) {
+export function Header({ showSearch = false, showFridayFab = true, minimalFridayNav = false }: { showSearch?: boolean; showFridayFab?: boolean; minimalFridayNav?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -104,24 +104,26 @@ export function Header({ showSearch = false, showFridayFab = true }: { showSearc
         >
           Friday
         </button> 
-          <nav className="flex items-center gap-1 ml-auto">
-            <HeaderLink href="/live" active={pathname === '/live'}>
-              直播
-            </HeaderLink>
-            <HeaderLink href="/about" active={pathname === '/about'}>
-              关于
-            </HeaderLink>
-            <ThemeToggle />
-            <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
-              <Icon name="clock" />
-            </IconButton>
-            <IconButton label="下载管理" onClick={requestShowDownloadManager}>
-              <Icon name="download" />
-            </IconButton>
-            <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
-              <Icon name="gear" />
-            </IconButton>
-          </nav>
+          {!minimalFridayNav && (
+            <nav className="flex items-center gap-1 ml-auto">
+              <HeaderLink href="/live" active={pathname === '/live'}>
+                直播
+              </HeaderLink>
+              <HeaderLink href="/about" active={pathname === '/about'}>
+                关于
+              </HeaderLink>
+              <ThemeToggle />
+              <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
+                <Icon name="clock" />
+              </IconButton>
+              <IconButton label="下载管理" onClick={requestShowDownloadManager}>
+                <Icon name="download" />
+              </IconButton>
+              <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
+                <Icon name="gear" />
+              </IconButton>
+            </nav>
+          )}
         </div>
       </header>
 
