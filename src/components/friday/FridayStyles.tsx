@@ -908,12 +908,10 @@ export function FridayStyles() {
           pointer-events:none;
         }
         .friday-root .friday-orb-fallback{
-          position:absolute;inset:8%;border-radius:50%;
-          background:
-            radial-gradient(circle at 34% 25%,rgba(255,255,255,.98) 0 3%,rgba(179,246,255,.92) 9%,rgba(103,174,255,.72) 24%,rgba(144,105,255,.58) 43%,rgba(255,132,210,.38) 60%,rgba(9,20,48,.08) 74%,transparent 76%);
-          box-shadow:inset -8px -10px 22px rgba(30,35,100,.28),
-                     inset 5px 5px 14px rgba(255,255,255,.76),
-                     0 0 24px rgba(128,180,255,.34);
+          position:absolute;inset:8%;width:84%;height:84%;object-fit:contain;
+          border-radius:50%;mix-blend-mode:screen;
+          filter:drop-shadow(0 0 8px rgba(105,210,255,.35))
+                 drop-shadow(0 0 18px rgba(174,117,255,.22));
         }
         .friday-root .friday-orb-visual::before{
           content:"";position:absolute;z-index:-1;left:-35%;right:-35%;bottom:-18%;
