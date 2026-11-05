@@ -225,6 +225,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     let environmentTexture: WebGLTexture | null = null;
     let environmentAbort: AbortController | null = null;
     let onVisibilityChange: (() => void) | null = null;
+    let contextLost = false;
     let disposed = false;
     const start = performance.now();
     const dprLimit = window.matchMedia("(max-width: 768px)").matches ? 1.5 : 2;
@@ -232,6 +233,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
 
     const onContextLost = (event: Event) => {
       event.preventDefault();
+      contextLost = true;
       cancelAnimationFrame(raf);
       raf = 0;
       setFallback(true);
@@ -348,7 +350,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
 
       const draw = () => {
         raf = 0;
-        if (disposed || !gl || !program || document.hidden) return;
+        if (disposed || contextLost || !gl || !program || document.hidden) return;
         const rect = canvas.getBoundingClientRect();
         const dpr = Math.min(window.devicePixelRatio || 1, dprLimit);
         const width = Math.max(1, Math.round(rect.width * dpr));
@@ -399,7 +401,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
         if (document.hidden) {
           cancelAnimationFrame(raf);
           raf = 0;
-        } else if (!disposed && !raf) {
+        } else if (!disposed && !contextLost && !raf) {
           raf = requestAnimationFrame(draw);
         }
       };
