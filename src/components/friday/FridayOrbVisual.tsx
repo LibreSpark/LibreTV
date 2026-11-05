@@ -226,10 +226,13 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     let environmentAbort: AbortController | null = null;
     let disposed = false;
     const start = performance.now();
+    const dprLimit = window.matchMedia("(max-width: 768px)").matches ? 1.5 : 2;
+    const projectionMatrix = new Float32Array(16);
 
     const onContextLost = (event: Event) => {
       event.preventDefault();
       cancelAnimationFrame(raf);
+      raf = 0;
       setFallback(true);
     };
     canvas.addEventListener("webglcontextlost", onContextLost, false);
@@ -343,9 +346,10 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
       }
 
       const draw = () => {
-        if (disposed || !gl || !program) return;
+        raf = 0;
+        if (disposed || !gl || !program || document.hidden) return;
         const rect = canvas.getBoundingClientRect();
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = Math.min(window.devicePixelRatio || 1, dprLimit);
         const width = Math.max(1, Math.round(rect.width * dpr));
         const height = Math.max(1, Math.round(rect.height * dpr));
         if (canvas.width !== width || canvas.height !== height) {
@@ -358,7 +362,8 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
         const f = 1 / Math.tan(Math.PI / 8);
         const near = 0.1;
         const far = 10;
-        const matrix = new Float32Array(16);
+        const matrix = projectionMatrix;
+        matrix.fill(0);
         matrix[0] = f / Math.max(aspect, 1);
         matrix[5] = f * Math.min(aspect, 1);
         matrix[10] = (far + near) / (near - far);
@@ -386,11 +391,21 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
         gl.drawElements(gl.TRIANGLES, indexData.length, gl.UNSIGNED_SHORT, 0);
-        raf = requestAnimationFrame(draw);
+        if (!document.hidden) raf = requestAnimationFrame(draw);
       };
 
+      const onVisibilityChange = () => {
+        if (document.hidden) {
+          cancelAnimationFrame(raf);
+          raf = 0;
+        } else if (!disposed && !raf) {
+          raf = requestAnimationFrame(draw);
+        }
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+
       setFallback(false);
-      draw();
+      if (!document.hidden) draw();
     } catch (error) {
       console.error("[FridayOrbVisual] WebGL initialization failed:", error);
       setFallback(true);
@@ -401,6 +416,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
       environmentAbort?.abort();
       cancelAnimationFrame(raf);
       canvas.removeEventListener("webglcontextlost", onContextLost);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (gl) {
         if (vertexBuffer) gl.deleteBuffer(vertexBuffer);
         if (indexBuffer) gl.deleteBuffer(indexBuffer);
