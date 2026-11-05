@@ -708,7 +708,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
   place-items: center;
   width: 30px;
   flex: 0 0 30px;
-  color: var(--c-muted,#888);
+  color: rgb(var(--c-muted));
 }
 .home-v2 .home-v2-ai-search-input {
   flex: 1;
@@ -718,11 +718,11 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--c-content,currentColor);
+  color: rgb(var(--c-content));
   font-size: 14px;
   -webkit-appearance: none;
 }
-.home-v2 .home-v2-ai-search-input::placeholder { color: var(--c-faint,#888); opacity: 1; }
+.home-v2 .home-v2-ai-search-input::placeholder { color: rgb(var(--c-faint)); opacity: 1; }
 .home-v2 .home-v2-search-clear,
 .home-v2 .home-v2-mic-button,
 .home-v2 .home-v2-search-submit {
@@ -735,7 +735,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--c-muted,#888);
+  color: rgb(var(--c-muted));
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -762,7 +762,7 @@ button[class*="episode"].active, .episode-btn.active { background-color: #e63921
 .home-v2 .home-v2-voice-error,
 .home-v2 .home-v2-voice-status {
   margin: 7px 6px 0;
-  color: var(--c-muted,#888);
+  color: rgb(var(--c-muted));
   font-size: 11px;
   text-align: center;
 }
