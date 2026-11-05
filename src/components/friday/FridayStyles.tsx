@@ -808,6 +808,130 @@ export function FridayStyles() {
           flex-basis: 48px;
         }
 
+        .friday-root .friday-panel.friday-expanded.friday-immersive{
+          inset: 0;
+          right: 0;
+          bottom: 0;
+          box-sizing: border-box;
+          width: 100vw;
+          height: 100dvh;
+          max-height: 100dvh;
+          min-height: 0;
+          padding-top: env(safe-area-inset-top,0px);
+          padding-bottom: env(safe-area-inset-bottom,0px);
+          border: 0;
+          border-radius: 0;
+          background:
+            radial-gradient(ellipse at 50% 46%,rgba(74,125,210,.2),transparent 38%),
+            radial-gradient(ellipse at 50% 68%,rgba(157,91,205,.12),transparent 52%),
+            rgba(5,8,18,.98);
+          animation: friday-immersive-in .55s cubic-bezier(.18,.82,.2,1);
+        }
+
+        @keyframes friday-immersive-in{
+          from{ opacity: 0; transform: scale(1.025); }
+          to{ opacity: 1; transform: scale(1); }
+        }
+
+        .friday-root .friday-immersive .friday-canvas-top{
+          min-height: 56px;
+          padding: max(14px,env(safe-area-inset-top,0px)) 22px 10px;
+        }
+
+        .friday-root .friday-immersive .friday-messages{
+          flex: 1 1 0;
+          min-height: 0;
+          max-height: none;
+          padding: clamp(10px,3vh,28px) clamp(18px,6vw,64px);
+        }
+
+        .friday-root .friday-immersive .friday-orb-stage{
+          flex: 0 0 auto;
+          flex-direction: column;
+          gap: 18px;
+          min-height: clamp(220px,38vh,390px);
+          padding: 8px 20px 22px;
+        }
+
+        .friday-root .friday-immersive .friday-orb-stage .friday-orb-visual{
+          width: clamp(150px,32vw,260px);
+          height: clamp(150px,32vw,260px);
+          flex: 0 0 auto;
+          filter: drop-shadow(0 0 34px rgba(91,151,255,.25));
+        }
+
+        .friday-root .friday-immersive .friday-orb-status{
+          font-size: 13px;
+          letter-spacing: .08em;
+          text-align: center;
+        }
+
+        .friday-root .friday-immersive .friday-input-area{
+          padding: 14px 18px max(14px,env(safe-area-inset-bottom,0px));
+          background: rgba(7,10,20,.42);
+          border-top-color: rgba(255,255,255,.08);
+        }
+
+        .friday-root .friday-immersive .friday-tools{
+          flex-wrap: wrap;
+        }
+
+        @media (max-width:600px){
+          .friday-root .friday-panel.friday-expanded.friday-immersive{
+            inset: 0;
+            right: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100dvh;
+            max-height: 100dvh;
+            border-radius: 0;
+          }
+
+          .friday-root .friday-immersive .friday-canvas-top{
+            padding-right: 17px;
+            padding-left: 17px;
+          }
+
+          .friday-root .friday-immersive .friday-orb-stage{
+            min-height: clamp(190px,34vh,300px);
+            padding-bottom: 12px;
+          }
+
+          .friday-root .friday-immersive .friday-orb-stage .friday-orb-visual{
+            width: clamp(142px,42vw,210px);
+            height: clamp(142px,42vw,210px);
+          }
+
+          .friday-root .friday-immersive .friday-input-area{
+            padding-right: 10px;
+            padding-left: 10px;
+          }
+        }
+
+        @media (max-height:520px){
+          .friday-root .friday-immersive .friday-orb-stage{
+            min-height: 150px;
+            gap: 8px;
+            padding-bottom: 8px;
+          }
+
+          .friday-root .friday-immersive .friday-orb-stage .friday-orb-visual{
+            width: 112px;
+            height: 112px;
+          }
+
+          .friday-root .friday-immersive .friday-messages{
+            padding-top: 4px;
+            padding-bottom: 4px;
+          }
+        }
+
+        @media (prefers-reduced-motion:reduce){
+          .friday-root .friday-panel.friday-expanded.friday-immersive{
+            animation: none !important;
+          }
+        }
+
         @media (max-width:600px) {
           .friday-root{
             right: 16px;
