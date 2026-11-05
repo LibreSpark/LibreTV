@@ -23,8 +23,10 @@
  *   把 source 直连 destination，保留音频通路。
  * - 全 App 复用一个 AudioContext（不是每次换台新建一个），避免上下文数量上限/泄漏。
  * - 手势监听只在「有待补挂项」时存在，补挂完成即解绑，不常驻 document。
- * - 透明软限幅：threshold=0dB、knee=0、ratio=20，只压超过 0dBFS 的峰值；实测对
- *   安静片源输出与未限幅完全一致，既保留 1.8x 放大又避免响片破音。
+ * - 透明软限幅：threshold=0dB、knee=0、ratio=20，只压超过 0dBFS 的峰值。实测（见下方
+ *   createDynamicsCompressor 处的数据）：未顶满的片源全额拿到 +5.11 dB（=1.8 倍），
+ *   已经贴近 0dBFS 且滑块拉满的片源被压回约 +1.25 dB，稳态峰值仍略超满量程（1.041）——
+ *   它是防破音的软限幅，不是硬保证。
  * - createMediaElementSource 对同一元素只能调用一次，用 WeakMap 保证幂等。
  */
 'use client';
@@ -226,7 +228,14 @@ function doAttach(handle: Handle, ctx: AudioContext): boolean {
   const gainNode = ctx.createGain();
   gainNode.gain.value = handle.gain;
 
-  // 透明软限幅：只削掉放大后超过 0dBFS 的峰值
+  // 透明软限幅：只削掉放大后超过 0dBFS 的峰值。
+  // 参数是实测选的（Chromium OfflineAudioContext，440Hz 正弦，跳过前 0.8s 待限幅器收敛）：
+  //   · 输入未顶满时，1.8 倍全额兑现（+5.11 dB = 20·log10(1.8)），峰值与 RMS 同步；
+  //   · 只有「源本身已接近 0dBFS 且滑块拉满」会被压回，实测约 +1.25 dB；
+  //   · 稳态峰值仍会到 1.041（略超满量程）。试过更"保守"的 threshold=−1/knee=3
+  //     与 threshold=−1.5/knee=6/ratio=12，结果过冲反而更大（1.055 / 1.153），
+  //     所以不要靠降 threshold 去治过冲；若一定要压到 1.0 以内，代价是在限幅后
+  //     串一级 0.95 的固定衰减（安静源的提升会从 5.11 dB 降到 4.66 dB）。
   const compressor = ctx.createDynamicsCompressor();
   compressor.threshold.value = 0;
   compressor.knee.value = 0;
