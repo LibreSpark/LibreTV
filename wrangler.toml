@@ -10,3 +10,10 @@ PASSWORD = "12345"
 CMS_SEARCH_API = "https://caiji.dyttzyapi.com/api.php/provide/vod"
 API_60S_BASE = "https://60s.bggdbh.workers.dev"
 LLM_MODEL = "glm-4-flash"
+[previews.vars]
+# Preview 环境不启用站点密码；不要复制生产 PASSWORD。
+PASSWORD = ""
+# 仅复用公开只读上游接口；Preview 不连接生产数据库或私有资源。
+CMS_SEARCH_API = "https://caiji.dyttzyapi.com/api.php/provide/vod"
+API_60S_BASE = "https://60s.bggdbh.workers.dev"
+LLM_MODEL = "glm-4-flash"
