@@ -1,0 +1,12 @@
+name = "libretv"
+main = ".open-next/worker.js"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"] 
+assets = { directory = ".open-next/assets" }
+
+[vars]
+# 注意：PASSWORD 写在此处会随公开仓库暴露，请勿用于敏感或复用密码。
+PASSWORD = "12345"
+CMS_SEARCH_API = "https://caiji.dyttzyapi.com/api.php/provide/vod"
+API_60S_BASE = "https://60s.bggdbh.workers.dev"
+LLM_MODEL = "glm-4-flash"

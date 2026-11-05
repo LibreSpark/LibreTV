@@ -10,11 +10,16 @@
     "start": "next start -p 8080",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "syncDoubanPosters": "node scripts/sync-douban-posters.mjs"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "1.0.0",
+    "@ai-sdk/react": "2.0.0",
+    "@opennextjs/cloudflare": "^1.0.0",
     "@tanstack/react-query": "^5.59.0",
     "@tanstack/react-virtual": "^3.14.12",
+    "ai": "5.0.0",
     "artplayer": "^5.2.3",
     "dexie": "^4.0.8",
     "dexie-react-hooks": "^1.1.7",
@@ -24,7 +29,9 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zustand": "^5.0.2"
+    "zod": "^3.24.1",
+    "zustand": "^5.0.2",
+    "wrangler": "^4.148.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

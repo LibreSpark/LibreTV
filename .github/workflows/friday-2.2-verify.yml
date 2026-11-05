@@ -1,0 +1,50 @@
+name: friday-2.2-verify
+
+on:
+  push:
+    branches:
+      - feature/friday-2.2-architecture
+    paths:
+      - "src/lib/friday/**"
+      - "docs/FRIDAY-2.2-TECHNICAL-SPEC.md"
+      - ".github/workflows/friday-2.2-verify.yml"
+      - "src/components/AIFloatingBall.tsx"
+      - "src/app/api/chat/route.ts"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/lib/friday/**"
+      - "docs/FRIDAY-2.2-TECHNICAL-SPEC.md"
+      - "src/components/AIFloatingBall.tsx"
+      - "src/app/api/chat/route.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/feature/friday-2.2-architecture' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/friday-2.2-architecture
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        env:
+          PASSWORD: ci-test-password
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build

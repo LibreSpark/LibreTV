@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from './theme';
 import { SourceManagerDrawer } from './source-manager';
@@ -10,9 +10,9 @@ import { requestShowDownloadManager } from './download-manager';
 import { Icon } from './icon';
 import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
-
+import AIFloatingBall from '@/components/AIFloatingBall';
 /** 顶部导航：Logo、搜索框（首页外）、历史、设置 */
-export function Header({ showSearch = false }: { showSearch?: boolean }) {
+export function Header({ showSearch = false, showFridayFab = true }: { showSearch?: boolean; showFridayFab?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -36,15 +36,14 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   };
 
   return (
-    <>
-      <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
+    <React.Fragment>
+<header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
           <Link href="/" aria-label="LibreTV 首页" className="flex items-center shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/icons/icon-512.png" alt="LibreTV" className="w-7 h-7 rounded-lg" />
           </Link>
-
-          {showSearch && (
+{showSearch && (
             <form
               className="flex-1 max-w-xl hidden sm:block"
               onSubmit={(e) => {
@@ -110,19 +109,26 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             <IconButton label="下载管理" onClick={requestShowDownloadManager}>
               <Icon name="download" />
             </IconButton>
-            <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-hover hover:text-content"
+              aria-label="打开系统设置"
+              title="设置"
+            >
               <Icon name="gear" />
-            </IconButton>
+              <span>设置</span>
+            </button>
           </nav>
         </div>
       </header>
 
+      <AIFloatingBall showFab={showFridayFab} />
       <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
-    </>
+    </React.Fragment>
   );
 }
-
 function HeaderLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
     <Link

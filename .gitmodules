@@ -1,0 +1,3 @@
+[submodule "workers/60s"]
+	path = workers/60s
+	url = https://github.com/vikiboss/60s.git
