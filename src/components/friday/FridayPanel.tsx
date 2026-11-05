@@ -57,7 +57,7 @@ export type MessageLike = {
 type FridayPanelProps = {
   expanded: boolean;
   closing: boolean;
-  auroraState: string;
+  auroraState: "standby" | "listening" | "thinking" | "speaking" | "completed";
   agentState: string;
   voiceState: string;
   stateLabel: string;
@@ -156,7 +156,7 @@ export function FridayPanel({
                 />
     
                 <div className="friday-orb-stage">
-                  <span className="friday-orb-status">
+                  <span className="friday-orb-status" role="status" aria-live="polite" aria-atomic="true">
                     {listening
                       ? "请说出你想看的影片"
                       : busy
@@ -170,7 +170,7 @@ export function FridayPanel({
                               : "Friday 随时待命"}
                   </span>
     
-                  <FridayOrbVisual state={auroraState as "standby" | "listening" | "thinking" | "speaking" | "completed"} />
+                  <FridayOrbVisual state={auroraState} />
                 </div>
     
                 <FridayComposer
