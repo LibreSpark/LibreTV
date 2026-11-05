@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Header } from '@/components/header';
 import { HomeSearchSection } from '@/components/home/HomeSearchSection';
-import { FridayHero } from '@/components/friday/FridayHero';
+import { HomeIntentCanvas } from '@/components/home/HomeIntentCanvas';
 import { useFridayDetailBridge } from '@/components/friday/useFridayDetailBridge';
 import { useHomeSearchController } from '@/components/home/useHomeSearchController';
 import { RecommendSection } from '@/components/douban-section';
@@ -206,20 +206,22 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
             }}
           />
         )}
-        {!urlQuery && isV2 ? (
-          <FridayHero onSearchFocus={() => inputRef.current?.focus()} />
-        ) : null}
-        <HomeSearchSection
-          urlQuery={urlQuery}
-          input={input}
-          setInput={setInput}
-          inputRef={inputRef}
-          searchHistory={searchHistory}
-          runSearch={runSearch}
-          pickHistory={pickHistory}
-          showBrandTitle={!isV2}
-          showQuickSearches={isV2}
-        />
+        <HomeIntentCanvas
+          variant={isV2 ? 'v2' : 'legacy'}
+          onSearchFocus={() => inputRef.current?.focus()}
+        >
+          <HomeSearchSection
+            urlQuery={urlQuery}
+            input={input}
+            setInput={setInput}
+            inputRef={inputRef}
+            searchHistory={searchHistory}
+            runSearch={runSearch}
+            pickHistory={pickHistory}
+            showBrandTitle={!isV2}
+            showQuickSearches={isV2}
+          />
+        </HomeIntentCanvas>
         {urlQuery && (
           <section aria-label="搜索结果" className="mb-10">
             <div className="flex items-center justify-between mb-3">
