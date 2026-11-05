@@ -12,6 +12,7 @@ attribute vec3 aPosition;
 uniform mat4 uProjection;
 uniform float uTime;
 uniform float uSpeed;
+uniform float uActivity;
 varying vec3 vNormal;
 varying vec3 vPosition;
 varying float vNoise;
@@ -40,7 +41,7 @@ void main(){
  float t=uTime*uSpeed;
  float n=snoise(aPosition*2.45+vec3(t*.13,t*.09,-t*.11));
  float n2=snoise(aPosition*5.0+vec3(-t*.07,t*.1,t*.06));
- float displacement=(n*.025+n2*.008);
+ float displacement=(n*.025+n2*.008) * (0.55 + uActivity * 0.65);
  vec3 p=aPosition*(1.0+displacement);
  vNormal=normalize(aPosition+vec3(n*.035));
  vPosition=p;vNoise=n;
@@ -51,6 +52,7 @@ const FRAGMENT_SHADER = `
 precision highp float;
 uniform float uTime;
 uniform float uSpeed;
+uniform float uActivity;
 uniform vec2 uResolution;
 uniform sampler2D uEnvironment;
 uniform float uHasEnvironment;
@@ -117,7 +119,7 @@ void main() {
   float film = 0.5 + 0.5 * sin((1.0 - ndv) * 13.0 + t * 0.16 + vNoise * 1.4);
   vec3 spectral = mix(vec3(0.20, 0.86, 1.0), vec3(0.82, 0.46, 1.0), film);
   spectral = mix(spectral, vec3(1.0, 0.48, 0.72), 0.5 + 0.5 * sin(film * 6.2831 + 1.2));
-  glass += spectral * pow(1.0 - ndv, 3.2) * 0.22;
+  glass += spectral * pow(1.0 - ndv, 3.2) * (0.12 + uActivity * 0.16);
 
   float glintA = pow(max(dot(reflected, normalize(vec3(-0.72, 0.52, 0.48))), 0.0), 70.0);
   float glintB = pow(max(dot(reflected, normalize(vec3(0.78, 0.18, 0.58))), 0.0), 54.0);
@@ -204,6 +206,8 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const listening = isListening ?? state === "listening";
   const listeningRef = useRef(listening);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [fallback, setFallback] = React.useState(false);
   listeningRef.current = listening;
 
@@ -294,10 +298,11 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
       const projection = gl.getUniformLocation(program, "uProjection");
       const time = gl.getUniformLocation(program, "uTime");
       const speed = gl.getUniformLocation(program, "uSpeed");
+      const activity = gl.getUniformLocation(program, "uActivity");
       const resolution = gl.getUniformLocation(program, "uResolution");
       const environment = gl.getUniformLocation(program, "uEnvironment");
       const hasEnvironment = gl.getUniformLocation(program, "uHasEnvironment");
-      if (!projection || !time || !speed || !resolution || !environment || !hasEnvironment) {
+      if (!projection || !time || !speed || !activity || !resolution || !environment || !hasEnvironment) {
         throw new Error("Required shader uniforms are unavailable");
       }
 
@@ -362,7 +367,17 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
 
         gl.uniformMatrix4fv(projection, false, matrix);
         gl.uniform1f(time, (performance.now() - start) / 1000);
-        gl.uniform1f(speed, listeningRef.current ? 2.65 : 1);
+        const currentState = stateRef.current;
+        const activityLevel = currentState === "speaking" ? 1.35
+          : currentState === "listening" ? 1.15
+            : currentState === "thinking" ? 0.78
+              : currentState === "completed" ? 0.24 : 0.38;
+        const motionSpeed = currentState === "speaking" ? 1.85
+          : currentState === "listening" ? 2.65
+            : currentState === "thinking" ? 0.72
+              : currentState === "completed" ? 0.48 : 1;
+        gl.uniform1f(speed, motionSpeed);
+        gl.uniform1f(activity, activityLevel);
         gl.uniform2f(resolution, width, height);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
