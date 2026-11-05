@@ -51,17 +51,12 @@ export function FridayStyles() {
           overflow:visible;border:0;border-radius:50%;background:transparent;
           box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
         }
-        .friday-root .friday-orb-visual::before{
-          content:"";position:absolute;z-index:-1;left:-30%;right:-30%;bottom:-15%;
-          height:48%;border-radius:50%;
-          background:radial-gradient(ellipse,rgba(8,18,42,.48) 0%,rgba(39,74,122,.22) 35%,rgba(125,101,190,.10) 56%,transparent 76%);
-          filter:blur(13px);pointer-events:none;
-        }
-
+        .friday-root .friday-orb-listening{
           position:absolute;right:-8px;bottom:-10px;z-index:4;
           color:rgba(255,255,255,.78);font-size:8px;letter-spacing:.12em;
           text-shadow:0 1px 8px rgba(20,32,64,.8);white-space:nowrap;
           animation:friday-listening-pulse 1.2s ease-in-out infinite;
+          pointer-events:none;
         }
         @keyframes friday-listening-pulse{0%,100%{opacity:.55}50%{opacity:1}}
         .friday-root .friday-fab:active .friday-orb-visual{transform:scale(.9)}
@@ -386,6 +381,7 @@ export function FridayStyles() {
         }
 
 
+        .friday-root .friday-input-area{
           position: relative;
           z-index: 4;
           flex: 0 0 auto;
@@ -902,22 +898,13 @@ export function FridayStyles() {
         }
         .friday-root .friday-orb-media{
           display:block;width:100%;height:100%;object-fit:contain;
-          mix-blend-mode:screen;border-radius:50%;
-          filter:drop-shadow(0 0 8px rgba(105,210,255,.35))
-                 drop-shadow(0 0 18px rgba(174,117,255,.22));
+          border-radius:50%;
           pointer-events:none;
         }
         .friday-root .friday-orb-fallback{
           position:absolute;inset:8%;width:84%;height:84%;object-fit:contain;
-          border-radius:50%;mix-blend-mode:screen;
-          filter:drop-shadow(0 0 8px rgba(105,210,255,.35))
-                 drop-shadow(0 0 18px rgba(174,117,255,.22));
-        }
-        .friday-root .friday-orb-visual::before{
-          content:"";position:absolute;z-index:-1;left:-35%;right:-35%;bottom:-18%;
-          height:46%;border-radius:50%;
-          background:radial-gradient(ellipse,rgba(5,12,28,.78) 0%,rgba(10,25,52,.5) 35%,rgba(15,25,50,.18) 60%,transparent 78%);
-          filter:blur(14px);pointer-events:none;
+          border-radius:50%;
+          pointer-events:none;
         }
         .friday-root .friday-orb-visual[data-state="listening"]{
           animation-duration:1.15s,2.6s;
