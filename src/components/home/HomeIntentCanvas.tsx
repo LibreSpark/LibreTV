@@ -5,7 +5,6 @@ import { FridayHero } from '@/components/friday/FridayHero';
 
 type HomeIntentCanvasProps = {
   variant: 'legacy' | 'v2';
-  onSearchFocus: () => void;
   children: ReactNode;
 };
 
@@ -15,13 +14,12 @@ type HomeIntentCanvasProps = {
  */
 export function HomeIntentCanvas({
   variant,
-  onSearchFocus,
   children,
 }: HomeIntentCanvasProps) {
   return (
     <>
       {variant === 'v2' ? (
-        <FridayHero onSearchFocus={onSearchFocus} />
+        <FridayHero />
       ) : null}
       {children}
     </>
