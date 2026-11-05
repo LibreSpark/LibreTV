@@ -95,9 +95,11 @@ export function useFridayResponseController({
     if (!error) return;
 
     setSpeaking(false);
+    setCompleted(false);
 
     if (voiceSessionActiveRef.current) {
       setVoiceError("Friday 请求失败，请检查网络后重新尝试。");
+      scheduleVoiceResume();
     }
   }, [error, setSpeaking, voiceSessionActiveRef, setVoiceError]);
 
