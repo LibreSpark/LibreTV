@@ -197,7 +197,6 @@ function HomeContent({ variant = 'legacy' }: HomeContentProps) {
         )}
         <HomeIntentCanvas
           variant={isV2 && !urlQuery ? 'v2' : 'legacy'}
-          onSearchFocus={() => inputRef.current?.focus()}
         >
           <HomeSearchSection
             urlQuery={urlQuery}
