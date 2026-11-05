@@ -15,6 +15,7 @@ export type IconName =
   | 'chevronDown'
   | 'plus'
   | 'search'
+  | 'microphone'
   | 'clock'
   | 'check'
   | 'arrowDown'
@@ -62,6 +63,9 @@ const PATHS: Record<IconName, ReactNode> = {
   ),
   chevronDown: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />,
   plus: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" />,
+  microphone: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18.75a4.5 4.5 0 0 0 4.5-4.5v-6a4.5 4.5 0 1 0-9 0v6a4.5 4.5 0 0 0 4.5 4.5Zm0 0v3m-4.5 0h9m-13.5-9a9 9 0 0 0 18 0" />
+  ),
   search: (
     <path
       strokeLinecap="round"

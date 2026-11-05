@@ -237,6 +237,26 @@ export default function AIFloatingBall({
   }, [handleSend]);
 
   useEffect(() => {
+    const handleHomepageVoiceSubmit = (event: Event) => {
+      const text = (
+        event as CustomEvent<{ text?: string }>
+      ).detail?.text?.trim();
+      if (!text) return;
+
+      // 首页麦克风的识别结果直接进入 Friday 对话/影视解析流程。
+      openPanel();
+      window.setTimeout(() => {
+        void handleSendRef.current(text);
+      }, 0);
+    };
+
+    window.addEventListener("friday-submit-message", handleHomepageVoiceSubmit);
+    return () => {
+      window.removeEventListener("friday-submit-message", handleHomepageVoiceSubmit);
+    };
+  }, [openPanel]);
+
+  useEffect(() => {
     if (!immersive) return;
     const wasAlreadyLocked = document.body.classList.contains("friday-popup-lock");
     document.body.classList.add("friday-popup-lock");

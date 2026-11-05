@@ -155,10 +155,9 @@ const HOT_LISTS = [
   { id: 'douban_tv_global', label: '海外剧周榜' },
   { id: 'douban_show_chinese', label: '国内综艺' },
   { id: 'douban_show_global', label: '海外综艺' },
-  { id: 'baidu_teleplay', label: '百度热播剧' },
 ];
 
-/** 影视热榜（60s API）：豆瓣五个周榜 + 百度热播剧，chips 切换 */
+/** 影视热榜（60s API）：豆瓣电影/剧集/综艺榜单，chips 切换 */
 function HotListView({ onPick }: { onPick: (title: string) => void }) {
   const [listId, setListId] = useState(HOT_LISTS[0].id);
 
