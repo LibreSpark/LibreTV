@@ -128,7 +128,7 @@ export function useFridayVoiceController({
     }
   }, [dispatchMachine]);
 
-  const stopSpeech = useCallback(() => {
+  const stopSpeech = useCallback((notifyMachine = true) => {
     utteranceRef.current = null;
     if (typeof window !== "undefined") {
       try {
@@ -138,10 +138,12 @@ export function useFridayVoiceController({
       }
     }
     setSpeakingState(false);
-    dispatchMachine({
-      type: "VOICE_STOP",
-      sessionId: voiceSessionIdRef.current,
-    });
+    if (notifyMachine) {
+      dispatchMachine({
+        type: "VOICE_STOP",
+        sessionId: voiceSessionIdRef.current,
+      });
+    }
   }, [setSpeakingState, dispatchMachine]);
 
   const stopRecognition = useCallback((abort = true) => {
@@ -514,7 +516,7 @@ export function useFridayVoiceController({
       voiceSessionIdRef.current += 1;
       clearVoiceResumeTimer();
       stopRecognition(true);
-      stopSpeech();
+      stopSpeech(false);
     };
   }, [clearVoiceResumeTimer, stopRecognition, stopSpeech]);
 
