@@ -112,6 +112,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
 
     const onContextLost = (event: Event) => {
       event.preventDefault();
+      cancelAnimationFrame(raf);
       setFallback(true);
     };
     canvas.addEventListener("webglcontextlost", onContextLost, false);
