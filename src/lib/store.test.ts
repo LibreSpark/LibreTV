@@ -521,3 +521,16 @@ describe('订阅自动刷新状态', () => {
     expect(find(subUrl)?.failStreak).toBe(2);
   });
 });
+
+describe('音量放大设置项', () => {
+  it('volumeBoost 出厂默认关闭：增益与音量滑块相乘，会让所有档位响度整体抬高，必须用户显式开启', () => {
+    expect(store().volumeBoost).toBe(false);
+  });
+
+  it('volumeBoost 可通过 updateSettings 切换（设置页与播放器共用同一份状态）', () => {
+    store().updateSettings({ volumeBoost: true });
+    expect(store().volumeBoost).toBe(true);
+    store().updateSettings({ volumeBoost: false });
+    expect(store().volumeBoost).toBe(false);
+  });
+});

@@ -49,9 +49,11 @@ interface LivePlayerProps {
   /** 上一台/下一台：传入时注册为播放器控制条按钮（全屏内也可操作） */
   onPrevChannel?: () => void;
   onNextChannel?: () => void;
+  /** 音量放大（Web Audio 增益链）：默认关闭，关闭时完全不接入音频链路 */
+  volumeBoost: boolean;
 }
 
-export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePlayerProps) {
+export function LivePlayer({ url, title, onPrevChannel, onNextChannel, volumeBoost }: LivePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
@@ -69,6 +71,11 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
   const [osdTitle, setOsdTitle] = useState('');
   const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 音量放大句柄（换台销毁播放器时释放）；用 ref 才能在设置变化时被另一个 effect 操作 */
+  const volumeBoostRef = useRef<VolumeBoostHandle | null>(null);
+  // 创建实例的 effect 不依赖 volumeBoost（换台才重建），起播回调靠这个 ref 读最新设置
+  const volumeBoostSettingRef = useRef(volumeBoost);
+  volumeBoostSettingRef.current = volumeBoost;
 
   // url 变化即换台：显示频道名 2.5s
   useEffect(() => {
@@ -96,8 +103,6 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     let playbackStarted = false;
     let disposed = false;
     let destroyed = false;
-    /** 音量放大句柄（换台销毁播放器时释放） */
-    let volumeBoost: VolumeBoostHandle | null = null;
     /** 原生播放注册的 error 监听清理函数（切台/销毁时调用） */
     let nativeCleanup: (() => void) | null = null;
 
@@ -349,10 +354,10 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       setLoading(false);
       setShowPoster(false);
       setError('');
-      // 音量放大：起播后（src 已就绪）才挂增益图。跨域直连流会自动跳过，
-      // 代理/hls.js 的 blob: 源可安全放大；失败一律原样播放。
-      if (!volumeBoost) {
-        volumeBoost = attachVolumeBoost(art.video);
+      // 音量放大：起播后（src 已就绪）才挂增益图。默认关闭时完全不接入；
+      // 跨域直连流会自动跳过，代理/hls.js 的 blob: 源可安全放大；失败一律原样播放。
+      if (volumeBoostSettingRef.current && !volumeBoostRef.current) {
+        volumeBoostRef.current = attachVolumeBoost(art.video);
       }
     });
     art.on('video:error', () => {
@@ -379,8 +384,8 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       clearTimeout(startTimer);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
       cleanupEngines();
-      volumeBoost?.dispose();
-      volumeBoost = null;
+      volumeBoostRef.current?.dispose();
+      volumeBoostRef.current = null;
       art.destroy();
       artRef.current = null;
       // CONTROL_HIDE_TIME 是全局 static：恢复库默认值，避免影响后续挂载的其它播放器
@@ -389,6 +394,20 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, retryNonce, onPrevChannel, onNextChannel]);
+
+  // —— 音量放大开关：播放中改设置即时生效，不必等重新起播 ——
+  // 关闭走「单位增益直通」而不是拆链：createMediaElementSource 之后元素输出只走
+  // 音频图，拆链会永久静音且无法恢复直连，所以只旁路增益与限幅。
+  useEffect(() => {
+    const video = artRef.current?.video as HTMLVideoElement | undefined;
+    if (!video) return;
+    if (volumeBoost) {
+      volumeBoostRef.current = attachVolumeBoost(video) ?? volumeBoostRef.current;
+      volumeBoostRef.current?.setBoost(true);
+    } else {
+      volumeBoostRef.current?.setBoost(false);
+    }
+  }, [volumeBoost]);
 
   return (
     <div className="relative w-full h-full">

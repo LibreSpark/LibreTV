@@ -584,6 +584,12 @@ function PlaybackPanel() {
           checked={store.autoSkipSegments}
           onChange={(v) => store.updateSettings({ autoSkipSegments: v })}
         />
+        <ToggleRow
+          label="音量增强"
+          description="音量拉到 100% 仍偏小时用：经 Web Audio 增益链把输出再放大约 1.8 倍并软限幅防破音。增益与音量滑块相乘，会让所有档位的响度整体抬高，故默认关闭。跨域直连且未开启 CORS 的直播流受浏览器限制不生效（走代理或 hls.js 的源正常）"
+          checked={store.volumeBoost}
+          onChange={(v) => store.updateSettings({ volumeBoost: v })}
+        />
       </div>
 
       {markCount > 0 && (

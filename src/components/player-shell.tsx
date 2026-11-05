@@ -67,6 +67,11 @@ interface PlayerShellProps {
    * 是否连播下一集仍由 autoplayNext 决定。
    */
   autoSkipSegments: boolean;
+  /**
+   * 音量放大（Web Audio 增益链）：默认 false。
+   * 关闭时完全不接入音频链路；播放中改开关由 setBoost 走「直通/增益」切换。
+   */
+  volumeBoost: boolean;
   /** 中段两步态的起点：由页面层持有，面板与快捷键共用同一份状态 */
   pendingStart: number | null;
   /** 更新中段起点；null 表示取消或已消费 */
@@ -107,6 +112,7 @@ export function PlayerShell({
   autoplayNext,
   skipMark,
   autoSkipSegments,
+  volumeBoost,
   pendingStart,
   onPendingStart,
   onPlayerApi,
@@ -138,14 +144,14 @@ export function PlayerShell({
 
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef({
-    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments,
+    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments, volumeBoost,
     pendingStart, onPendingStart, onPlayerApi, onRecordSegment,
     episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onQuality, onRequestSwitchSource,
     onPrevEpisode, onNextEpisode, hasPrevEpisode, hasNextEpisode,
   });
   propsRef.current = {
-    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments,
+    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments, volumeBoost,
     pendingStart, onPendingStart, onPlayerApi, onRecordSegment,
     episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onQuality, onRequestSwitchSource,
@@ -567,8 +573,10 @@ export function PlayerShell({
     artRef.current = art;
 
     // 音量放大：起播后（src 已就绪）才挂 Web Audio 增益图，避免空 src / CORS 误判。
+    // 默认关闭（设置项 volumeBoost）：不接入时完全不碰音频链路。
     // 纯附加：不改动 ArtPlayer 的 volume/滑块/快捷键；失败时原样播放。
     art.on('video:playing', () => {
+      if (!propsRef.current.volumeBoost) return;
       if (!volumeBoostRef.current) {
         volumeBoostRef.current = attachVolumeBoost(art.video);
       }
@@ -952,6 +960,20 @@ export function PlayerShell({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // —— 音量放大开关：播放中改设置即时生效，不必等重新起播 ——
+  // 关闭走「单位增益直通」而不是拆链：createMediaElementSource 之后元素输出只走
+  // 音频图，拆链会永久静音且无法恢复直连，所以只旁路增益与限幅。
+  useEffect(() => {
+    const video = artRef.current?.video as HTMLVideoElement | undefined;
+    if (!video) return;
+    if (volumeBoost) {
+      volumeBoostRef.current = attachVolumeBoost(video) ?? volumeBoostRef.current;
+      volumeBoostRef.current?.setBoost(true);
+    } else {
+      volumeBoostRef.current?.setBoost(false);
+    }
+  }, [volumeBoost]);
 
   // —— 上/下集禁用态：走 ArtPlayer 的 controls API 更新样式，不直接改 DOM ——
   // 直接 querySelector 改 style 在控件重建（切全屏/播放器重绘）后不会恢复，且依赖内部 class 名。
