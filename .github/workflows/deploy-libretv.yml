@@ -2,6 +2,15 @@ name: Deploy LibreTV to Cloudflare Workers
 
 on:
   workflow_dispatch:
+    inputs:
+      home_v2:
+        description: "生产首页版本（默认启用 Friday 新首页；选择 false 可回滚旧版）"
+        required: true
+        type: choice
+        options:
+          - "true"
+          - "false"
+        default: "true"
 
 permissions:
   contents: read
@@ -29,6 +38,9 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Build OpenNext for Cloudflare
+        env:
+          NEXT_PUBLIC_HOME_V2: ${{ inputs.home_v2 }}
+          NEXT_TELEMETRY_DISABLED: "1"
         run: npx opennextjs-cloudflare build
 
       - name: Deploy Worker
