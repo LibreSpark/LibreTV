@@ -227,6 +227,8 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     let onVisibilityChange: (() => void) | null = null;
     let contextLost = false;
     let disposed = false;
+    let isInView = true;
+    let intersectionObserver: IntersectionObserver | null = null;
     const start = performance.now();
     const dprLimit = window.matchMedia("(max-width: 768px)").matches ? 1.5 : 2;
     const projectionMatrix = new Float32Array(16);
@@ -350,7 +352,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
 
       const draw = () => {
         raf = 0;
-        if (disposed || contextLost || !gl || !program || document.hidden) return;
+        if (disposed || contextLost || !gl || !program || document.hidden || !isInView) return;
         const rect = canvas.getBoundingClientRect();
         const dpr = Math.min(window.devicePixelRatio || 1, dprLimit);
         const width = Math.max(1, Math.round(rect.width * dpr));
@@ -394,11 +396,24 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
         gl.drawElements(gl.TRIANGLES, indexData.length, gl.UNSIGNED_SHORT, 0);
-        if (!document.hidden) raf = requestAnimationFrame(draw);
+        if (!document.hidden && isInView) raf = requestAnimationFrame(draw);
       };
 
+      intersectionObserver = typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(([entry]) => {
+            isInView = Boolean(entry?.isIntersecting);
+            if (!isInView) {
+              cancelAnimationFrame(raf);
+              raf = 0;
+            } else if (!disposed && !contextLost && !document.hidden && !raf) {
+              raf = requestAnimationFrame(draw);
+            }
+          }, { threshold: 0.01 })
+        : null;
+      intersectionObserver?.observe(canvas);
+
       onVisibilityChange = () => {
-        if (document.hidden) {
+        if (document.hidden || !isInView) {
           cancelAnimationFrame(raf);
           raf = 0;
         } else if (!disposed && !contextLost && !raf) {
@@ -417,6 +432,7 @@ export function FridayOrbVisual({ state = "standby", isListening }: FridayOrbVis
     return () => {
       disposed = true;
       environmentAbort?.abort();
+      intersectionObserver?.disconnect();
       cancelAnimationFrame(raf);
       canvas.removeEventListener("webglcontextlost", onContextLost);
       if (onVisibilityChange) document.removeEventListener("visibilitychange", onVisibilityChange);
