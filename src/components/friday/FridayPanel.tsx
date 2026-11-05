@@ -56,6 +56,7 @@ export type MessageLike = {
 
 type FridayPanelProps = {
   expanded: boolean;
+  immersive: boolean;
   closing: boolean;
   auroraState: "standby" | "listening" | "thinking" | "speaking" | "completed";
   agentState: string;
@@ -98,7 +99,7 @@ export { getMovieDataForMessage, getPartText } from "@/lib/friday/message";
 
 
 export function FridayPanel({
-  expanded, closing, auroraState, agentState, voiceState, stateLabel,
+  expanded, immersive, closing, auroraState, agentState, voiceState, stateLabel,
   onAnimationEnd, onClose, messagesRef, messages, listening, busy, status,
   error, speaking, completed, voiceSessionActive, inputRef, input, setInput,
   onSend, onToggleListening, voiceError, voiceEnabled, onToggleVoiceEnabled,
@@ -116,7 +117,7 @@ export function FridayPanel({
               <section
                 className={`friday-panel ${
                   expanded ? "friday-expanded" : ""
-                } ${closing ? "friday-closing" : ""}`}
+                } ${immersive ? "friday-immersive" : ""} ${closing ? "friday-closing" : ""}`}
                 data-state={auroraState}
                 data-agent-state={agentState}
                 data-voice-state={voiceState}
