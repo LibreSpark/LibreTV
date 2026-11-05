@@ -138,7 +138,11 @@ export function useFridayVoiceController({
       }
     }
     setSpeakingState(false);
-  }, [setSpeakingState]);
+    dispatchMachine({
+      type: "VOICE_STOP",
+      sessionId: voiceSessionIdRef.current,
+    });
+  }, [setSpeakingState, dispatchMachine]);
 
   const stopRecognition = useCallback((abort = true) => {
     const recognition = recognitionRef.current;
@@ -401,6 +405,12 @@ export function useFridayVoiceController({
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
       setSpeakingState(false);
       setCompleted(true);
+      dispatchMachine({
+        type: "VOICE_FAILED",
+        sessionId: voiceSessionIdRef.current,
+        code: "speech-synthesis-unsupported",
+        message: "当前浏览器不支持语音播报。",
+      });
       setVoiceError("当前浏览器不支持语音播报。");
       scheduleVoiceResume();
       return;
@@ -416,12 +426,20 @@ export function useFridayVoiceController({
     utterance.onstart = () => {
       if (utteranceRef.current !== utterance) return;
       setSpeakingState(true);
+      dispatchMachine({
+        type: "VOICE_SPEAK_START",
+        sessionId: voiceSessionIdRef.current,
+      });
     };
     utterance.onend = () => {
       if (utteranceRef.current !== utterance) return;
       utteranceRef.current = null;
       setSpeakingState(false);
       setCompleted(true);
+      dispatchMachine({
+        type: "VOICE_SPEAK_END",
+        sessionId: voiceSessionIdRef.current,
+      });
       scheduleVoiceResume();
     };
     utterance.onerror = () => {
@@ -429,6 +447,12 @@ export function useFridayVoiceController({
       utteranceRef.current = null;
       setSpeakingState(false);
       setCompleted(true);
+      dispatchMachine({
+        type: "VOICE_FAILED",
+        sessionId: voiceSessionIdRef.current,
+        code: "speech-synthesis-error",
+        message: "语音播报中断",
+      });
       setVoiceError("语音播报中断，请继续使用文字或重新开启语音。");
       scheduleVoiceResume();
     };
@@ -442,9 +466,16 @@ export function useFridayVoiceController({
       if (utteranceRef.current === utterance) utteranceRef.current = null;
       setSpeakingState(false);
       setCompleted(true);
+      dispatchMachine({
+        type: "VOICE_FAILED",
+        sessionId: voiceSessionIdRef.current,
+        code: "speech-synthesis-start-failed",
+        message: "语音播报启动失败",
+      });
+      setVoiceError("语音播报启动失败，请继续使用文字或重新开启语音。");
       scheduleVoiceResume();
     }
-  }, [voiceEnabled, stopSpeech, scheduleVoiceResume, setVoiceError]);
+  }, [voiceEnabled, stopSpeech, scheduleVoiceResume, setVoiceError, dispatchMachine]);
 
   const toggleVoiceEnabled = useCallback(() => {
     if (voiceEnabled) {
