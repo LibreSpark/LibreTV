@@ -140,7 +140,7 @@ function BangumiView({ onPick }: { onPick: (item: DoubanItem) => void }) {
               item={item}
               isTv={item.isTv ?? true}
               enableTmdbFallback
-              onClick={() => onPick(item.title)}
+              onClick={() => onPick(item)}
             />
           ))}
         </div>
