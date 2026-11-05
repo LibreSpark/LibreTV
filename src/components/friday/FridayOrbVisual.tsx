@@ -38,7 +38,7 @@ export function FridayOrbVisual({
           aria-hidden="true"
         />
       ) : (
-        <span className="friday-orb-fallback" aria-hidden="true" />
+        <img className="friday-orb-fallback" src="/media/friday-orb-fallback.png" alt="" aria-hidden="true" />
       )}
       {currentState === "listening" ? (
         <span className="friday-orb-listening">Listening...</span>
