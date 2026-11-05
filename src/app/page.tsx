@@ -4,15 +4,18 @@ import {
   Suspense,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 import { Header } from '@/components/header';
-import { RecommendSection } from '@/components/douban-section';
+import { HomeSearchSection } from '@/components/home/HomeSearchSection';
+import { HomeIntentCanvas } from '@/components/home/HomeIntentCanvas';
+import { useFridayDetailBridge } from '@/components/friday/useFridayDetailBridge';
+import { useHomeSearchController } from '@/components/home/useHomeSearchController';
+import { HomeRecommendationSection } from '@/components/home/HomeRecommendationSection';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
@@ -27,42 +30,42 @@ import type {
   SourceSearchOutcome,
 } from '@/lib/types';
 import {
-  SearchHistoryDropdown,
-  useSearchHistory,
-} from '@/components/search-history';
-import {
   cn,
   formatDisableTtl,
   validateSourceUrl,
 } from '@/lib/utils';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
-import { Icon } from '@/components/icon';
 import { SiteFooter } from '@/components/site-footer';
 
 const RESULT_PAGE_SIZE = 60;
 
-function isRecord(
-  value: unknown
-): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  );
-}
+const HOME_V2_ENABLED = process.env.NEXT_PUBLIC_HOME_V2 === 'true';
 
 export default function HomePage() {
   return (
     <Suspense>
-      <HomeContent />
+      {HOME_V2_ENABLED ? <HomePageV2 /> : <HomeContent />}
     </Suspense>
   );
 }
 
-function HomeContent() {
+/**
+ * Feature-flag entry for the Friday-first homepage.
+ * The V2 shell reuses HomeContent's existing search, recommendations,
+ * detail modal, and navigation data flow; only the presentation variant changes.
+ */
+function HomePageV2() {
+  return <HomeContent variant="v2" />;
+}
+
+type HomeContentProps = {
+  variant?: 'legacy' | 'v2';
+};
+
+function HomeContent({ variant = 'legacy' }: HomeContentProps) {
+  const isV2 = variant === 'v2';
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { toast } = useToast();
 
   const urlQuery = searchParams.get('q') ?? searchParams.get('s') ?? '';
@@ -73,147 +76,14 @@ function HomeContent() {
   const yellowFilter = useAppStore((s) => s.yellowFilter);
   const sourceHealth = useAppStore((s) => s.sourceHealth);
   const subscriptions = useAppStore((s) => s.subscriptions);
+  const doubanEnabled = useAppStore((s) => s.doubanEnabled);
 
-  const [input, setInput] = useState(urlQuery);
   const [detailItem, setDetailItem] =
     useState<SearchResultItem | null>(null);
   const [streamedOutcomes, setStreamedOutcomes] =
     useState<SourceSearchOutcome[]>([]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (urlQuery) setInput(urlQuery);
-  }, [urlQuery]);
-
-  // 🚨 终极修复版监听器：直接信任搜索结果的 sourceUrl，不再读客户端环境变量
-  useEffect(() => {
-    const handleFridayOpenDetail = (event: Event) => {
-      const raw = (event as CustomEvent<unknown>).detail;
-      if (!isRecord(raw)) return;
-      
-      const {
-        sourceKey,
-        sourceName,
-        sourceUrl,
-        vodId,
-        name,
-        pic,
-        typeName,
-        year,
-        area,
-        remarks,
-        isAdult,
-      } = raw;
-
-      if (
-        typeof sourceKey !== 'string' ||
-        !sourceKey.trim() ||
-        sourceKey.length > 100 ||
-        typeof sourceName !== 'string' ||
-        !sourceName.trim() ||
-        sourceName.length > 100 ||
-        typeof vodId !== 'string' ||
-        !/^[a-zA-Z0-9_-]{1,30}$/.test(vodId) ||
-        typeof name !== 'string' ||
-        !name.trim() ||
-        name.length > 100
-      ) {
-        toast('影片详情参数无效，无法打开详情', 'warning');
-        return;
-      }
-
-      if (sourceUrl !== undefined && typeof sourceUrl !== 'string') {
-        toast('影片详情来源地址格式无效', 'warning');
-        return;
-      }
-
-      const suppliedSourceUrl =
-        typeof sourceUrl === 'string'
-          ? sourceUrl.trim()
-          : '';
-
-      if (suppliedSourceUrl && !validateSourceUrl(suppliedSourceUrl)) {
-        toast('影片详情来源地址未通过安全校验', 'warning');
-        return;
-      }
-
-      if (
-        (pic !== undefined && typeof pic !== 'string') ||
-        (typeName !== undefined && typeof typeName !== 'string') ||
-        (year !== undefined && typeof year !== 'string') ||
-        (area !== undefined && typeof area !== 'string') ||
-        (remarks !== undefined && typeof remarks !== 'string') ||
-        (isAdult !== undefined && typeof isAdult !== 'boolean')
-      ) {
-        toast('影片详情附加参数格式无效', 'warning');
-        return;
-      }
-
-      const normalizedSourceKey = sourceKey.trim();
-      const normalizedSourceName = sourceName.trim();
-      const currentStore = useAppStore.getState();
-      
-      // 先读取本地配置，普通数据源仍然保持原有行为。
-      const localSource = resolveSource(currentStore, normalizedSourceKey);
-      let source = localSource;
-      
-      // Friday 搜索结果携带的 sourceUrl 是本次搜索实际使用的地址。
-      // 必须优先使用它，不能被本地旧 friday-cms 配置覆盖。
-      if (normalizedSourceKey === 'friday-cms' && suppliedSourceUrl) {
-        source = {
-          ...(localSource ?? {}),
-          key: normalizedSourceKey,
-          name: normalizedSourceName,
-          url: suppliedSourceUrl,
-          detail: undefined,
-        };
-      } else if (!source && suppliedSourceUrl) {
-        // 普通数据源仅在本地配置不存在时使用事件携带的地址。
-        source = {
-          key: normalizedSourceKey,
-          name: normalizedSourceName,
-          url: suppliedSourceUrl,
-        };
-      }
-
-      if (!source || !source.url) {
-        toast(
-          normalizedSourceKey === 'friday-cms'
-            ? 'Friday CMS 数据源地址缺失，请检查搜索结果或本地配置'
-            : '本地数据源配置不存在，请检查数据源设置',
-          'error'
-        );
-        return;
-      }
-
-      if (!validateSourceUrl(source.url)) {
-        toast('数据源地址未通过安全校验', 'error');
-        return;
-      }
-
-      const item: SearchResultItem = {
-        sourceKey: source.key,
-        sourceName: normalizedSourceName || source.name,
-        sourceUrl: source.url,
-        vodId,
-        name: name.trim(),
-        ...(typeof pic === 'string' && pic ? { pic } : {}),
-        ...(typeof typeName === 'string' && typeName ? { typeName } : {}),
-        ...(typeof year === 'string' && year ? { year } : {}),
-        ...(typeof area === 'string' && area ? { area } : {}),
-        ...(typeof remarks === 'string' && remarks ? { remarks } : {}),
-        ...(typeof isAdult === 'boolean' ? { isAdult } : source.isAdult !== undefined ? { isAdult: source.isAdult } : {}),
-      };
-      
-      setDetailItem(item);
-    };
-
-    window.addEventListener('friday-open-detail', handleFridayOpenDetail);
-    return () => {
-      window.removeEventListener('friday-open-detail', handleFridayOpenDetail);
-    };
-  }, [toast]);
+  useFridayDetailBridge(setDetailItem, toast);
 
   const sourceName = (key: string) =>
     customAPIs.find((a) => a.key === key)?.name ??
@@ -234,6 +104,15 @@ function HomeContent() {
       .filter((s) => !isSourceDisabled({ sourceHealth }, s.key))
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
+
+  const {
+    input,
+    setInput,
+    inputRef,
+    searchHistory,
+    runSearch,
+    pickHistory,
+  } = useHomeSearchController(urlQuery, selectedSources.length, toast);
 
   const disabledSources = useMemo(
     () => selectedKeys.filter((key) => isSourceDisabled({ sourceHealth }, key)),
@@ -278,29 +157,6 @@ function HomeContent() {
     staleTime: 300_000,
   });
 
-  const searchHistory = useSearchHistory(input);
-
-  const runSearch = (q: string) => {
-    const query = q.trim().slice(0, 100);
-    if (!query) {
-      toast('请输入搜索内容', 'info');
-      inputRef.current?.focus();
-      return;
-    }
-    if (selectedSources.length === 0) {
-      toast('请先在设置中添加并勾选点播源', 'warning');
-      return;
-    }
-    router.push(`/?q=${encodeURIComponent(query)}`, { scroll: false });
-    searchHistory.record(query);
-  };
-
-  const pickHistory = (text: string) => {
-    setInput(text);
-    searchHistory.close();
-    runSearch(text);
-  };
-
   const isSearching = Boolean(urlQuery) && searchQuery.isFetching && !searchQuery.data;
 
   const streamedList = useMemo(
@@ -337,9 +193,9 @@ function HomeContent() {
   }, [groups]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6">
+    <div className={isV2 ? "home-v2 min-h-screen flex flex-col" : "legacy-home min-h-screen flex flex-col"}>
+      <Header showFridayFab={!isV2} />
+      <main className={cn("relative flex-1 max-w-6xl w-full mx-auto px-4 py-6", isV2 && "home-v2-main")}>
         {!urlQuery && (
           <div
             aria-hidden
@@ -350,104 +206,22 @@ function HomeContent() {
             }}
           />
         )}
-        <section
-          className={cn(
-            'flex flex-col items-center',
-            urlQuery ? 'mb-6' : 'mt-8 mb-8'
-          )}
+        <HomeIntentCanvas
+          variant={isV2 && !urlQuery ? 'v2' : 'legacy'}
+          onSearchFocus={() => inputRef.current?.focus()}
         >
-          {!urlQuery && (
-            <header className="text-center mb-6">
-              <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">
-                LibreTV
-              </h1>
-            </header>
-          )}
-          {urlQuery && <h1 className="sr-only">LibreTV 视频搜索</h1>}
-          <div
-            ref={searchHistory.containerRef}
-            className="relative w-full max-w-2xl"
-          >
-            <form
-              className="w-full"
-              onSubmit={(e) => {
-                e.preventDefault();
-                runSearch(input);
-              }}
-            >
-              <div
-                className={cn(
-                  'flex items-stretch min-h-12 pl-4 border',
-                  'transition-[background-color,border-color,border-radius] duration-200',
-                  searchHistory.visible
-                    ? 'rounded-t-xl rounded-b-none border-accent border-b-line bg-surface-raised'
-                    : 'rounded-xl border-line bg-chip focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40'
-                )}
-              >
-                <input
-                  ref={inputRef}
-                  className="flex-1 min-w-0 pr-2 bg-transparent text-sm text-content placeholder:text-faint focus:outline-none"
-                  placeholder="输入影片名称..."
-                  value={input}
-                  maxLength={100}
-                  onChange={(e) => {
-                    setInput(e.target.value);
-                    searchHistory.resetActive();
-                  }}
-                  onFocus={searchHistory.onFocus}
-                  onKeyDown={(e) => searchHistory.onKeyDown(e, pickHistory)}
-                  role="combobox"
-                  aria-label="搜索影片"
-                  aria-expanded={searchHistory.visible}
-                  aria-controls="home-search-history"
-                  aria-autocomplete="list"
-                  aria-activedescendant={
-                    searchHistory.visible && searchHistory.activeIndex >= 0
-                      ? `home-search-history-${searchHistory.activeIndex}`
-                      : undefined
-                  }
-                />
-                {input && (
-                  <button
-                    type="button"
-                    className="shrink-0 self-center mr-1 p-1.5 rounded-full text-faint hover:text-content hover:bg-hover transition-colors"
-                    onClick={() => {
-                      setInput('');
-                      searchHistory.resetActive();
-                      inputRef.current?.focus();
-                    }}
-                    aria-label="清空"
-                  >
-                    <Icon name="close" className="w-4 h-4" />
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  className={cn(
-                    'btn-primary shrink-0 px-4 font-medium transition-[background-color,filter] active:brightness-90',
-                    '!rounded-l-none',
-                    searchHistory.visible
-                      ? '!rounded-tr-xl !rounded-br-none'
-                      : '!rounded-r-xl'
-                  )}
-                >
-                  <Icon name="search" className="w-4 h-4" />
-                  搜索
-                </button>
-              </div>
-            </form>
-            {searchHistory.visible && (
-              <SearchHistoryDropdown
-                id="home-search-history"
-                matches={searchHistory.matches}
-                activeIndex={searchHistory.activeIndex}
-                onPick={pickHistory}
-                onRemove={searchHistory.remove}
-                onClearAll={searchHistory.clearAll}
-              />
-            )}
-          </div>
-        </section>
+          <HomeSearchSection
+            urlQuery={urlQuery}
+            input={input}
+            setInput={setInput}
+            inputRef={inputRef}
+            searchHistory={searchHistory}
+            runSearch={runSearch}
+            pickHistory={pickHistory}
+            showBrandTitle={!isV2}
+            showQuickSearches={isV2}
+          />
+        </HomeIntentCanvas>
         {urlQuery && (
           <section aria-label="搜索结果" className="mb-10">
             <div className="flex items-center justify-between mb-3">
@@ -531,7 +305,9 @@ function HomeContent() {
           </section>
         )}
         {!urlQuery && (
-          <RecommendSection
+          <HomeRecommendationSection
+            isV2={isV2}
+            enabled={doubanEnabled}
             onPick={(title) => {
               setInput(title);
               runSearch(title);
