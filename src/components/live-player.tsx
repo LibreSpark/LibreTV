@@ -51,9 +51,11 @@ interface LivePlayerProps {
   onNextChannel?: () => void;
   /** 音量放大（Web Audio 增益链）：默认关闭，关闭时完全不接入音频链路 */
   volumeBoost: boolean;
+  /** 部署者配置的迷你进度条开关 */
+  miniProgressBar: boolean;
 }
 
-export function LivePlayer({ url, title, onPrevChannel, onNextChannel, volumeBoost }: LivePlayerProps) {
+export function LivePlayer({ url, title, onPrevChannel, onNextChannel, volumeBoost, miniProgressBar }: LivePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
@@ -320,7 +322,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel, volumeBoo
       aspectRatio: false,
       fullscreen: true,
       fullscreenWeb: true,
-      miniProgressBar: false,
+      miniProgressBar,
       hotkey: false,
       mutex: true,
       backdrop: true,
@@ -393,7 +395,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel, volumeBoo
       destroyed = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, retryNonce, onPrevChannel, onNextChannel]);
+  }, [url, retryNonce, onPrevChannel, onNextChannel, miniProgressBar]);
 
   // —— 音量放大开关：播放中改设置即时生效，不必等重新起播 ——
   // 关闭走「单位增益直通」而不是拆链：createMediaElementSource 之后元素输出只走

@@ -53,7 +53,7 @@ function WatchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const store = useAppStore();
-  const { verified } = useAuth();
+  const { verified, miniProgressBar } = useAuth();
   const { toast } = useToast();
 
   const sourceKey = searchParams.get('source') || '';
@@ -324,6 +324,7 @@ function WatchContent() {
                   skipMark={skipMark}
                   autoSkipSegments={store.autoSkipSegments}
                   volumeBoost={store.volumeBoost}
+                  miniProgressBar={miniProgressBar}
                   pendingStart={pendingStart}
                   onPendingStart={setPendingStart}
                   onPlayerApi={(api) => { playerApiRef.current = api; }}

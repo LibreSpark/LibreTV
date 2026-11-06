@@ -72,6 +72,8 @@ interface PlayerShellProps {
    * 关闭时完全不接入音频链路；播放中改开关由 setBoost 走「直通/增益」切换。
    */
   volumeBoost: boolean;
+  /** 部署者配置的迷你进度条开关 */
+  miniProgressBar: boolean;
   /** 中段两步态的起点：由页面层持有，面板与快捷键共用同一份状态 */
   pendingStart: number | null;
   /** 更新中段起点；null 表示取消或已消费 */
@@ -113,6 +115,7 @@ export function PlayerShell({
   skipMark,
   autoSkipSegments,
   volumeBoost,
+  miniProgressBar,
   pendingStart,
   onPendingStart,
   onPlayerApi,
@@ -532,7 +535,7 @@ export function PlayerShell({
       aspectRatio: true,
       fullscreen: true,
       fullscreenWeb: true,
-      miniProgressBar: false,
+      miniProgressBar,
       mutex: true,
       backdrop: true,
       playsInline: true,
@@ -959,7 +962,7 @@ export function PlayerShell({
       artRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [miniProgressBar]);
 
   // —— 音量放大开关：播放中改设置即时生效，不必等重新起播 ——
   // 关闭走「单位增益直通」而不是拆链：createMediaElementSource 之后元素输出只走
