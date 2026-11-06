@@ -1,0 +1,50 @@
+name: ci
+
+# PR 与 main 推送都跑静态检查与单测。
+#
+# 为什么单独加这个：此前仓库里三个 workflow 全是 tag 或手动触发，唯一的 `npm test`
+# 出现在 docker-publish 的镜像构建里——等于「发版才发现」。#960 第一版把
+# `dns.promises.lookup` 按回调签名调用，导致受保护域内**所有出网请求挂到超时**，
+# 而 549 条用例全绿（那些用例只断言 rejects.toThrow，挂死→超时同样抛错），
+# 没有任何自动信号会拦住它合进 main。这一层就是补那个信号缺口。
+#
+# Node 版本与 Dockerfile 的 node:22-alpine 保持同一条主线：SSRF 防护依赖
+# 内置 fetch 接受外部 undici Agent 作为 dispatcher，这条版本线是被实测过的，
+# 不要在 CI 里悄悄换大版本。
+
+on:
+  pull_request:
+    branches: ['main']
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
