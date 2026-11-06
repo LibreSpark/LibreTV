@@ -22,6 +22,8 @@ interface AuthContextValue {
   setupRequired: SetupRequired;
   /** /api/status 返回的应用版本（构建时从 package.json 注入） */
   version: string | null;
+  /** 部署者配置的 ArtPlayer 迷你进度条状态（默认开启） */
+  miniProgressBar: boolean;
   openLogin: () => void;
   logout: () => Promise<void>;
 }
@@ -31,6 +33,7 @@ const AuthContext = createContext<AuthContextValue>({
   verified: false,
   setupRequired: false,
   version: null,
+  miniProgressBar: true,
   openLogin: () => {},
   logout: async () => {},
 });
@@ -44,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [verified, setVerified] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
+  const [miniProgressBar, setMiniProgressBar] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -58,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setVerified(s.verified);
         setSetupRequired(!s.passwordRequired);
         setVersion(s.version);
+        setMiniProgressBar(s.miniProgressBar ?? true);
         setChecked(true);
       })
       .catch(() => {
@@ -115,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [toast, queryClient]);
 
   return (
-    <AuthContext.Provider value={{ checked, verified, setupRequired, version, openLogin, logout }}>
+    <AuthContext.Provider value={{ checked, verified, setupRequired, version, miniProgressBar, openLogin, logout }}>
       {children}
       {modalOpen && (
         <LoginModal

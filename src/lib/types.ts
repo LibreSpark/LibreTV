@@ -140,6 +140,8 @@ export interface AuthStatusResponse {
   defaultRecommendSource: 'douban' | 'bangumi' | 'hot-list' | null;
   /** 部署者通过 DEFAULT_IMAGE_MODE 环境变量指定的封面图加载方式默认值（未配置时为 null） */
   defaultImageMode: 'direct' | 'proxy' | null;
+  /** 部署者通过 MINI_PROGRESS_BAR 环境变量控制 ArtPlayer 的迷你进度条 */
+  miniProgressBar: boolean;
 }
 
 // —— 直播 / IPTV ——

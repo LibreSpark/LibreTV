@@ -119,6 +119,7 @@ PASSWORD=your-password npm start   # 监听 8080
 | `DEFAULT_LIVE_SOURCES` | 否 | 预置直播源（M3U 订阅），JSON 数组：`[{"name":"源名","url":"https://.../list.m3u","epg":"https://.../epg.xml.gz"}]`，`epg` 为可选的 XMLTV 节目单地址 |
 | `DEFAULT_SUBSCRIPTIONS` | 否 | 预置数据源订阅（LibreTV-SourceList JSON 链接，也接受 TVBOX 配置与接口目录地址），JSON 数组：`["https://.../sources.json", {"url":"https://.../list.json","name":"名称","refreshDays":10}]`。首次访问自动导入点播源与直播源，之后按 `refreshDays`（1-365，缺省 1 天）静默刷新；用户删除后不再自动加回。`refreshDays` 只是初始值，用户在源管理面板改过之后以面板设置为准 |
 | `DEFAULT_RECOMMEND_SOURCE` | 否 | 首页推荐数据源的默认值（`douban` / `bangumi` / `hot-list`，出厂默认 `hot-list`）；仅对未在设置中主动选择过的用户生效，用户的选择始终优先 |
+| `MINI_PROGRESS_BAR` | 否 | 是否显示播放器失焦时的迷你进度条（`true` / `false`，默认 `true`），同时作用于点播与直播播放器 |
 | `LIVE_ALLOW_PRIVATE` | 否 | 设为 `1` 时允许直播流代理访问内网/保留地址（自建 IPTV 场景），默认关闭以维持 SSRF 防护 |
 
 ## 使用说明

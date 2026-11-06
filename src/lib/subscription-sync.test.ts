@@ -43,6 +43,7 @@ const status = (over: Partial<AuthStatusResponse> = {}): AuthStatusResponse => (
   defaultSubscriptions: [],
   defaultRecommendSource: null,
   defaultImageMode: null,
+  miniProgressBar: true,
   ...over,
 });
 

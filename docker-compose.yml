@@ -27,6 +27,8 @@ services:
       # - DEFAULT_SUBSCRIPTIONS=["https://example.com/sources.json", {"url":"https://example.com/list.json","name":"名称","refreshDays":10}]
       # 可选：首页推荐数据源默认值（douban / bangumi / hot-list），仅对未主动选择过的用户生效
       # - DEFAULT_RECOMMEND_SOURCE=douban
+      # ArtPlayer 迷你进度条（true / false，默认 true）
+      - MINI_PROGRESS_BAR=${MINI_PROGRESS_BAR:-true}
       # 可选：自建内网 IPTV 放行（对拉列表、测活、拉流三个阶段同时生效，默认关闭以维持 SSRF 防护）
       # - LIVE_ALLOW_PRIVATE=1
       # 可选：代理上游请求超时（毫秒）与重试次数

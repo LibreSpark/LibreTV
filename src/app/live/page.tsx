@@ -49,7 +49,7 @@ function LiveContent() {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const volumeBoost = useAppStore((s) => s.volumeBoost);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
-  const { verified } = useAuth();
+  const { verified, miniProgressBar } = useAuth();
   const [copied, setCopied] = useState(false);
   // 移动端频道抽屉开合
   const [listOpen, setListOpen] = useState(false);
@@ -233,6 +233,7 @@ function LiveContent() {
                   onPrevChannel={goPrevChannel}
                   onNextChannel={goNextChannel}
                   volumeBoost={volumeBoost}
+                  miniProgressBar={miniProgressBar}
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-black">
