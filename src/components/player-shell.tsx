@@ -72,6 +72,11 @@ interface PlayerShellProps {
    * 关闭时完全不接入音频链路；播放中改开关由 setBoost 走「直通/增益」切换。
    */
   volumeBoost: boolean;
+  /**
+   * 底部细进度条（默认开启）：控制栏收起时常驻一条极细进度条。
+   * 关闭后移开鼠标将完全隐藏并沉浸播放。
+   */
+  miniProgressBar?: boolean;
   /** 中段两步态的起点：由页面层持有，面板与快捷键共用同一份状态 */
   pendingStart: number | null;
   /** 更新中段起点；null 表示取消或已消费 */
@@ -113,6 +118,7 @@ export function PlayerShell({
   skipMark,
   autoSkipSegments,
   volumeBoost,
+  miniProgressBar = true,
   pendingStart,
   onPendingStart,
   onPlayerApi,
@@ -144,14 +150,14 @@ export function PlayerShell({
 
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef({
-    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments, volumeBoost,
+    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments, volumeBoost, miniProgressBar,
     pendingStart, onPendingStart, onPlayerApi, onRecordSegment,
     episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onQuality, onRequestSwitchSource,
     onPrevEpisode, onNextEpisode, hasPrevEpisode, hasNextEpisode,
   });
   propsRef.current = {
-    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments, volumeBoost,
+    url, title, adFilter, autoplayNext, skipMark, autoSkipSegments, volumeBoost, miniProgressBar,
     pendingStart, onPendingStart, onPlayerApi, onRecordSegment,
     episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onQuality, onRequestSwitchSource,
@@ -532,7 +538,7 @@ export function PlayerShell({
       aspectRatio: true,
       fullscreen: true,
       fullscreenWeb: true,
-      miniProgressBar: true,
+      miniProgressBar: propsRef.current.miniProgressBar,
       mutex: true,
       backdrop: true,
       playsInline: true,
@@ -579,6 +585,13 @@ export function PlayerShell({
       if (!propsRef.current.volumeBoost) return;
       if (!volumeBoostRef.current) {
         volumeBoostRef.current = attachVolumeBoost(art.video);
+      }
+    });
+
+    // 控制栏隐藏时：若关闭了底部细进度条，确保移除 art-mini-progress-bar 类名
+    art.on("control", (show: boolean) => {
+      if (!show && !propsRef.current.miniProgressBar) {
+        art.template?.$player?.classList.remove("art-mini-progress-bar");
       }
     });
 
@@ -960,6 +973,17 @@ export function PlayerShell({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // —— 底部细进度条开关：播放中改设置即时生效 ——
+  useEffect(() => {
+    const player = artRef.current?.template?.$player as HTMLElement | undefined;
+    if (!player) return;
+    if (!miniProgressBar) {
+      player.classList.remove("art-mini-progress-bar");
+    } else if (!artRef.current?.template?.$bottom?.classList.contains("art-bottom-show")) {
+      player.classList.add("art-mini-progress-bar");
+    }
+  }, [miniProgressBar]);
 
   // —— 音量放大开关：播放中改设置即时生效，不必等重新起播 ——
   // 关闭走「单位增益直通」而不是拆链：createMediaElementSource 之后元素输出只走

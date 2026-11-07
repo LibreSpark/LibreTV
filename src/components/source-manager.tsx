@@ -590,6 +590,12 @@ function PlaybackPanel() {
           checked={store.volumeBoost}
           onChange={(v) => store.updateSettings({ volumeBoost: v })}
         />
+        <ToggleRow
+          label="底部细进度条"
+          description="控制栏收起后，在画面底部常驻显示极细的播放进度条；关闭后移开鼠标将完全沉浸播放"
+          checked={store.miniProgressBar}
+          onChange={(v) => store.updateSettings({ miniProgressBar: v })}
+        />
       </div>
 
       {markCount > 0 && (
