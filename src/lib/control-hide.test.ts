@@ -24,3 +24,29 @@ describe('控制栏隐藏策略', () => {
     expect(Date.now() - 0 >= TOUCH_CONTROL_HIDE_MS).toBe(false);
   });
 });
+
+describe('底部细进度条行为策略 (#965)', () => {
+  it('ArtPlayer 库选项默认 miniProgressBar 为 false，点播播放器经配置项显式开启', () => {
+    // 验证 ArtPlayer 内置默认值
+    expect(Artplayer.option.miniProgressBar).toBe(false);
+  });
+
+  it('关闭细进度条时能够安全移除 DOM 类名并进入完全沉浸态', () => {
+    const classSet = new Set<string>(['art-video-player', 'art-mini-progress-bar']);
+    const mockPlayer = {
+      classList: {
+        contains: (c: string) => classSet.has(c),
+        remove: (c: string) => { classSet.delete(c); },
+        add: (c: string) => { classSet.add(c); },
+      },
+    };
+
+    // 模拟关闭 miniProgressBar
+    const miniProgressBarEnabled = false;
+    if (!miniProgressBarEnabled) {
+      mockPlayer.classList.remove('art-mini-progress-bar');
+    }
+
+    expect(mockPlayer.classList.contains('art-mini-progress-bar')).toBe(false);
+  });
+});

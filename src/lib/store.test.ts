@@ -534,3 +534,16 @@ describe('音量放大设置项', () => {
     expect(store().volumeBoost).toBe(false);
   });
 });
+
+describe('底部迷你进度条设置项 (#965)', () => {
+  it('miniProgressBar 出厂默认开启：保持与旧版体验一致（控制栏收起时底部保留细条）', () => {
+    expect(store().miniProgressBar).toBe(true);
+  });
+
+  it('miniProgressBar 可通过 updateSettings 关闭与开启（设置页与播放器联动）', () => {
+    store().updateSettings({ miniProgressBar: false });
+    expect(store().miniProgressBar).toBe(false);
+    store().updateSettings({ miniProgressBar: true });
+    expect(store().miniProgressBar).toBe(true);
+  });
+});
