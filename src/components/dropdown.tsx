@@ -121,6 +121,8 @@ export function Dropdown({
           aria-label={ariaLabel}
           className={cn(
             'absolute right-0 top-full z-50 mt-1.5 min-w-full w-max max-h-60 overflow-y-auto py-1',
+            // 窄屏限制宽度：按内容宽度 + nowrap 会把面板撑出手机视口
+            'max-w-[calc(100vw-2rem)]',
             'rounded-xl border border-line bg-surface-raised shadow-xl animate-fade-in'
           )}
         >
@@ -142,14 +144,14 @@ export function Dropdown({
                   <span className="min-w-0">
                     <span
                       className={cn(
-                        'block whitespace-nowrap text-xs',
+                        'block whitespace-nowrap truncate text-xs',
                         isSelected ? 'text-accent font-medium' : 'text-content'
                       )}
                     >
                       {o.label}
                     </span>
                     {o.hint && (
-                      <span className="block whitespace-nowrap text-[11px] text-faint">{o.hint}</span>
+                      <span className="block truncate whitespace-nowrap text-[11px] text-faint">{o.hint}</span>
                     )}
                   </span>
                   {isSelected && <Icon name="check" className="ml-auto w-3.5 h-3.5 shrink-0 text-accent" />}

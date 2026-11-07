@@ -115,6 +115,7 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
       onClose={onClose}
       title="设置"
       resetScrollKey={current}
+      mobileFull
       subheader={
         <div className="space-y-2">
           <TabRow tabs={PRIMARY_TABS} value={primary} onChange={setPrimary} variant="primary" ariaLabel="设置分类" />
