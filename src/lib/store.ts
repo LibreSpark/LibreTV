@@ -6,7 +6,7 @@ import type { QualityEntry, SourceConfig, LiveSourceConfig, SourceSearchOutcome 
 import { migrateSkipMarks, type SkipMark, type SkipSegment } from './skip-marks';
 import { isQualityEntryFresh, mergeQualityEntries, qualityKey } from './quality';
 import { clearLiveProbeResultsDb, loadLiveProbeResults, saveLiveProbeResults } from './db';
-import { PERSIST_KEY, createThrottledStorage } from './persist-storage';
+import { PERSIST_KEY, createThrottledStorage, subscribePersistChanges } from './persist-storage';
 
 /**
  * 全局设置（zustand + localStorage 持久化）。
@@ -316,6 +316,8 @@ function nextCustomKey(apiList: SourceConfig[]): string {
  * 节流写入的 localStorage 包装已抽至 persist-storage.ts（db.ts 的 importConfig
  * 需要在直接写盘前 flush 缓冲，而运行时依赖方向是 store → db，不能反向引用）。
  */
+
+const persistStorage = createThrottledStorage();
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -851,7 +853,7 @@ export const useAppStore = create<AppState>()(
     {
       name: PERSIST_KEY,
       // 节流写入：搜索 / 测活等高频 set 不再每次都整份序列化写盘
-      storage: createJSONStorage(createThrottledStorage),
+      storage: createJSONStorage(() => persistStorage),
       // v1：直播源新增归属字段、最近观看新增 sourceUrl。
       // v2：直播源归属改为多引用（fromSubscription 单值 → fromSubscriptions 数组）。
       // v3：新增片头片尾标记与自动跳过开关（旧快照缺字段时补默认值）。
@@ -954,6 +956,19 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
+
+const syncPersistSnapshot = (state: AppState) => {
+  const { partialize, version } = useAppStore.persist.getOptions();
+  if (partialize) persistStorage.syncSnapshot(partialize(state) as Record<string, unknown>, version);
+};
+syncPersistSnapshot(useAppStore.getState());
+useAppStore.persist.onFinishHydration(syncPersistSnapshot);
+
+// rehydrate 直接替换内存中的持久化字段，不会触发 persist 的 setItem。
+// 首次恢复仍由 Providers 在挂载后执行，避免 SSR hydration 不一致。
+subscribePersistChanges(() => {
+  if (useAppStore.persist.hasHydrated()) void useAppStore.persist.rehydrate();
+});
 
 /**
  * 从 IndexedDB 恢复测活缓存（Providers 挂载后、persist.rehydrate 之后调用）。
