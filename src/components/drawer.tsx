@@ -33,6 +33,7 @@ export function Drawer({
   resetScrollKey,
   modal = true,
   mobileSheet = false,
+  mobileFull = false,
   panelStyle,
 }: {
   open: boolean;
@@ -61,6 +62,11 @@ export function Drawer({
    * 需要同时看上方画面的场景（播放页标记）只有底部半屏才成立。
    */
   mobileSheet?: boolean;
+  /**
+   * 小屏（<lg）改为近全屏底部面板（默认 false）。用于内容较多的抽屉（如设置），
+   * 手机上半屏高度明显不够用；保留顶部一条露出遮罩，便于点空白处关闭。
+   */
+  mobileFull?: boolean;
 }) {
   const [mounted, setMounted] = useState(open);
   const [entered, setEntered] = useState(false);
@@ -181,12 +187,24 @@ export function Drawer({
           // 小屏底部抽屉：占下半屏、贴底、顶部圆角，留出上半屏给画面
           mobileSheet &&
             'max-lg:inset-x-0 max-lg:top-auto max-lg:bottom-0 max-lg:h-auto max-lg:max-h-[60vh] max-lg:max-w-none max-lg:rounded-t-xl max-lg:border-t max-lg:border-l-0 max-lg:pb-[env(safe-area-inset-bottom)]',
+          // 近全屏底部面板：单列设置项在手机上需要完整高度可用
+          mobileFull &&
+            'max-lg:inset-x-0 max-lg:top-auto max-lg:bottom-0 max-lg:h-[92dvh] max-lg:max-h-[92dvh] max-lg:max-w-none max-lg:rounded-t-xl max-lg:border-t max-lg:border-l-0 max-lg:pb-[env(safe-area-inset-bottom)]',
           entered
             ? 'translate-x-0 max-lg:translate-y-0'
-            : cn('translate-x-full', mobileSheet && 'max-lg:translate-x-0 max-lg:translate-y-full')
+            : cn('translate-x-full', (mobileSheet || mobileFull) && 'max-lg:translate-x-0 max-lg:translate-y-full')
         )}
         style={panelStyle}
       >
+        {mobileFull && (
+          /* 顶部拖拽提示条：明确"这是可关闭的底部面板"，仅近全屏移动形态出现 */
+          <div
+            className="hidden max-lg:flex shrink-0 justify-center pt-2 pb-0.5"
+            aria-hidden
+          >
+            <span className="h-1 w-10 rounded-full bg-line" />
+          </div>
+        )}
         <div className="shrink-0 px-4 py-2.5 border-b border-line flex items-center justify-between">
           <h2 className="font-semibold text-content">{title}</h2>
           <button
