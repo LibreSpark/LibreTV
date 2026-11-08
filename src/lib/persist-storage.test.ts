@@ -256,4 +256,45 @@ describe('多标签配置持久化', () => {
     expect(saved().adFilter).toBe(false);
     fail.mockRestore();
   });
+
+  /**
+   * 明确记录该 PR **没有**解决的部分：数组不做并集，同一个顶层字段仍是 last-flush-wins。
+   * 标题是 "preserve settings across browser tabs"，用户会读成「不再丢配置」，
+   * 所以这条边界要有用例钉住，而不是只写在 PR 描述里。
+   */
+  it('两个标签各自新增源时仍按后落盘者覆盖（数组不并集）', async () => {
+    const a = await openTab();
+    const b = await openTab();
+    a.store.getState().addCustomApi({ name: 'A 标签加的', url: 'https://a.example/api' });
+    a.flush();
+    b.store.getState().addCustomApi({ name: 'B 标签加的', url: 'https://b.example/api' });
+    b.flush();
+    // B 的内存里没有 A 的新源（storage 事件未送达），落盘后 A 的那条被覆盖
+    expect(saved().customAPIs.map((source: { name: string }) => source.name)).toEqual(['非凡', '量子', 'B 标签加的']);
+  });
+
+  /**
+   * 单标签场景下，本标签自己的落盘不应再触发一次 rehydrate：
+   * 那会在每个 800ms 窗口多一轮全应用订阅者通知，而值并没有任何变化。
+   * 直接盯 rehydrate 的调用次数，比数订阅者通知更准（后者会被异步调度干扰）。
+   */
+  it('本标签自己落盘不再自我 rehydrate，只有磁盘真有外部改动才通知', async () => {
+    const a = await openTab();
+    const rehydrate = vi.spyOn(a.store.persist, 'rehydrate');
+
+    a.store.getState().recordSourceHealth([{ sourceKey: 'custom_0', ok: true, ms: 100, list: [] }]);
+    a.flush();
+    expect(rehydrate).not.toHaveBeenCalled();
+    expect(saved().sourceHealth.custom_0.ok).toBe(true);
+
+    // 对照：另一标签真的写了盘，本标签收到 storage 事件时才恢复内存基线
+    const b = await openTab();
+    b.store.getState().addCustomApi(added);
+    b.flush();
+    a.notify();
+    expect(rehydrate).toHaveBeenCalled();
+    await a.store.persist.rehydrate();
+    expect(a.store.getState().customAPIs).toHaveLength(3);
+    rehydrate.mockRestore();
+  });
 });

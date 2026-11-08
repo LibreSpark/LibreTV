@@ -67,6 +67,11 @@ export function createThrottledStorage(): ThrottledStorage {
   let snapshot: Snapshot | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pendingName: string | null = null;
+  /**
+   * 我们最后一次读到 / 写掉的磁盘原文。用来在 flush 时判断「磁盘上是否有别的标签
+   * 刚写进去、而我们内存里没有的内容」——只有真有外部改动才值得让本标签 rehydrate。
+   */
+  let lastKnownDisk: string | null = null;
   const changes = new Map<string, unknown>();
   const removed = new Set<string>();
 
@@ -84,13 +89,21 @@ export function createThrottledStorage(): ThrottledStorage {
     const name = pendingName;
     try {
       const latest = read(name);
+      // 磁盘内容与上次已知不一致 = 别的标签写过，本标签内存确实落后，才需要 rehydrate。
+      // 单标签场景（绝大多数时候）这一句直接把「每次落盘都自我 rehydrate」省掉：
+      // 那会多出一轮全应用订阅者通知，而值并没有任何变化。
+      const external = latest !== lastKnownDisk;
       const next = JSON.stringify(rebase(parseSnapshot(latest)));
-      if (next !== latest) storage.setItem(name, next);
+      if (next !== latest) {
+        storage.setItem(name, next);
+        lastKnownDisk = next;
+      } else {
+        lastKnownDisk = latest;
+      }
       pendingName = null;
       changes.clear();
       removed.clear();
-      // 本标签也可能在 flush 时才发现别的标签的新配置，必须同步其内存基线。
-      notifyChanges();
+      if (external) notifyChanges();
     } catch {
       // 配额不足 / 隐私模式下保留内存态，后续操作或显式 flush 可重试。
     }
@@ -115,6 +128,7 @@ export function createThrottledStorage(): ThrottledStorage {
     getItem: (name) => {
       try {
         const latest = read(name);
+        lastKnownDisk = latest;
         // 收到 storage 通知时，先把本标签尚未落盘的真实修改重放到最新快照再 hydrate，
         // 不能直接丢掉 pending，也不能更新基线后继续把旧内存视作新修改。
         const value = pendingName === name ? JSON.stringify(rebase(parseSnapshot(latest))) : latest;
@@ -154,6 +168,7 @@ export function createThrottledStorage(): ThrottledStorage {
       changes.clear();
       removed.clear();
       snapshot = null;
+      lastKnownDisk = null;
       try {
         storage?.removeItem(name);
       } catch {
