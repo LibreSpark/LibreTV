@@ -272,10 +272,16 @@ function LiveContent() {
                     <span className="live-dot shrink-0" />
                     <h1 className="text-sm font-semibold text-content truncate">{currentChannel.name}</h1>
                     {currentChannel.group && (
-                      <span className="tag bg-chip text-faint shrink-0">{currentChannel.group}</span>
+                      <span className="tag bg-chip text-faint shrink-0 hidden sm:inline-flex">
+                        {currentChannel.group}
+                      </span>
                     )}
                   </div>
-                  <p className="text-xs text-faint truncate mt-0.5">{currentChannel.url}</p>
+                  {/* 手机上不展示完整流地址：占宽且无信息价值，横屏/桌面再显示 */}
+                  <p className="text-xs text-faint truncate mt-0.5 hidden sm:block">{currentChannel.url}</p>
+                  {currentChannel.group && (
+                    <p className="text-xs text-faint truncate mt-0.5 sm:hidden">{currentChannel.group}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button

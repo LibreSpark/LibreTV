@@ -127,7 +127,7 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/80 py-10 px-4 animate-fade-in"
+      className="fixed inset-0 z-[60] flex items-end sm:items-start justify-center sm:overflow-y-auto bg-black/80 sm:py-10 px-0 sm:px-4 animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -135,12 +135,13 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="bg-surface-raised rounded-xl w-full max-w-3xl shadow-2xl animate-slide-up outline-none"
+        // 手机：贴底全宽底部面板（顶部圆角 + 安全区）；平板/桌面：居中弹窗
+        className="bg-surface-raised rounded-t-2xl sm:rounded-xl w-full max-w-3xl shadow-2xl animate-slide-up outline-none max-h-[92dvh] sm:max-h-none flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-label={`${item.name} 详情`}
       >
-        <div className="flex items-start justify-between gap-4 p-5 pb-3 border-b border-line">
+        <div className="flex items-start justify-between gap-4 p-5 pb-3 border-b border-line shrink-0 sm:border-b">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-content break-words">{item.name}</h2>
             <span className="text-sm text-faint">{item.sourceName}</span>
@@ -156,21 +157,21 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
           </button>
         </div>
 
-        <div className="p-5 pt-4">
+        <div className="p-5 pt-4 pb-[calc(1.25rem_+_env(safe-area-inset-bottom))] sm:pb-5 flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-thin">
           {loading && <LoadingState label="正在获取剧集信息..." />}
 
           {!loading && error && <ErrorState message={error || '获取失败'} />}
 
           {!loading && !error && detail && (
             <>
-              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <div className="flex gap-4 mb-4">
                 {item?.pic && !posterFailed && (
                   <SmartImage
                     url={item.pic}
                     mode={store.imageProxyMode}
                     customProxy={store.customImageProxy}
                     alt={item.name}
-                    className="w-24 sm:w-32 aspect-[2/3] object-cover rounded-lg bg-chip shrink-0 self-center sm:self-start"
+                    className="w-20 sm:w-32 aspect-[2/3] object-cover rounded-lg bg-chip shrink-0"
                     loading="eager"
                     onExhausted={() => setPosterFailed(true)}
                   />
@@ -214,7 +215,7 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
                       复制链接
                     </button>
                   </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-2 max-h-[40vh] overflow-y-auto scrollbar-thin pr-1">
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-2 max-h-[40vh] sm:max-h-[40vh] overflow-y-auto scrollbar-thin pr-1">
                     {episodes.map((_, i) => {
                       const realIndex = reversed ? detail.episodes.length - 1 - i : i;
                       return (
