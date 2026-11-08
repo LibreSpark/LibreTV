@@ -124,7 +124,14 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
 
           {/* 手机：设置直接露出（最常用），其余收进汉堡菜单 */}
           <div className="sm:hidden flex items-center gap-1 shrink-0">
-            <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
+            {/* 与菜单项一致：打开抽屉前先收起菜单，否则关掉设置后汉堡菜单还摊在那儿 */}
+            <IconButton
+              label="设置"
+              onClick={() => {
+                closeMenu();
+                setSettingsOpen(true);
+              }}
+            >
               <Icon name="gear" />
             </IconButton>
             <IconButton

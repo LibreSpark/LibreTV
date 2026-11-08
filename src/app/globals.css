@@ -159,8 +159,12 @@ body {
  * iOS Safari 在聚焦字号小于 16px 的输入框时会强制放大整页，
  * 且放大后不会自动缩回（页面表现为"错位"）。
  * 表单控件在触屏窄屏统一提到 16px；桌面端保持原字号。
+ *
+ * 断点取 640px 而不是 767px：本项目其余响应式都以 Tailwind 的 sm(640px) 为界，
+ * 用 767 会让 640–767 这段（大手机横屏、小平板竖屏）落到「桌面版式 + 手机字号」的
+ * 混搭区间。640px 与 Tailwind 的 max-sm 变体取值一致，等价于 max-sm。
  */
-@media (max-width: 767px) and (pointer: coarse) {
+@media (max-width: 640px) and (pointer: coarse) {
   input,
   select,
   textarea {
