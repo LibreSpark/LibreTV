@@ -12,29 +12,37 @@ export const PERSIST_KEY = 'libretv-settings';
 /** 节流窗口：搜索/测活等高频 set 合并为 800ms 一次落盘 */
 const THROTTLE_MS = 800;
 
-let timer: ReturnType<typeof setTimeout> | null = null;
-let pending: [string, string] | null = null;
-
-function flush(): void {
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
-  if (!pending) return;
-  const [key, value] = pending;
-  pending = null;
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // 配额不足 / 隐私模式下静默放弃持久化，内存态仍可用
-  }
+interface Snapshot {
+  state: Record<string, unknown>;
+  version?: number;
 }
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flush();
-  });
-  window.addEventListener('beforeunload', flush);
+interface ThrottledStorage extends StateStorage {
+  syncSnapshot: (state: Record<string, unknown>, version?: number) => void;
+}
+
+const flushers = new Set<() => void>();
+const listeners = new Set<() => void>();
+
+/** 外部写入及本标签重基落盘后，让 store 恢复合并后的快照（恢复本身不写盘）。 */
+export function subscribePersistChanges(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
+function notifyChanges(): void {
+  for (const listener of listeners) listener();
+}
+
+function parseSnapshot(value: string | null): Snapshot | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Snapshot;
+    return parsed && parsed.state && typeof parsed.state === 'object' && !Array.isArray(parsed.state)
+      ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -43,7 +51,7 @@ if (typeof window !== 'undefined') {
  * 会在导入后 flush 覆盖刚写入的配置（竞态见 db.ts importConfig）。
  */
 export function flushPendingPersist(): void {
-  flush();
+  for (const flush of flushers) flush();
 }
 
 /**
@@ -51,22 +59,103 @@ export function flushPendingPersist(): void {
  * 搜索会逐源写健康度、测活每 200ms 合并写回，这些都会触发 persist 的整份序列化 + 写盘；
  * 这里把写入合并为 800ms 一次，并在页面隐藏/卸载时立即 flush，确保不丢最后一次修改。
  */
-export function createThrottledStorage(): StateStorage {
+export function createThrottledStorage(): ThrottledStorage {
+  // 每个标签独立维护「上次交给 store 的快照」和实际修改过的字段。
+  // 不能拿整份旧快照覆盖磁盘：即使 storage 事件尚未送达，测速等无关 set 也应保留新源。
+  let storage: Storage | undefined;
+  try { storage = localStorage; } catch { /* SSR / 禁止存储 */ }
+  let snapshot: Snapshot | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pendingName: string | null = null;
+  const changes = new Map<string, unknown>();
+  const removed = new Set<string>();
+
+  const read = (name: string): string | null => storage?.getItem(name) ?? null;
+  const rebase = (latest: Snapshot | null): Snapshot => {
+    const state = { ...(latest?.state ?? {}) };
+    for (const key of removed) delete state[key];
+    for (const [key, value] of changes) state[key] = value;
+    return { state, version: snapshot?.version ?? latest?.version };
+  };
+  const flush = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    if (!pendingName || !storage) return;
+    const name = pendingName;
+    try {
+      const latest = read(name);
+      const next = JSON.stringify(rebase(parseSnapshot(latest)));
+      if (next !== latest) storage.setItem(name, next);
+      pendingName = null;
+      changes.clear();
+      removed.clear();
+      // 本标签也可能在 flush 时才发现别的标签的新配置，必须同步其内存基线。
+      notifyChanges();
+    } catch {
+      // 配额不足 / 隐私模式下保留内存态，后续操作或显式 flush 可重试。
+    }
+  };
+  flushers.add(flush);
+
+  if (typeof window !== 'undefined') {
+    const doc = document;
+    window.addEventListener('visibilitychange', () => {
+      if (doc.visibilityState === 'hidden') flush();
+    });
+    window.addEventListener('beforeunload', flush);
+    window.addEventListener('storage', (event) => {
+      if ((event.key === PERSIST_KEY || event.key === null) && event.storageArea === storage) notifyChanges();
+    });
+  }
+
   return {
+    // hydration 会补入缺省字段；比较基线必须与实际 store 一致，否则旧快照缺少的
+    // 默认值会在下次普通 set 时被误认作本标签的修改，回退另一标签的新偏好。
+    syncSnapshot: (state, version) => { snapshot = { state, version }; },
     getItem: (name) => {
       try {
-        return localStorage.getItem(name);
+        const latest = read(name);
+        // 收到 storage 通知时，先把本标签尚未落盘的真实修改重放到最新快照再 hydrate，
+        // 不能直接丢掉 pending，也不能更新基线后继续把旧内存视作新修改。
+        const value = pendingName === name ? JSON.stringify(rebase(parseSnapshot(latest))) : latest;
+        const next = parseSnapshot(value);
+        // 与 persist 的浅合并一致：缺省字段沿用当前内存值。迁移触发 setItem 时，
+        // 也不能把这些补入的默认值误记为修改；仍保留真正的迁移差异和版本升级。
+        snapshot = next ? { ...next, state: { ...snapshot?.state, ...next.state } } : snapshot;
+        return value;
       } catch {
         return null;
       }
     },
     setItem: (name, value) => {
-      pending = [name, value];
+      const next = parseSnapshot(value);
+      if (!next) return;
+      const versionChanged = snapshot?.version !== next.version;
+      const previous = snapshot?.state ?? {};
+      for (const key of new Set([...Object.keys(previous), ...Object.keys(next.state)])) {
+        if (JSON.stringify(previous[key]) === JSON.stringify(next.state[key])) continue;
+        if (Object.hasOwn(next.state, key)) {
+          changes.set(key, next.state[key]);
+          removed.delete(key);
+        } else {
+          changes.delete(key);
+          removed.add(key);
+        }
+      }
+      snapshot = next;
+      if (changes.size === 0 && removed.size === 0 && !versionChanged) return;
+      pendingName = name;
       if (!timer) timer = setTimeout(flush, THROTTLE_MS);
     },
     removeItem: (name) => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      pendingName = null;
+      changes.clear();
+      removed.clear();
+      snapshot = null;
       try {
-        localStorage.removeItem(name);
+        storage?.removeItem(name);
       } catch {
         // 忽略
       }
