@@ -141,7 +141,7 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
         aria-modal="true"
         aria-label={`${item.name} 详情`}
       >
-        <div className="flex items-start justify-between gap-4 p-5 pb-3 border-b border-line shrink-0 sm:border-b">
+        <div className="flex items-start justify-between gap-4 p-5 pb-3 border-b border-line shrink-0">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-content break-words">{item.name}</h2>
             <span className="text-sm text-faint">{item.sourceName}</span>
@@ -171,7 +171,10 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
                     mode={store.imageProxyMode}
                     customProxy={store.customImageProxy}
                     alt={item.name}
-                    className="w-20 sm:w-32 aspect-[2/3] object-cover rounded-lg bg-chip shrink-0"
+                    // self-start 不能省：这一行是 flex（默认 align-items: stretch），
+                    // 少了它海报会被信息列的高度拉变形，aspect-[2/3] 让位给拉伸高度，
+                    // 手机与桌面同样中招（原实现的 self-center sm:self-start 就是干这个的）。
+                    className="w-20 sm:w-32 aspect-[2/3] object-cover rounded-lg bg-chip shrink-0 self-start"
                     loading="eager"
                     onExhausted={() => setPosterFailed(true)}
                   />
@@ -215,7 +218,7 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
                       复制链接
                     </button>
                   </div>
-                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-2 max-h-[40vh] sm:max-h-[40vh] overflow-y-auto scrollbar-thin pr-1">
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-2 max-h-[40vh] overflow-y-auto scrollbar-thin pr-1">
                     {episodes.map((_, i) => {
                       const realIndex = reversed ? detail.episodes.length - 1 - i : i;
                       return (
