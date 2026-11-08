@@ -534,3 +534,26 @@ describe('音量放大设置项', () => {
     expect(store().volumeBoost).toBe(false);
   });
 });
+
+describe('底部细进度条设置项', () => {
+  it('miniProgressBar 出厂默认开启：多年既有行为，新增的只是可关闭的入口', () => {
+    expect(store().miniProgressBar).toBe(true);
+  });
+
+  it('miniProgressBar 可通过 updateSettings 切换（设置页与播放器共用同一份状态）', () => {
+    store().updateSettings({ miniProgressBar: false });
+    expect(store().miniProgressBar).toBe(false);
+    store().updateSettings({ miniProgressBar: true });
+    expect(store().miniProgressBar).toBe(true);
+  });
+
+  it('partialize 会带上 miniProgressBar：漏写就只活在内存里，刷新即回默认', () => {
+    const options = useAppStore.persist.getOptions() as unknown as {
+      partialize: (s: unknown) => Record<string, unknown>;
+    };
+    expect(options.partialize(store()).miniProgressBar).toBe(true);
+    store().updateSettings({ miniProgressBar: false });
+    expect(options.partialize(store()).miniProgressBar).toBe(false);
+    store().updateSettings({ miniProgressBar: true });
+  });
+});

@@ -591,6 +591,12 @@ function PlaybackPanel() {
           checked={store.volumeBoost}
           onChange={(v) => store.updateSettings({ volumeBoost: v })}
         />
+        <ToggleRow
+          label="底部细进度条"
+          description="控制栏收起后，在画面底边常驻一条 3px 进度线，不开控件也能瞄一眼进度。关闭后鼠标移开即完全隐藏（全屏观影不留任何控件），需要看进度时把鼠标移回画面即可"
+          checked={store.miniProgressBar}
+          onChange={(v) => store.updateSettings({ miniProgressBar: v })}
+        />
       </div>
 
       {markCount > 0 && (

@@ -30,6 +30,12 @@ export interface AppSettings {
    * 因此只作为用户显式开启的兜底，不作为出厂默认。
    */
   volumeBoost: boolean;
+  /**
+   * 底部细进度条：默认开启（保持既有观感，不替用户改行为）。
+   * 开启时控制栏收起后画面底边常驻一条 3px 进度线；关闭后收起即完全隐藏。
+   * 类名判定与同步见 lib/mini-progress-bar.ts。
+   */
+  miniProgressBar: boolean;
   /** 跳过片段：按归一化剧名持久化，详见 lib/skip-marks.ts */
   skipMarks: Record<string, SkipMark>;
   /**
@@ -345,6 +351,8 @@ export const useAppStore = create<AppState>()(
       autoplayNext: true,
       // 音量放大默认关闭：开启后对所有音量档位整体抬高约 1.8 倍，交给用户显式选择
       volumeBoost: false,
+      // 细进度条默认开启：这是多年既有行为，新增的只是「可以关掉」的入口
+      miniProgressBar: true,
       skipMarks: {},
       // 自动跳过默认开启，但只有用户真正标记过片段才生效
       autoSkipSegments: true,
@@ -943,6 +951,7 @@ export const useAppStore = create<AppState>()(
         recommendSourceTouched: s.recommendSourceTouched,
         autoplayNext: s.autoplayNext,
         volumeBoost: s.volumeBoost,
+        miniProgressBar: s.miniProgressBar,
         skipMarks: s.skipMarks,
         autoSkipSegments: s.autoSkipSegments,
         imageProxyMode: s.imageProxyMode,
