@@ -1,5 +1,5 @@
 import { fetchUpstream, getCache, setCache } from './fetch-utils';
-import { filterRelevantResults, normalizeTitle } from './cms-parser';
+import { cmsRequestHeaders, filterRelevantResults, normalizeTitle } from './cms-parser';
 
 interface EnglishQuery { base: string; year?: string; season?: number }
 export interface SearchTitles { terms: string[]; year?: string }
@@ -78,8 +78,8 @@ export async function resolveSearchTitles(wd: string): Promise<SearchTitles> {
   const cached = getCache<string[]>(cacheKey);
   if (cached) return { terms: [nativeTerm, ...cached], year: query.year };
   let aliases: string[] = [];
-  const options = { timeoutMs: 2000, retries: 0, headers: {
-    'User-Agent': 'LibreTV (+https://github.com/LibreSpark/LibreTV)', Accept: 'application/json',
+  const options = { timeoutMs: 4000, retries: 0, headers: {
+    ...cmsRequestHeaders(), Accept: 'application/json',
     Referer: 'https://movie.douban.com/',
   } };
   try {
@@ -96,7 +96,9 @@ export async function resolveSearchTitles(wd: string): Promise<SearchTitles> {
   if (!aliases.length) {
     try {
       const params = new URLSearchParams({ action: 'wbsearchentities', search: query.base, language: 'en', uselang: 'zh-hans', type: 'item', limit: '10', format: 'json' });
-      const response = await fetchUpstream(`https://www.wikidata.org/w/api.php?${params}`, options);
+      const response = await fetchUpstream(`https://www.wikidata.org/w/api.php?${params}`, {
+        ...options, timeoutMs: 2000, headers: { 'User-Agent': 'LibreTV (+https://github.com/LibreSpark/LibreTV)', Accept: 'application/json' },
+      });
       if (response.ok) aliases = aliasesFromWikidata(await response.json(), query);
     } catch { /* No guessed translation or unrelated fallback catalogue. */ }
   }
