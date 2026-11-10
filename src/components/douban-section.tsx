@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
+import { mergeRecommendationPages, nextRecommendationOffset, RECOMMEND_PAGE_SIZE } from '@/lib/recommendation-pages';
 import { DoubanCard } from './video-card';
 
 const MOVIE_TAGS = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动画'];
@@ -25,20 +26,35 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
 
 /**
  * 豆瓣推荐：影视切换 + 标签筛选。
- * 一次性渲染全部条目：数据本就一次拉全（50 条），卡片图片又是 lazy 加载，
- * 视口外的图不会请求，因此不需要「加载更多」这类本地切片分页来打断浏览。
+ * 首批 50 条，滚动接近列表末尾时获取下一批真实数据；分类之间隔离缓存。
+ * 空页/完全重复页停止；下一页失败时保留现有卡片，用户可以重试。
  */
 function DoubanView({ onPick }: { onPick: (title: string) => void }) {
   const [type, setType] = useState<'movie' | 'tv'>('movie');
   const [tag, setTag] = useState('热门');
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const query = useQuery({
-    queryKey: ['douban', type, tag],
-    queryFn: ({ signal }) => api.douban(type, tag, 0, 50, signal),
+  const query = useInfiniteQuery({
+    queryKey: ['douban-scroll', type, tag, RECOMMEND_PAGE_SIZE],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => api.douban(type, tag, pageParam, RECOMMEND_PAGE_SIZE, signal),
+    getNextPageParam: (last, pages, offset) => nextRecommendationOffset(last, pages, offset),
+    retry: false,
   });
 
   const tags = type === 'movie' ? MOVIE_TAGS : TV_TAGS;
-  const items = query.data?.items ?? [];
+  const items = useMemo(() => mergeRecommendationPages(query.data?.pages ?? []), [query.data]);
+  const { hasNextPage, isFetching, isFetchNextPageError, fetchNextPage } = query;
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasNextPage || isFetching || isFetchNextPageError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void fetchNextPage({ cancelRefetch: false });
+    }, { rootMargin: '600px 0px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetching, isFetchNextPageError, fetchNextPage, type, tag]);
 
   const switchType = (t: 'movie' | 'tv') => {
     if (t === type) return;
@@ -76,17 +92,36 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
         ))}
       </div>
 
-      {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试或在设置中关闭</p>
+      {query.isError && items.length === 0 ? (
+        <div className="text-center text-sm text-faint py-8">
+          <p>推荐内容加载失败</p>
+          <button className="btn-ghost btn-sm mt-2" onClick={() => void query.refetch()}>重试</button>
+        </div>
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-8">该分类暂无推荐内容</p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div data-recommendation-grid className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
           ))}
+        </div>
+      )}
+      {items.length > 0 && (
+        <div ref={loadMoreRef} data-recommendation-more className="text-center text-sm text-muted py-6">
+          {query.isFetchingNextPage ? (
+            <p role="status">正在加载更多推荐...</p>
+          ) : query.isFetchNextPageError ? (
+            <div role="status">
+              <p>加载更多失败，已加载内容仍可浏览</p>
+              <button className="btn-ghost btn-sm mt-2" onClick={() => void query.fetchNextPage({ cancelRefetch: false })}>重试加载更多</button>
+            </div>
+          ) : query.hasNextPage ? (
+            <button className="btn-ghost btn-sm" onClick={() => void query.fetchNextPage({ cancelRefetch: false })}>加载更多</button>
+          ) : (
+            <p role="status">已显示全部 {items.length} 部推荐</p>
+          )}
         </div>
       )}
     </section>
