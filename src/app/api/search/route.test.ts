@@ -62,6 +62,45 @@ afterEach(() => {
 });
 
 describe('POST /api/search', () => {
+  it.each([false, true])('finds Chinese source titles from English input in JSON/stream modes (%s)', async (stream) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === 'movie.douban.com') return Response.json([{ type: 'movie', title: '盗梦空间', sub_title: 'Inception', year: '2010' }]);
+      if (url.searchParams.get('wd') === 'Inception') return new Response('unavailable', { status: 500 });
+      return Response.json({ pagecount: 1, list: [
+        { vod_id: 10, vod_name: '盗梦空间', vod_year: 2010, type_name: '科幻片' },
+        { vod_id: 10, vod_name: '盗梦空间', vod_year: 2010, type_name: '科幻片' },
+        { vod_id: 11, vod_name: '无关影片', type_name: '剧情片' },
+        { vod_id: 12, vod_name: '盗梦空间', type_name: '福利视频' },
+      ] });
+    }));
+    const body = { wd: 'Inception', sources: [{ key: 'alias', name: '源', url: `https://cms.example.com/english-${stream}` }], filterAdult: true };
+    const res = await POST(makeRequest(body, stream));
+    expect(res.status).toBe(200);
+    const result = stream ? (await res.text()).trim().split('\n').map(line => JSON.parse(line)).at(-1) : await res.json();
+    expect(result.list.map((item: { vodId: string }) => item.vodId)).toEqual(['10']);
+    expect(result.searchedTitles).toEqual(['盗梦空间']);
+    expect(result.failures).toEqual([]);
+    const cached = await POST(makeRequest(body));
+    expect((await cached.json()).searchedTitles).toEqual(['盗梦空间']);
+  });
+
+  it('uses the requested movie year and rejects invalid keyword types before metadata lookup', async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('subject_suggest')) return Response.json([{ type: 'movie', title: '沙丘', sub_title: 'Dune', year: '2021' }]);
+      return Response.json({ pagecount: 1, list: [
+        { vod_id: 1, vod_name: '沙丘', vod_year: '1984' },
+        { vod_id: 2, vod_name: '沙丘', vod_year: '2021' },
+      ] });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const res = await POST(makeRequest({ wd: 'Dune 2021', sources: [{ key: 'year', name: '源', url: 'https://cms.example.com/movie-year' }] }));
+    expect((await res.json()).list.map((item: { vodId: string }) => item.vodId)).toEqual(['2']);
+    const calls = fetchSpy.mock.calls.length;
+    expect((await POST(makeRequest({ wd: 123, sources: SOURCES }))).status).toBe(400);
+    expect(fetchSpy).toHaveBeenCalledTimes(calls);
+  });
+
   it('聚合多源结果：同源去重、成人内容过滤、失败源进 failures', async () => {
     mockUpstream();
     const res = await POST(makeRequest({ wd: '测试剧', sources: SOURCES, filterAdult: true }));

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
-import { cmsRequestHeaders, filterAdultResults, filterRelevantResults, normalizeTitle, parseSearchList } from '@/lib/cms-parser';
+import { cmsRequestHeaders, filterAdultResults, normalizeTitle, parseSearchList } from '@/lib/cms-parser';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
+import { filterSearchTitles, resolveSearchTitles } from '@/lib/search-titles';
 import type { SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -56,7 +57,7 @@ function isTimeoutError(err: unknown): boolean {
  * 整源受 SEARCH_SOURCE_TIMEOUT_MS 总死线约束。
  * 旧版在浏览器里打满 N 个请求（暴露用户 IP、无法缓存、超时失控），现全部上移。
  */
-async function searchSource(source: SourceConfig, wd: string): Promise<SourceSearchOutcome> {
+async function searchSource(source: SourceConfig, terms: string[]): Promise<SourceSearchOutcome> {
   const start = Date.now();
   const finish = (outcome: Omit<SourceSearchOutcome, 'ms'>): SourceSearchOutcome => ({
     ...outcome,
@@ -91,10 +92,11 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   });
 
   const base = source.url.replace(/\/+$/, '');
-  const fetchPage = async (page: number) => {
+  const fetchPage = async (wd: string, page: number) => {
     const api = `${base}?ac=videolist&wd=${encodeURIComponent(wd)}&pg=${page}`;
     const res = await fetchUpstream(api, {
-      timeoutMs: 8000,
+      timeoutMs: terms.length > 1 && wd === terms[0] ? 2500 : 8000,
+      retries: terms.length > 1 ? 0 : undefined,
       headers: cmsRequestHeaders(),
       signal: controller.signal,
     });
@@ -102,8 +104,8 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
     return res.json();
   };
 
-  const run = async (): Promise<SourceSearchOutcome> => {
-    const first = await fetchPage(1);
+  const runQuery = async (wd: string) => {
+    const first = await fetchPage(wd, 1);
     const list = parseSearchList(first, source);
     // 源站真实总页数与配置上限取较小者；pagecount 缺失或非法时视为 1 页
     const rawPageCount = parseInt(String((first as { pagecount?: unknown }).pagecount ?? '1'), 10);
@@ -112,7 +114,7 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
       const extraPages = await Promise.all(
         Array.from({ length: pageCount - 1 }, (_, i) => i + 2).map(async (page) => {
           try {
-            return parseSearchList(await fetchPage(page), source);
+            return parseSearchList(await fetchPage(wd, page), source);
           } catch {
             return [];
           }
@@ -120,6 +122,15 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
       );
       list.push(...extraPages.flat());
     }
+    return list;
+  };
+
+  const run = async (): Promise<SourceSearchOutcome> => {
+    const results = await Promise.allSettled(terms.map(runQuery));
+    const list = results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+    const failed = results.find((result) => result.status === 'rejected');
+    // A successful title variant remains useful when another variant fails.
+    if (!list.length && failed?.status === 'rejected') throw failed.reason;
     return { sourceKey: source.key, ok: true, list };
   };
 
@@ -151,7 +162,7 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
 }
 
 /** 合并 + 去重 + 过滤 + 排序，stream 与非 stream 两种模式共用 */
-function aggregateOutcomes(outcomes: SourceSearchOutcome[], wd: string, filterAdult: boolean): SearchResponse {
+function aggregateOutcomes(outcomes: SourceSearchOutcome[], terms: string[], filterAdult: boolean, year?: string): SearchResponse {
   const seen = new Set<string>();
   let list = outcomes.flatMap((o) => o.list).filter((item) => {
     const key = `${item.sourceKey}_${item.vodId}`;
@@ -162,13 +173,14 @@ function aggregateOutcomes(outcomes: SourceSearchOutcome[], wd: string, filterAd
 
   list = filterAdultResults(list, filterAdult);
   // 部分源站做分词/OR 模糊搜索（搜「摔跤吧！爸爸」返回一堆「爸爸XXX」），按关键词过滤
-  list = filterRelevantResults(list, wd);
+  list = filterSearchTitles(list, terms);
+  if (year) list = list.filter((item) => !item.year || item.year === year);
 
   // 精确命中（忽略标点差异）排在最前，其余按名称（与旧版一致），名称相同按源名
-  const exact = normalizeTitle(wd);
+  const exact = new Set(terms.map(normalizeTitle));
   list.sort((a, b) => {
-    const aExact = normalizeTitle(a.name || '') === exact ? 0 : 1;
-    const bExact = normalizeTitle(b.name || '') === exact ? 0 : 1;
+    const aExact = exact.has(normalizeTitle(a.name || '')) ? 0 : 1;
+    const bExact = exact.has(normalizeTitle(b.name || '')) ? 0 : 1;
     if (aExact !== bExact) return aExact - bExact;
     const nameCompare = (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN');
     if (nameCompare !== 0) return nameCompare;
@@ -179,7 +191,7 @@ function aggregateOutcomes(outcomes: SourceSearchOutcome[], wd: string, filterAd
     .filter((o) => !o.ok)
     .map((o) => ({ sourceKey: o.sourceKey, error: o.error || '请求失败', timedOut: o.timedOut }));
 
-  return { list, failures };
+  return { list, failures, ...(terms.length > 1 ? { searchedTitles: terms.slice(1) } : {}) };
 }
 
 /**
@@ -199,7 +211,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '请求格式错误' }, { status: 400 });
   }
 
-  const wd = (body.wd || '').trim();
+  const wd = typeof body?.wd === 'string' ? body.wd.trim() : '';
   if (!wd || wd.length > 100) {
     return NextResponse.json({ error: '搜索关键词无效' }, { status: 400 });
   }
@@ -214,7 +226,7 @@ export async function POST(req: Request) {
   if (cached) {
     // 流式模式下缓存命中也要走 done 事件，客户端解析逻辑保持单一
     if (new URL(req.url).searchParams.get('stream') === '1') {
-      const event: SearchStreamEvent = { type: 'done', list: cached.list, failures: cached.failures };
+      const event: SearchStreamEvent = { type: 'done', list: cached.list, failures: cached.failures, searchedTitles: cached.searchedTitles };
       return new Response(JSON.stringify(event) + '\n', {
         headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' },
       });
@@ -222,10 +234,11 @@ export async function POST(req: Request) {
     return NextResponse.json(cached);
   }
 
+  const { terms, year } = await resolveSearchTitles(wd);
   const isStream = new URL(req.url).searchParams.get('stream') === '1';
   if (!isStream) {
-    const outcomes = await Promise.all(sources.map((source) => searchSource(source, wd)));
-    const payload = aggregateOutcomes(outcomes, wd, filterAdult);
+    const outcomes = await Promise.all(sources.map((source) => searchSource(source, terms)));
+    const payload = aggregateOutcomes(outcomes, terms, filterAdult, year);
     setCache(cacheKey, payload, SEARCH_CACHE_TTL);
     return NextResponse.json(payload);
   }
@@ -247,17 +260,17 @@ export async function POST(req: Request) {
       const outcomes: SourceSearchOutcome[] = new Array(sources.length);
       await Promise.all(
         sources.map(async (source, i) => {
-          const outcome = await searchSource(source, wd);
+          const outcome = await searchSource(source, terms);
           outcomes[i] = outcome;
           // 中间结果与最终结果共用去重和过滤规则，避免无关/成人条目短暂出现在页面上。
-          const { list } = aggregateOutcomes([outcome], wd, filterAdult);
+          const { list } = aggregateOutcomes([outcome], terms, filterAdult, year);
           send({ type: 'source', ...outcome, list });
         })
       );
 
-      const payload = aggregateOutcomes(outcomes, wd, filterAdult);
+      const payload = aggregateOutcomes(outcomes, terms, filterAdult, year);
       setCache(cacheKey, payload, SEARCH_CACHE_TTL);
-      send({ type: 'done', list: payload.list, failures: payload.failures });
+      send({ type: 'done', list: payload.list, failures: payload.failures, searchedTitles: payload.searchedTitles });
       closed = true;
       try {
         controller.close();
