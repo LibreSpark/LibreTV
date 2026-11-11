@@ -5,7 +5,12 @@ import { useAppStore } from '@/lib/store';
 import {
   SEGMENT_COLORS,
   SEGMENT_LABELS,
+  endingTailSeconds,
+  nudgeSegment,
+  resolveSegment,
   validateSegment,
+  withEndingTail,
+  type ResolvedSegment,
   type SkipSegment,
   type SkipSegmentType,
 } from '@/lib/skip-marks';
@@ -28,6 +33,8 @@ import { Icon } from './icon';
  * - 手机上（<lg）退化成底部半屏抽屉，并把记录按钮放在 footer 常驻，避免盖住画面、
  *   也避免列表变长后要滚到底才能记一笔；
  * - 记录/试跳前先暂停：点击到读取之间视频还在走，容易偏 1–2 秒；
+ * - 片尾记的是「距结尾多长」，列表区间、试跳与高亮都按当前时长倒算起点，
+ *   各集时长不一致时也不会出现「短集整条失效 / 长集一路跳到结尾」；
  * - 顶部常驻「当前 12:34 / 45:00」，试跳与微调都有参照；
  * - 中段两步态的起点由播放页持有（pendingStart），与 Shift+S/E 共用同一份状态；
  * - 全局「自动跳过片段」在这里只读展示（层级不同，避免和「本剧跳过」并排成两个 checkbox）。
@@ -44,6 +51,25 @@ interface PlayerClock {
 const SEGMENT_TYPES: SkipSegmentType[] = ['opening', 'middle', 'ending'];
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * 列表里一条片段的区间文案。
+ * 片尾是「距结尾的长度」，起点每集都不同，只报记录那集的绝对秒数反而误导，
+ * 所以报「最后 00:30 · 本集 25:30 起」；历史绝对起点片尾仍报「26:30 → 结尾」。
+ * range 为该段在当前这集解析出的区间（时长还没报出来时为 null，退回记录值）。
+ */
+function describeRange(seg: SkipSegment, range: ResolvedSegment | null): string {
+  if (seg.type === 'ending') {
+    const tail = endingTailSeconds(seg);
+    if (tail !== null) {
+      return range ? `最后 ${formatTime(tail)} · 本集 ${formatTime(range.start)} 起` : `最后 ${formatTime(tail)}`;
+    }
+    return `${formatTime(range?.start ?? seg.start)} → 结尾`;
+  }
+  const start = range?.start ?? seg.start;
+  const end = range?.end ?? seg.end;
+  return `${formatTime(start)} → ${formatTime(end)}`;
+}
 
 export function SkipMarkPanel({
   open,
@@ -112,7 +138,10 @@ export function SkipMarkPanel({
   };
 
   /** 记录一条片段；成功返回 true（失败时保留两步态，用户可以改位置重试） */
-  const tryRecord = (segment: SkipSegment, label: string, duration: number): boolean => {
+  const tryRecord = (raw: SkipSegment, label: string, duration: number): boolean => {
+    // 片尾在写入时就换算成「距结尾的长度」：只记绝对起点的话，
+    // 下一集时长不同会整条失效（短集）或一路跳到结尾（长集）
+    const segment = withEndingTail(raw, duration);
     const error = validateSegment(segment, duration, segments);
     if (error) {
       toast(error, 'error');
@@ -126,9 +155,12 @@ export function SkipMarkPanel({
       : segment.type === 'ending'
         ? '，命中时显示「跳过片尾」按钮'
         : '，命中时显示跳过按钮';
+    const recordedTail = endingTailSeconds(segment);
     const at =
       segment.type === 'ending'
-        ? formatTime(segment.start)
+        ? recordedTail !== null
+          ? `最后 ${formatTime(recordedTail)}`
+          : formatTime(segment.start)
         : segment.type === 'middle'
           ? `${formatTime(segment.start)} → ${formatTime(segment.end)}`
           : formatTime(segment.end);
@@ -191,15 +223,12 @@ export function SkipMarkPanel({
   const nudge = (index: number, delta: number) => {
     const seg = segments[index];
     if (!seg) return;
-    const changed: SkipSegment =
-      seg.type === 'ending'
-        ? { ...seg, start: round1(seg.start + delta) }
-        : seg.type === 'opening'
-          ? { ...seg, end: round1(seg.end + delta) }
-          : { ...seg, start: round1(seg.start + delta), end: round1(seg.end + delta) };
     const clockNow = getPlayerClock();
+    const duration = clockNow?.duration ?? 0;
+    // 平移规则（含「片尾改的是距结尾长度」与历史绝对起点的顺手换算）在 lib/skip-marks.ts
+    const changed = nudgeSegment(seg, delta, duration);
     const others = segments.filter((_, i) => i !== index);
-    const error = validateSegment(changed, clockNow?.duration ?? 0, others);
+    const error = validateSegment(changed, duration, others);
     if (error) {
       toast(error, 'error');
       return;
@@ -214,16 +243,22 @@ export function SkipMarkPanel({
       toast('播放器尚未就绪，请稍后再试', 'warning');
       return;
     }
+    // 先按本集时长解析区间再跳：片尾起点是倒算的，直接用记录值会跳到别的位置
+    const range = resolveSegment(seg, c.duration);
+    const start = range?.start ?? seg.start;
+    const end = range?.end ?? (seg.type === 'ending' ? c.duration : seg.end);
+    const target = to === 'start' ? start : Math.max(0, end - 1);
     c.pause();
-    c.seek(to === 'start' ? seg.start : Math.max(0, seg.end - 1));
-    setClock({ current: to === 'start' ? seg.start : Math.max(0, seg.end - 1), duration: c.duration, paused: true });
+    c.seek(target);
+    setClock({ current: target, duration: c.duration, paused: true });
   };
 
   /** 当前播放位置落在哪个片段里：列表里高亮出来，方便核对边界 */
   const currentKey = segments.find((s) => {
-    if (clock.current < s.start) return false;
+    const r = clock.duration > 0 ? resolveSegment(s, clock.duration) : null;
+    if (clock.current < (r?.start ?? s.start)) return false;
     if (s.type === 'ending') return true;
-    return clock.current < s.end;
+    return clock.current < (r?.end ?? s.end);
   });
 
   return (
@@ -252,7 +287,7 @@ export function SkipMarkPanel({
             <button
               type="button"
               className="btn-ghost btn-sm"
-              title="把当前画面记为片尾开始位置"
+              title="把当前画面记为片尾开始位置（记住的是距结尾多长，各集时长不同也能套用）"
               onClick={() => recordAt('ending')}
             >
               记为片尾开始
@@ -285,7 +320,8 @@ export function SkipMarkPanel({
             {clock.paused && <span className="ml-1 text-muted">· 已暂停</span>}
           </p>
           <p className="mt-1 text-[11px] text-muted">
-            已标记 {segments.length} 段 · 按剧名对本剧各集与同名资源生效
+            已标记 {segments.length} 段 · 按剧名对本剧各集与同名资源生效 · 片尾记的是「距结尾多长」，
+            各集时长不一样也会各自倒算起点
           </p>
         </div>
         <label
@@ -321,6 +357,9 @@ export function SkipMarkPanel({
               seg.type === 'middle' && sameTypeCount > 1
                 ? `${SEGMENT_LABELS.middle}${segments.slice(0, i).filter((s) => s.type === 'middle').length + 1}`
                 : SEGMENT_LABELS[seg.type];
+            const range = clock.duration > 0 ? resolveSegment(seg, clock.duration) : null;
+            // 有时长却解析不出区间 = 这条标记对本集不适用（历史绝对起点越界、片尾长度超上限等）
+            const notApplied = clock.duration > 0 && !range;
             return (
               <li
                 key={`${seg.type}:${seg.start}`}
@@ -337,9 +376,8 @@ export function SkipMarkPanel({
                       style={{ backgroundColor: SEGMENT_COLORS[seg.type] }}
                     />
                     <span className="text-muted">[{label}]</span>
-                    <span className="font-mono text-muted">
-                      {formatTime(seg.start)} → {seg.type === 'ending' ? '结尾' : formatTime(seg.end)}
-                    </span>
+                    <span className="font-mono text-muted">{describeRange(seg, range)}</span>
+                    {notApplied && <span className="shrink-0 text-[10px] text-faint">本集不生效</span>}
                   </span>
                   {isCurrent && <span className="shrink-0 text-[10px] text-accent">当前</span>}
                 </div>

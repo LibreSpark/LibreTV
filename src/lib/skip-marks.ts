@@ -9,6 +9,12 @@ import { normalizeTitle } from './cms-parser';
  * 相比固定的「片头/片尾」两个标记，这里泛化为任意数量的跳过片段（SkipSegment），
  * 每个片段用位置归类：opening（开头/片头）、middle（中间）、ending（结尾/片尾）。
  * 本模块只做纯计算，播放器接入与 UI 见 player-shell.tsx / skip-mark-panel.tsx。
+ *
+ * 三类片段的锚点不同，这是刻意的：
+ * - 片头/中段锚在时间轴开头（第 X 秒 → 第 Y 秒）；
+ * - 片尾锚在时间轴末尾（距结尾 tail 秒），生效起点 = 本集时长 - tail。
+ *   采集站各集时长常常差一两分钟，片尾若只存绝对起点，短一集的标记会整条失效
+ *   （起点已越过片尾护栏）、长一集会一路跳到结尾多跳几分钟；倒着算就不会。
  */
 
 /** 片段位置类型：开头 / 中间 / 结尾 */
@@ -21,6 +27,13 @@ export interface SkipSegment {
   start: number;
   /** 片段终点；ending 用 -1 表示「到视频结尾」，运行时以实际时长填充 */
   end: number;
+  /**
+   * 片尾专用：距视频结尾的秒数（倒着算的长度），生效起点 = 时长 - tail。
+   * 缺省表示这是一条历史遗留的「绝对起点」片尾标记，沿用 start 的老语义；
+   * 新记录与任何一次微调都会补上 tail。
+   * ending 的 start 保留为记录当时的绝对起点，只做展示与时长未知时的兜底。
+   */
+  tail?: number;
 }
 
 /** 一部剧的跳过标记；按归一化剧名持久化 */
@@ -46,7 +59,7 @@ export const SEGMENT_LABELS: Record<SkipSegmentType, string> = {
   ending: '片尾',
 };
 
-/** 某集经过时长校验后的有效片段；ending 的 end 已填充为实际时长 */
+/** 某集经过时长校验后的有效片段；ending 的 end 已填充为实际时长，起点按 tail 倒算 */
 export interface ResolvedSegment {
   type: SkipSegmentType;
   start: number;
@@ -59,6 +72,13 @@ export const MIN_SEGMENT_SECONDS = 3;
 export const MIN_SEGMENT_GAP_SECONDS = 5;
 /** 片段终点（ending 为起点）至少要比总时长提前的秒数，贴着结尾的片段没有跳过价值 */
 export const END_GUARD_SECONDS = 2;
+/**
+ * 片尾长度占本集时长的上限。
+ * 倒着算让标记能跨集套用，代价是短片/特辑会被一条长尾标记吃掉大半集——
+ * 例如 27 分钟记录的 2 分钟片尾，套到 5 分钟的特辑就是跳过 40%。
+ * 超过该比例宁可整条不生效（用户仍可自己拖进度条），也不要默默切掉大半集正片。
+ */
+export const MAX_ENDING_TAIL_RATIO = 0.25;
 /** 命中提示的收尾余量：距片段末尾不足 1s 时不再打扰 */
 export const PROMPT_GUARD_SECONDS = 1;
 /** 两次 timeupdate 之间超过该秒数视为 seek，不使用「连续越过」判定 */
@@ -91,6 +111,7 @@ export function skipMarkKey(title: string | undefined, fallback: string): string
  * 把持久化快照里的 skipMarks 归一化为当前结构（persist v3 → v4）。
  * - 已是 segments 结构的直接保留（按结构探测，兼容后续再升级）；
  * - 旧的 { introEnd, outroStart } 转成 opening + ending 两条；
+ * - 片尾的 tail（距结尾长度）原样保留；没有 tail 就是历史「绝对起点」片尾，沿用旧语义；
  * - 损坏条目（null/非对象）直接丢弃，绝不能让恢复过程抛错。
  */
 export function migrateSkipMarks(raw: unknown): Record<string, SkipMark> {
@@ -114,10 +135,19 @@ export function migrateSkipMarks(raw: unknown): Record<string, SkipMark> {
       // 逐条校验结构：面板直接渲染 segments，损坏条目会显示成 NaN:NaN
       const valid = (mark.segments as unknown[]).flatMap((s): SkipSegment[] => {
         if (!s || typeof s !== 'object') return [];
-        const seg = s as { type?: unknown; start?: unknown; end?: unknown };
+        const seg = s as { type?: unknown; start?: unknown; end?: unknown; tail?: unknown };
         if (typeof seg.type !== 'string' || !SEGMENT_TYPES.has(seg.type)) return [];
         if (!isFiniteNumber(seg.start) || !isFiniteNumber(seg.end)) return [];
-        return [{ type: seg.type as SkipSegmentType, start: seg.start, end: seg.end }];
+        const item: SkipSegment = {
+          type: seg.type as SkipSegmentType,
+          start: seg.start,
+          end: seg.end,
+        };
+        // tail 只对片尾有意义：非片尾带着脏 tail 会误启用倒算语义，直接丢回绝对起点
+        if (item.type === 'ending' && isFiniteNumber(seg.tail) && seg.tail > 0) {
+          item.tail = seg.tail;
+        }
+        return [item];
       });
       result[key] = { segments: valid, enabled, updatedAt };
       continue;
@@ -135,28 +165,84 @@ export function migrateSkipMarks(raw: unknown): Record<string, SkipMark> {
   return result;
 }
 
+const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/** 一条片尾的「距结尾长度」；无 tail（历史绝对起点标记）或非法时返回 null */
+export function endingTailSeconds(seg: SkipSegment): number | null {
+  if (seg.type !== 'ending') return null;
+  return isFiniteNumber(seg.tail) && seg.tail > 0 ? seg.tail : null;
+}
+
 /**
- * 把一条原始片段归一化成当前这集的有效区间；非法/越界/损坏时返回 null。
+ * 记录片尾时把「距结尾长度」补上：tail = 本集时长 - 起点。
+ * 时长未知（播放器还没报时长）时原样返回，退化成历史的绝对起点语义。
+ */
+export function withEndingTail(segment: SkipSegment, duration: number): SkipSegment {
+  if (segment.type !== 'ending') return segment;
+  if (!isFiniteNumber(duration) || duration <= 0) return segment;
+  const tail = round1(duration - segment.start);
+  if (!(tail > 0)) return segment;
+  return { ...segment, tail };
+}
+
+/**
+ * 把一条片段的边界平移 delta 秒（+1 = 边界推后 1 秒），供面板/快捷键的 ±1s 微调使用。
+ * - 片头调终点、中段整段平移；
+ * - 片尾调的是「距结尾的长度」：边界推后 1 秒 = 少跳 1 秒 = 长度 -1，
+ *   绝对起点同步平移，保证 start + tail 恒等于记录那集的时长；
+ * - 历史「绝对起点」片尾只要有时长可参照就顺手换算成 tail（这次手动确认等于用户
+ *   承认「本集从这里到结尾是片尾」）；拿不到时长时退回改绝对起点的老语义。
+ */
+export function nudgeSegment(seg: SkipSegment, delta: number, duration: number): SkipSegment {
+  if (seg.type === 'opening') return { ...seg, end: round1(seg.end + delta) };
+  if (seg.type !== 'ending') {
+    return { ...seg, start: round1(seg.start + delta), end: round1(seg.end + delta) };
+  }
+  const tail =
+    endingTailSeconds(seg) ??
+    (isFiniteNumber(duration) && duration > 0 ? round1(duration - seg.start) : null);
+  if (tail === null) return { ...seg, start: round1(seg.start + delta) };
+  return { ...seg, start: round1(seg.start + delta), tail: round1(tail - delta) };
+}
+
+/**
+ * 单条片段在当前这集的生效区间：opening 起点恒 0，ending 终点用时长填充，
+ * 带 tail 的片尾起点按时长倒算。非法/越界/长度异常时返回 null。
  *
  * 必须是「读取侧」校验：标记按剧共享，不同集/不同源的时长可能不同，
  * 旧标记完全可能越界；损坏的持久化数据也不应让播放报错。
  */
-function normalizeSegment(seg: SkipSegment | undefined, duration: number): ResolvedSegment | null {
+export function resolveSegment(
+  seg: SkipSegment | undefined,
+  duration: number
+): ResolvedSegment | null {
   if (!seg || !SEGMENT_TYPES.has(seg.type)) return null;
   if (!isFiniteNumber(seg.start) || seg.start < 0) return null;
+  if (!isFiniteNumber(duration) || duration <= 0) return null;
+
+  if (seg.type === 'ending') {
+    const tail = endingTailSeconds(seg);
+    if (tail !== null) {
+      // 倒着算：长度太短没有跳过价值，太长会把短片/特辑的大半集切掉，两种都整条不生效
+      if (tail < MIN_SEGMENT_SECONDS) return null;
+      if (tail > duration * MAX_ENDING_TAIL_RATIO) return null;
+      const start = round1(duration - tail);
+      if (start < END_GUARD_SECONDS) return null;
+      return { type: 'ending', start, end: duration };
+    }
+    // 历史「绝对起点」片尾：沿用旧语义（等长/更长的集照常生效，短集不生效）
+    const start = seg.start;
+    if (start > duration - END_GUARD_SECONDS) return null;
+    if (duration - start < MIN_SEGMENT_SECONDS) return null;
+    return { type: 'ending', start, end: duration };
+  }
 
   const start = seg.type === 'opening' ? 0 : seg.start;
-  const end = seg.type === 'ending' ? duration : seg.end;
-
+  const end = seg.end;
   if (!isFiniteNumber(end)) return null;
   if (end <= start) return null;
   if (end - start < MIN_SEGMENT_SECONDS) return null;
-
-  if (seg.type === 'ending') {
-    if (start > duration - END_GUARD_SECONDS) return null;
-  } else if (end > duration - END_GUARD_SECONDS) {
-    return null;
-  }
+  if (end > duration - END_GUARD_SECONDS) return null;
 
   return { type: seg.type, start, end };
 }
@@ -172,7 +258,7 @@ export function resolveSegments(mark: SkipMark | undefined, duration: number): R
 
   const resolved: ResolvedSegment[] = [];
   for (const seg of mark.segments) {
-    const r = normalizeSegment(seg, duration);
+    const r = resolveSegment(seg, duration);
     if (r) resolved.push(r);
   }
   resolved.sort((a, b) => a.start - b.start);
@@ -214,6 +300,10 @@ export function findCrossedEnding(
 /**
  * 校验一条待写入的片段；duration 未知（<=0）时只做相对校验。返回错误文案或 null。
  * existing 为当前已保存的片段（不含待写入这条）。
+ *
+ * 片尾有两种写法：带 tail（按距结尾长度校验）与不带的历史绝对起点。
+ * 写入路径（面板按钮与快捷键）都会先补齐 tail，因为绝对起点只在和记录那集等长时才等价；
+ * 本函数两种都接受，好让历史标记在被手动微调时仍能通过校验。
  */
 export function validateSegment(
   segment: SkipSegment,
@@ -224,22 +314,39 @@ export function validateSegment(
   if (!isFiniteNumber(segment.start) || segment.start < 0) return '片段起点无效';
   if (segment.type === 'opening' && segment.start !== 0) return '片头片段起点必须为 0';
 
-  const start = segment.start;
-  let end: number;
+  const hasDuration = isFiniteNumber(duration) && duration > 0;
+  const tail = endingTailSeconds(segment);
   if (segment.type === 'ending') {
     if (segment.end !== -1) return '片尾片段无需指定终点';
-    end = isFiniteNumber(duration) && duration > 0 ? duration : Number.POSITIVE_INFINITY;
+    if (segment.tail !== undefined && tail === null) return '片尾长度无效';
+    if (tail !== null && tail < MIN_SEGMENT_SECONDS) {
+      return `片尾长度至少需要 ${MIN_SEGMENT_SECONDS} 秒`;
+    }
+  } else if (!isFiniteNumber(segment.end)) {
+    return '片段终点无效';
+  }
+
+  // 本次校验用的区间：片尾优先用倒算起点，其余取字面值
+  const start = segment.type === 'ending' && tail !== null && hasDuration ? duration - tail : segment.start;
+  let end: number;
+  if (segment.type === 'ending') {
+    end = hasDuration ? duration : Number.POSITIVE_INFINITY;
   } else {
-    if (!isFiniteNumber(segment.end)) return '片段终点无效';
     end = segment.end;
   }
 
   if (end - start < MIN_SEGMENT_SECONDS) {
     return `跳过片段至少需要 ${MIN_SEGMENT_SECONDS} 秒`;
   }
-  if (isFiniteNumber(duration) && duration > 0) {
+  if (hasDuration) {
     if (segment.type === 'ending') {
-      if (start > duration - END_GUARD_SECONDS) return '片尾开始不能贴近视频末尾';
+      if (tail !== null) {
+        if (tail > duration * MAX_ENDING_TAIL_RATIO) {
+          return `片尾长度不能超过本集时长的 ${Math.round(MAX_ENDING_TAIL_RATIO * 100)}%`;
+        }
+      } else if (start > duration - END_GUARD_SECONDS) {
+        return '片尾开始不能贴近视频末尾';
+      }
     } else if (end > duration - END_GUARD_SECONDS) {
       return '片段终点不能贴近视频末尾';
     }
@@ -247,13 +354,13 @@ export function validateSegment(
 
   for (const other of existing) {
     if (!other || !SEGMENT_TYPES.has(other.type)) continue;
-    const oStart = other.start;
+    // 已有片段同样按时长解析（片尾可能是倒算的），解析不出来时退回字面值，判定保持保守
+    const r = hasDuration ? resolveSegment(other, duration) : null;
+    const oStart = r ? r.start : other.start;
     let oEnd: number;
-    if (other.type === 'ending') {
-      oEnd = isFiniteNumber(duration) && duration > 0 ? duration : Number.POSITIVE_INFINITY;
-    } else {
-      oEnd = isFiniteNumber(other.end) ? other.end : other.start;
-    }
+    if (r) oEnd = r.end;
+    else if (other.type === 'ending') oEnd = hasDuration ? duration : Number.POSITIVE_INFINITY;
+    else oEnd = isFiniteNumber(other.end) ? other.end : other.start;
     // 与已有片段的重叠/间隔判定：gap <= 0 为重叠，0 < gap < MIN_GAP 为过近
     const gap = Math.max(oStart - end, start - oEnd);
     if (gap < MIN_SEGMENT_GAP_SECONDS) {

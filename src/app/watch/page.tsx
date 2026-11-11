@@ -18,7 +18,13 @@ const PlayerShell = dynamic(() => import('@/components/player-shell').then((m) =
 import { EmptyState, LoadingState, Spinner } from '@/components/states';
 import { SwitchSourceModal } from '@/components/switch-source';
 import { SkipMarkPanel } from '@/components/skip-mark-panel';
-import { skipMarkKey, validateSegment, type SkipSegment } from '@/lib/skip-marks';
+import {
+  endingTailSeconds,
+  skipMarkKey,
+  validateSegment,
+  withEndingTail,
+  type SkipSegment,
+} from '@/lib/skip-marks';
 import type { PlayerSkipApi } from '@/components/player-shell';
 import { useToast } from '@/components/toast';
 import { enqueueDownload } from '@/components/download-manager';
@@ -34,7 +40,7 @@ import {
   upsertHistory,
   db,
 } from '@/lib/db';
-import { cn } from '@/lib/utils';
+import { cn, formatTime } from '@/lib/utils';
 
 /**
  * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
@@ -211,9 +217,11 @@ function WatchContent() {
 
   // 快捷键（Shift+I/O/S/E）记录片段：校验后写入
   const handleRecordSegment = useCallback(
-    (segment: SkipSegment) => {
+    (raw: SkipSegment) => {
       const duration = playerApiRef.current?.getDuration() ?? 0;
       const existing = useAppStore.getState().skipMarks[markKey]?.segments ?? [];
+      // 与面板同一套规则：片尾写入前先换算成「距结尾多长」，跨集才能各自倒算起点
+      const segment = withEndingTail(raw, duration);
       const error = validateSegment(segment, duration, existing);
       if (error) {
         toast(error, 'error');
@@ -222,13 +230,16 @@ function WatchContent() {
       useAppStore.getState().setSkipMark(markKey, [...existing, segment]);
       const label =
         segment.type === 'opening' ? '片头结束' : segment.type === 'ending' ? '片尾开始' : '中段片段';
+      const tail = endingTailSeconds(segment);
       // 中段命中时的表现取决于全局「自动跳过片段」，记完就说清楚，避免"标了却没反应"
       const hint =
         segment.type === 'middle'
           ? useAppStore.getState().autoSkipSegments
             ? '，命中时将自动跳过'
             : '，命中时显示跳过按钮'
-          : '';
+          : segment.type === 'ending' && tail !== null
+            ? `，最后 ${formatTime(tail)} 会被跳过（各集按本集时长倒算起点）`
+            : '';
       toast(`已记录${label}${hint}`, 'success');
     },
     [markKey, toast]
