@@ -35,6 +35,9 @@ export function makeAbsolute(url: string, base: string | undefined): string {
   }
 }
 
+/** 通过 URI 属性引用资源的标签：key/map，以及主播放列表里的备用音轨/字幕（EXT-X-MEDIA）和 I 帧播放列表 */
+const URI_ATTR_TAGS = ['#EXT-X-KEY', '#EXT-X-MAP', '#EXT-X-MEDIA:', '#EXT-X-I-FRAME-STREAM-INF', '#EXT-X-SESSION-KEY'];
+
 /** 将 m3u8 中的地址改写为经过本站代理的地址（分片/key/map 同样改写）。
  *  prefix 可指定代理地址基座（直播流走 /api/live/stream?url=，点播默认 /api/proxy?url=） */
 export function rewriteM3u8(
@@ -46,7 +49,7 @@ export function rewriteM3u8(
   if (depth > 5) return content;
   const lines = content.split('\n');
   const out = lines.map((line) => {
-    if (line.startsWith('#EXT-X-KEY') || line.startsWith('#EXT-X-MAP')) {
+    if (URI_ATTR_TAGS.some((tag) => line.startsWith(tag))) {
       return line.replace(/(URI=")([^"]+)(")/g, (m, p1: string, uri: string, p2: string) => {
         if (isProxiedUri(uri)) return m;
         return p1 + prefix + encodeURIComponent(makeAbsolute(uri, baseUrl)) + p2;

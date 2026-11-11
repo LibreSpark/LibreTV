@@ -29,6 +29,24 @@ describe('rewriteM3u8', () => {
     expect(out).toContain('#EXT-X-ENDLIST');
   });
 
+  it('主播放列表里 EXT-X-MEDIA 音轨/字幕与 I 帧播放列表的 URI 也改写为代理地址', () => {
+    const input = [
+      '#EXTM3U',
+      '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",DEFAULT=YES,URI="audio/en.m3u8"',
+      '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",NAME="中文",URI="/subs/zh.m3u8"',
+      '#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=86000,URI="iframe.m3u8"',
+      '#EXT-X-STREAM-INF:BANDWIDTH=1280000,AUDIO="aud",SUBTITLES="sub"',
+      '720p.m3u8',
+    ].join('\n');
+
+    const out = rewriteM3u8(input, BASE);
+
+    expect(out).toContain('URI="/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/live/audio/en.m3u8') + '"');
+    expect(out).toContain('URI="/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/subs/zh.m3u8') + '"');
+    expect(out).toContain('URI="/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/live/iframe.m3u8') + '"');
+    expect(out).toContain('GROUP-ID="aud",NAME="English",DEFAULT=YES,');
+  });
+
   it('直播前缀改写为 /api/live/stream?url= 形式', () => {
     const out = rewriteM3u8('https://cdn.example.com/live/seg1.ts', BASE, 0, '/api/live/stream?url=');
     expect(out).toBe('/api/live/stream?url=' + encodeURIComponent('https://cdn.example.com/live/seg1.ts'));
