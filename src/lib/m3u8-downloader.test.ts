@@ -136,7 +136,7 @@ function jobOptions(overrides: Partial<DownloadJobOptions> = {}): DownloadJobOpt
     signal: new AbortController().signal,
     pause: new PauseResumeController(),
     onProgress: () => {},
-    target: { kind: 'memory', write: async () => {}, close: async () => {}, abort: async () => {} },
+    target: { kind: 'memory', filename: 't.mp4', write: async () => {}, close: async () => {}, abort: async () => {}, savedUrl: () => null },
     ...overrides,
   };
 }
@@ -221,9 +221,48 @@ describe('runDownloadJob · 源站缺片与存储错误', () => {
       jobOptions({
         target: {
           kind: 'memory',
+          filename: 't.mp4',
           write: async (d) => void written.push(d.byteLength),
           close: async () => {},
           abort: async () => {},
+          savedUrl: () => null,
+        },
+        onProgress: (p) => progress.push(p),
+      })
+    );
+
+    expect(written).toHaveLength(3);
+    expect(progress.at(-1)?.status).toBe('done');
+  });
+
+  it('回归：分片数少于并发数时不越界取号（旧实现 8 个 worker 下必然 TypeError）', async () => {
+    // 并发 worker 同时停在循环顶部时 cursor 还是同一个值，旧写法先 await 再 ++，
+    // 于是 index 会越过 total 取到不存在的分片：parsed.segments[index - 1] undefined。
+    // 短片（分片数 ≤ 并发数）必然触发，长视频则在尾部偶发——默认 jobOptions 用
+    // concurrency: 1 掩盖了这条路径，所以这里显式开并发。
+    stubCaches();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('index.m3u8')) return new Response(PLAYLIST, { status: 200 });
+        return new Response(new Uint8Array([0x47]), { status: 200 });
+      })
+    );
+    const written: number[] = [];
+    const progress: DownloadProgress[] = [];
+
+    await runDownloadJob(
+      jobOptions({
+        concurrency: 8,
+        format: 'TS',
+        target: {
+          kind: 'memory',
+          filename: 't.ts',
+          write: async (d) => void written.push(d.byteLength),
+          close: async () => {},
+          abort: async () => {},
+          savedUrl: () => null,
         },
         onProgress: (p) => progress.push(p),
       })

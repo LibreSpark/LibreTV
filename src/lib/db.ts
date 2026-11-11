@@ -63,6 +63,12 @@ export interface DownloadTaskEntry {
   /** 输出格式 */
   format: 'TS' | 'MP4';
   status: DownloadStatus;
+  /**
+   * 是否已确认落盘：FS Access 直写为 true；内存聚合只能「发起」浏览器下载、
+   * 拿不到任何回执，故为 false（issue #977）。旧记录没有这个字段，
+   * 按 undefined 处理——等同已完成，不再补判。
+   */
+  savedToDisk?: boolean;
   finished: number;
   total: number;
   errorNum: number;

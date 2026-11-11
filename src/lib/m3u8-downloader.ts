@@ -316,12 +316,16 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
   report(current, total, 'downloading');
 
   const worker = async (): Promise<void> => {
-    while (cursor < total) {
+    while (true) {
       if (jobSignal.aborted) return;
-      await pause.waitIfPaused();
+      // 占号必须紧跟循环条件、在任何 await 之前：并发 worker 会同时停在循环顶部，
+      // 那时 cursor 还是同一个值；先 await 再 ++ 就会各自越过 total 取到不存在的
+      // 分片号——分片数 ≤ 并发数时必然发生，长视频则在尾部偶发——
+      // 表现为 parsed.segments[index - 1] 为 undefined 的 TypeError。
+      if (cursor >= total) return;
       const index = ++cursor; // 1 基
-      if (jobSignal.aborted) return;
       await pause.waitIfPaused();
+      if (jobSignal.aborted) return;
       const cached = await cache.match(new Request(chunkKey(index)));
       if (cached) {
         // 已在恢复预统计里计入，不再累加——否则续传时进度重复计数超过 100%
