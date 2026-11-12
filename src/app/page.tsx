@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
@@ -14,7 +15,7 @@ import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-his
 import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
 import { SiteFooter } from '@/components/site-footer';
 
 /**
@@ -45,6 +46,7 @@ function HomeContent() {
   const yellowFilter = useAppStore((s) => s.yellowFilter);
   const sourceHealth = useAppStore((s) => s.sourceHealth);
   const subscriptions = useAppStore((s) => s.subscriptions);
+  const recommendationsEnabled = useAppStore((s) => s.doubanEnabled);
   const [input, setInput] = useState(urlQuery);
   const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
   /** 流式搜索中已结算的源（data 就绪前用于增量渲染） */
@@ -163,28 +165,54 @@ function HomeContent() {
   const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount]);
   useEffect(() => setVisibleCount(RESULT_PAGE_SIZE), [groups]);
 
+  const sidebarLinks: { href: string; label: string; icon: IconName }[] = [
+    { href: '/', label: '首页', icon: 'home' },
+    ...(recommendationsEnabled
+      ? [{ href: urlQuery ? '/#recommendations' : '#recommendations', label: '影视推荐', icon: 'filter' as const }]
+      : []),
+    { href: '/live', label: '直播', icon: 'bolt' },
+    { href: '/about', label: '关于', icon: 'alert' },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6">
-        {/* 首屏氛围渐变 */}
-        {!urlQuery && (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[420px] -z-10"
-            style={{
-              background:
-                'radial-gradient(60% 60% at 50% 0%, rgba(35,173,229,0.10) 0%, rgba(35,173,229,0.03) 45%, transparent 75%)',
-            }}
-          />
-        )}
-
+      <div className="mx-auto grid w-full max-w-screen-2xl flex-1 gap-4 px-4 py-5 sm:px-8 sm:py-8 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-6">
+        <aside className="lg:sticky lg:top-20 lg:self-start">
+          <nav aria-label="影视导航" className="flex flex-wrap gap-1 rounded-xl border border-line bg-surface p-2 lg:flex-col">
+            {sidebarLinks.map(({ href, label, icon }) => {
+              const current = href === '/' && !urlQuery;
+              return (
+                <Link
+                  key={label}
+                  href={href}
+                  aria-current={current ? 'page' : undefined}
+                  className={cn(
+                    'flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent',
+                    current ? 'bg-accent/15 text-accent' : 'text-muted hover:bg-hover hover:text-content'
+                  )}
+                >
+                  <Icon name={icon} className="h-4 w-4 shrink-0" />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+        </aside>
+        <main className="relative min-w-0">
         {/* 搜索区 */}
-        <section className={cn('flex flex-col items-center', urlQuery ? 'mb-6' : 'mt-8 mb-8')}>
+        <section
+          className={cn(
+            'flex flex-col',
+            urlQuery
+              ? 'mb-6 items-center'
+              : 'mb-8 items-start rounded-2xl border border-line bg-gradient-to-br from-accent/15 via-surface to-page px-5 py-8 sm:px-10 sm:py-12'
+          )}
+        >
           {!urlQuery && (
-            <header className="text-center mb-6">
-              <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">LibreTV</h1>
+            <header className="mb-5">
+              <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-content">发现下一部好片</h1>
             </header>
           )}
           {urlQuery && <h1 className="sr-only">LibreTV 视频搜索</h1>}
@@ -278,6 +306,14 @@ function HomeContent() {
               />
             )}
           </div>
+          {!urlQuery && recommendationsEnabled && (
+            <a
+              href="#recommendations"
+              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium text-accent hover:bg-accent/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              浏览影视推荐 <span aria-hidden="true">↓</span>
+            </a>
+          )}
         </section>
 
         {/* 搜索结果 */}
@@ -365,15 +401,19 @@ function HomeContent() {
         )}
 
         {/* 首页推荐（有搜索时隐藏） */}
-        {!urlQuery && (
-          <RecommendSection
-            onPick={(title) => {
-              setInput(title);
-              runSearch(title);
-            }}
-          />
+        {!urlQuery && recommendationsEnabled && (
+          <div id="recommendations" className="scroll-mt-24">
+            <h2 className="mb-4 border-l-4 border-accent pl-3 text-xl font-semibold text-content sm:text-2xl">影视推荐</h2>
+            <RecommendSection
+              onPick={(title) => {
+                setInput(title);
+                runSearch(title);
+              }}
+            />
+          </div>
         )}
       </main>
+      </div>
 
       <SiteFooter />
 
