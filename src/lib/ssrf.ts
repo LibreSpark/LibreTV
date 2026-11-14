@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { LookupAddress } from 'node:dns';
 import { lookup as callbackLookup } from 'node:dns';
 import dns from 'node:dns/promises';
-import { Agent, buildConnector } from 'undici';
+import { Agent, buildConnector, fetch as undiciFetch } from 'undici';
 
 /** 去掉 URL.hostname 对 IPv6 附加的方括号（"[::1]" → "::1"） */
 function stripBrackets(host: string): string {
@@ -212,6 +212,17 @@ const GLOBAL_FETCH_WRAPPED = Symbol.for('libretv.ssrf.fetch.wrapped');
  * 安装安全的 fetch SSRF 防护包装器。
  * 仅在 runWithSSRFProtection 激活的作用域内生效，自动注入安全专用的 Agent，
  * 不影响外部全局网络通信，杜绝 monkey-patch net.Socket.prototype 造成的全局副作用。
+ *
+ * 受保护的那一路必须用**依赖自带的 undici 的 fetch** 发请求，不能把我们的 Agent
+ * 当 dispatcher 交给运行时内置 fetch：dispatcher 与 fetch 分属两个 undici 副本时，
+ * 接口并不保证兼容。实测（issue #984）：
+ * - Node 22 / 24：内置 undici 与 undici@6 同代，能接受，请求正常出网；
+ * - Node 26：内置 undici 已换到 7.x，对 6.x dispatcher 递进来的 handler 校验
+ *   `onError` 不通过，在建立连接之前就同步抛 `TypeError: fetch failed`
+ *   （cause: `InvalidArgumentError: invalid onError method`，耗时 11ms、请求根本没出网），
+ *   表现得像「网络挂了」。连不带自定义 connector 的裸 `new Agent()` 也一样失败，
+ *   说明与我们的 safeLookup 无关，纯粹是跨副本不兼容。
+ * 用同一份 undici 的 fetch 之后，运行时内置 undici 怎么换代都影响不到这里。
  */
 export function installFetchSSRFProtection(): void {
   const g = globalThis as unknown as Record<symbol, boolean>;
@@ -232,13 +243,15 @@ export function installFetchSSRFProtection(): void {
     // 在受保护作用域内，如果未提供专属 dispatcher，自动注入安全专用的 Agent
     const agent = createSSRFAgent({ allowPrivate: ctx.allowPrivate });
     try {
-      const res = await originalFetch(input, {
-        ...init,
+      // input/init 走 undici 自己的重载签名：DOM 的 Request 类型与 undici 的
+      // Request 类型在 duplex 上要求不同，直接传会报类型不兼容，这里只是同族对象互转
+      const res = await undiciFetch(input as Parameters<typeof undiciFetch>[0], {
+        ...(init as object),
         dispatcher: agent,
-      } as RequestInit);
+      });
       // 收到响应后优雅计划关闭 Agent，避免连接池跨请求保留
       agent.close().catch(() => {});
-      return res;
+      return res as unknown as Response;
     } catch (err) {
       agent.destroy().catch(() => {});
       throw err;
