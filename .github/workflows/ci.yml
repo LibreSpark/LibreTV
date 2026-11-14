@@ -8,9 +8,11 @@ name: ci
 # 而 549 条用例全绿（那些用例只断言 rejects.toThrow，挂死→超时同样抛错），
 # 没有任何自动信号会拦住它合进 main。这一层就是补那个信号缺口。
 #
-# Node 版本与 Dockerfile 的 node:22-alpine 保持同一条主线：SSRF 防护依赖
-# 内置 fetch 接受外部 undici Agent 作为 dispatcher，这条版本线是被实测过的，
-# 不要在 CI 里悄悄换大版本。
+# Node 版本跑 22 / 24 / 26 三条线，不再只跟 Dockerfile 的 node:22-alpine。
+# 理由就是 issue #984：旧实现把依赖自带的 undici Agent 当 dispatcher 交给运行时内置 fetch，
+# Node 22/24 恰好同代能跑，Node 26（内置 undici 已 7.x）在建连前就同步抛 fetch failed，
+# 而固定在 22 上的 CI 与本地全绿——只有把版本拉开，这类运行时内部的漂移才有信号。
+# （现在受保护请求已改由依赖自带的那份 undici 发出，与运行时版本解耦，矩阵是防复发。）
 
 on:
   pull_request:
@@ -23,6 +25,11 @@ permissions:
   contents: read
 
 concurrency:
+  # 这里不要按 matrix.node-version 拆组：matrix 只在 job/step 上下文可见，
+  # 写进 workflow 级 concurrency.group 会让整个 workflow 校验失败
+  # （GitHub 报 Unrecognized named-value: 'matrix'，表现为「0 个 job、run 直接红」，
+  # 而且因为触发器也解析不出来，它会不受 branches 过滤限制地到处跑）。
+  # 按 ref 去重已经够：新提交推上来，旧的整轮（含三条矩阵）一起取消。
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -30,12 +37,16 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22', '24', '26']
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - run: npm ci --no-audit --no-fund
