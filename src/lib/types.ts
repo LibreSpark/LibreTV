@@ -15,6 +15,7 @@ export interface SearchResultItem {
   sourceName: string;
   vodId: string;
   name: string;
+  alternateNames?: string[];
   pic?: string;
   typeName?: string;
   year?: string;
@@ -103,12 +104,13 @@ export interface QualityProbeResult {
 export interface SearchResponse {
   list: SearchResultItem[];
   failures: { sourceKey: string; error: string; timedOut?: boolean }[];
+  searchedTitles?: string[];
 }
 
 /** /api/search?stream=1 的 NDJSON 事件：逐源推送 + 最终聚合 */
 export type SearchStreamEvent =
   | ({ type: 'source' } & SourceSearchOutcome)
-  | { type: 'done'; list: SearchResultItem[]; failures: SearchResponse['failures'] };
+  | { type: 'done'; list: SearchResultItem[]; failures: SearchResponse['failures']; searchedTitles?: string[] };
 
 export interface DoubanResponse {
   items: DoubanItem[];
