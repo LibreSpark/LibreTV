@@ -199,4 +199,29 @@ describe('DNS Rebinding & Connection SSRF Protection (#941)', () => {
       server.close();
     }
   });
+
+  it('受保护请求必须由依赖自带的那份 undici 发出，而不是运行时内置 fetch（#984）', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('same-copy fetch');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address(); if (!addr || typeof addr === 'string') throw new Error('意外的地址'); const port = addr.port;
+
+    try {
+      const res = await runWithSSRFProtection({ allowPrivate: true }, async () => {
+        return await fetch(`http://127.0.0.1:${port}/live.m3u8`);
+      });
+      expect(await res.text()).toBe('same-copy fetch');
+      // 运行时内置 fetch 的响应必然 instanceof 全局 Response；这里断言「不是」，
+      // 等价于断言请求走的是 node_modules 里那份 undici（与 dispatcher 同一副本）。
+      // 之所以要钉这么一条：把外来 Agent 交给内置 fetch 在 Node 22/24 上照样能跑，
+      // 换到 Node 26（内置 undici 已 7.x）会在建连之前同步抛
+      // TypeError: fetch failed（cause: InvalidArgumentError: invalid onError method），
+      // 表现为「11ms 立刻失败、根本没出网」——当时所有本地用例依然全绿，什么也测不出来。
+      expect(res instanceof Response).toBe(false);
+    } finally {
+      server.close();
+    }
+  });
 });

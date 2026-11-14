@@ -41,20 +41,47 @@ export interface SafeRedirectOptions {
   headerTimeoutMs?: number;
 }
 
-/** 归一化连接层 SSRF 拦截错误为用户友好提示 */
+/** 需要原样透传的中断/超时语义：调用方靠 name 判定「超时」，不能被包装成普通错误 */
+function isAbortOrTimeout(value: unknown): boolean {
+  if (!(value instanceof Error)) return false;
+  const code = (value as { code?: string }).code;
+  return value.name === 'TimeoutError' || value.name === 'AbortError'
+    || code === 'ABORT_ERR' || code === 'UND_ERR_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT'
+    || code === 'UND_ERR_BODY_TIMEOUT';
+}
+
+/**
+ * 归一化上游请求异常：
+ * 1. 连接层 SSRF 拦截 → 换成用户可读的拒绝原因；
+ * 2. 其余 `TypeError: fetch failed` → undici 把真实原因挂在 err.cause 上
+ *    （ENOTFOUND / EAI_AGAIN / ECONNREFUSED / 证书错误 / 跨版本 dispatcher 被拒…），
+ *    只把「fetch failed」抛给用户等于没有诊断信息（issue #969 的排查就卡在这里），
+ *    所以把 cause 的 code + message 提上来，同时保留 cause 链不丢原始对象；
+ * 3. 超时/主动中断原样抛出，别让调用方的 TimeoutError 判定落空。
+ */
 function normalizeSSRFError(err: unknown): never {
+  const cause = (err as { cause?: unknown } | undefined)?.cause;
   if (
-    err &&
-    typeof err === 'object' &&
-    'cause' in err &&
-    err.cause &&
-    typeof err.cause === 'object' &&
-    'code' in err.cause &&
-    (err.cause as { code?: string }).code === 'ERR_SSRF_BLOCKED'
+    cause &&
+    typeof cause === 'object' &&
+    'code' in cause &&
+    (cause as { code?: string }).code === 'ERR_SSRF_BLOCKED'
   ) {
-    const cause = err.cause as { message?: string };
-    throw new Error(`连接目标被拒绝: ${cause.message || '目标地址被拒绝'}`);
+    const message = (cause as { message?: string }).message;
+    throw new Error(`连接目标被拒绝: ${message || '目标地址被拒绝'}`);
   }
+
+  if (cause instanceof Error && !isAbortOrTimeout(cause) && !isAbortOrTimeout(err)) {
+    const code = (cause as { code?: string }).code;
+    const detail = [code, cause.message].filter(Boolean).join(' ');
+    if (detail) {
+      const wrapped = new Error(`上游请求失败: ${detail}`, { cause: err });
+      // 原始 cause 上的 code 同时挂到顶层，方便按码分类统计与调用方判断
+      if (code) (wrapped as Error & { code?: string }).code = code;
+      throw wrapped;
+    }
+  }
+
   throw err;
 }
 
