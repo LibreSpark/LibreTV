@@ -1,6 +1,6 @@
 /** 服务端上游请求工具：超时、重试、安全跳转、JSON 解析 */
 
-import { checkLiveUrlAllowed, checkUpstreamAllowed, runWithSSRFProtection } from './ssrf';
+import { allowLivePrivate, checkLiveUrlAllowed, checkUpstreamAllowed, runWithSSRFProtection } from './ssrf';
 
 export interface FetchOptions extends RequestInit {
   timeoutMs?: number;
@@ -13,6 +13,9 @@ export interface FetchOptions extends RequestInit {
   /**
    * 直播场景放行内网地址（自建 IPTV）：仅在部署者设置 LIVE_ALLOW_PRIVATE=1 时生效。
    * 校验复用 checkLiveUrlAllowed，与直播流代理使用同一把尺子。
+   *
+   * 本标志只选择「逐跳校验用哪把尺子」；连接层是否放行内网另由 allowLivePrivate()
+   * 决定（#980）。两者不是同一个开关，别再把本标志原样传给受保护作用域。
    */
   allowPrivate?: boolean;
 }
@@ -31,6 +34,9 @@ export interface SafeRedirectOptions {
   /**
    * 直播场景放行内网地址（自建 IPTV）：仅在部署者设置 LIVE_ALLOW_PRIVATE=1 时生效。
    * 校验复用 checkLiveUrlAllowed，与直播流代理使用同一把尺子。
+   *
+   * 本标志只选择「逐跳校验用哪把尺子」；连接层是否放行内网另由 allowLivePrivate()
+   * 决定（#980）。两者不是同一个开关，别再把本标志原样传给受保护作用域。
    */
   allowPrivate?: boolean;
   /**
@@ -96,7 +102,15 @@ export async function fetchWithSafeRedirects(
   options: SafeRedirectOptions = {}
 ): Promise<FetchResult> {
   const { allowPrivate = false, headerTimeoutMs } = options;
-  return runWithSSRFProtection({ allowPrivate }, async () => {
+  // 两个角色必须分开（#980）：allowPrivate 只决定「逐跳用哪把尺子」（下方
+  // checkLiveUrlAllowed / checkUpstreamAllowed）；连接层是否放行内网要另看部署
+  // 开关 LIVE_ALLOW_PRIVATE。此前把 allowPrivate 原样传进受保护作用域，而直播
+  // 四个入口都无条件传 true，等于把 #941 那层连接时 DNS 校验在直播路径上整层
+  // 关掉——预检放行、连接时不再复查，rebinding 域名即可读回内网响应体。
+  // 取交集而非直接用开关：点播路径（allowPrivate=false）不受该开关影响，仍与
+  // 修复前一样严格，开关只作用于本来就声明走直播口径的调用方。
+  const connectAllowPrivate = allowPrivate && allowLivePrivate();
+  return runWithSSRFProtection({ allowPrivate: connectAllowPrivate }, async () => {
     let current = url;
     // headerTimeout 超时即 abort 内部 controller；外部 signal（调用方死线/客户端断开）链入同一 controller
     const controller = new AbortController();
@@ -136,6 +150,8 @@ export async function fetchUpstream(url: string, options: FetchOptions = {}): Pr
 /** 同 fetchUpstream，额外返回重定向后的最终 URL */
 export async function fetchUpstreamWithMeta(url: string, options: FetchOptions = {}): Promise<FetchResult> {
   const { timeoutMs = 8000, retries = 0, safeRedirects = true, allowPrivate = false, ...init } = options;
+  // 与 fetchWithSafeRedirects 同一口径（#980）：连接层放行内网＝直播口径 + 部署开关
+  const connectAllowPrivate = allowPrivate && allowLivePrivate();
   // 外部 signal（调用方的总死线中断）与单次超时合并：任一触发即中断请求
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = init.signal
@@ -146,7 +162,7 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
     try {
       if (!safeRedirects) {
         try {
-          const res = await runWithSSRFProtection({ allowPrivate }, () =>
+          const res = await runWithSSRFProtection({ allowPrivate: connectAllowPrivate }, () =>
             fetch(url, {
               ...init,
               signal,
