@@ -25,7 +25,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ matrix.node-version }}
+  # 这里不要按 matrix.node-version 拆组：matrix 只在 job/step 上下文可见，
+  # 写进 workflow 级 concurrency.group 会让整个 workflow 校验失败
+  # （GitHub 报 Unrecognized named-value: 'matrix'，表现为「0 个 job、run 直接红」，
+  # 而且因为触发器也解析不出来，它会不受 branches 过滤限制地到处跑）。
+  # 按 ref 去重已经够：新提交推上来，旧的整轮（含三条矩阵）一起取消。
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
