@@ -13,6 +13,7 @@ import { QualityBadge } from './quality-badge';
 import { useQualityProbe } from './use-quality-probe';
 import { useInView } from './use-in-view';
 import { addFavorite, db, removeFavorite } from '@/lib/db';
+import doubanPosters from '@/data/douban-posters.json';
 
 // —— 跨源同名聚合 ——
 
@@ -226,7 +227,7 @@ export function AggregatedCard({
         }}
       >
         {showImg ? (
-          <div className="relative flex-shrink-0 w-[105px] sm:w-[120px] aspect-[2/3] bg-chip">
+          <div className="lg-media-frame relative flex-shrink-0 w-[105px] sm:w-[120px] aspect-[2/3] bg-chip">
             <SmartImage
               url={group.pic}
               mode={imageProxyMode}
@@ -470,57 +471,17 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
   );
 }
 
-/** 豆瓣推荐卡片（无来源徽章；点击行为由首页注入，打开影片详情） */
+/** 豆瓣推荐卡片：优先使用豆瓣实时封面，失败时回退到同步的豆瓣海报索引。 */
 export function DoubanCard({
   item,
   onClick,
-  enableTmdbFallback = false,
-  isTv = false,
 }: {
-  item: { title: string; cover: string; rating?: string };
+  item: { id: string; title: string; cover: string; rating?: string };
   onClick: () => void;
-  /** 仅豆瓣热门与影视热榜启用，Bangumi 等其它入口保持原行为 */
-  enableTmdbFallback?: boolean;
-  isTv?: boolean;
 }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
-  const [imgFailed, setImgFailed] = useState(false);
-  const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
-  const [tmdbFailed, setTmdbFailed] = useState(false);
-
-  useEffect(() => {
-    setImgFailed(false);
-    setTmdbPoster(null);
-    setTmdbFailed(false);
-  }, [item.cover, item.title, isTv]);
-
-  const loadTmdbFallback = async () => {
-    if (!enableTmdbFallback || tmdbPoster || tmdbFailed) {
-      setImgFailed(true);
-      return;
-    }
-    try {
-      const params = new URLSearchParams({ title: item.title, type: isTv ? 'tv' : 'movie' });
-      const response = await fetch(`/api/poster-fallback?${params.toString()}`);
-      if (!response.ok) throw new Error('TMDB fallback unavailable');
-      const data = (await response.json()) as { poster?: string | null };
-      if (data.poster) {
-        setTmdbPoster(data.poster);
-        return;
-      }
-    } catch {
-      // TMDB 不可用时回到原占位图，不影响列表和点击播放
-    }
-    setTmdbFailed(true);
-    setImgFailed(true);
-  };
-
-  // 原始数据本身没有封面时也直接尝试 TMDB；有封面时仍严格等原图候选链失败后再兜底
-  useEffect(() => {
-    if (!item.cover && enableTmdbFallback) void loadTmdbFallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.cover, item.title, isTv, enableTmdbFallback]);
+  const indexedDoubanPoster = doubanPosters[item.id as keyof typeof doubanPosters];
 
   return (
     <div
@@ -530,30 +491,33 @@ export function DoubanCard({
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
-          // 阻止空格触发页面滚动（AggregatedCard 已是此写法，此处对齐）
           e.preventDefault();
           onClick();
         }
       }}
     >
-      <div className="relative aspect-[2/3] bg-chip">
-        {tmdbPoster ? (
-          // TMDB 图片为 HTTPS 静态 CDN 地址；只在豆瓣原图候选链耗尽后显示
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={tmdbPoster} alt={item.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-        ) : item.cover && !imgFailed ? (
+      <div className="lg-media-frame relative aspect-[2/3] bg-chip">
+        {item.cover ? (
           <SmartImage
             url={item.cover}
+            fallbackUrl={indexedDoubanPoster}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            onExhausted={loadTmdbFallback}
+          />
+        ) : indexedDoubanPoster ? (
+          <SmartImage
+            url={indexedDoubanPoster}
+            mode={imageProxyMode}
+            customProxy={customImageProxy}
+            alt={item.title}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-chip">
             <svg className="w-8 h-8 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1-1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1-1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1-1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1-1h-1a1 1 0 01-1-1V6z" />
             </svg>
           </div>
         )}

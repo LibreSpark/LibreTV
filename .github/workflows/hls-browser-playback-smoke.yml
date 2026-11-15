@@ -1,0 +1,46 @@
+name: HLS Browser Playback Smoke
+
+on:
+  push:
+    branches:
+      - feature/homepage-cinema-lobby-order-2026-11-11
+    paths:
+      - 'scripts/hls-browser-playback-smoke.mjs'
+      - '.github/workflows/hls-browser-playback-smoke.yml'
+      - 'src/lib/m3u8-downloader.ts'
+      - 'src/lib/m3u8-parse.ts'
+      - 'src/components/player-shell.tsx'
+      - 'src/components/live-player.tsx'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/hls-browser-playback-smoke.mjs'
+      - '.github/workflows/hls-browser-playback-smoke.yml'
+      - 'src/lib/m3u8-downloader.ts'
+      - 'src/lib/m3u8-parse.ts'
+      - 'src/components/player-shell.tsx'
+      - 'src/components/live-player.tsx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-hls-playback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install project dependencies
+        run: npm ci
+      - name: Install isolated Playwright runner
+        run: npm install --no-save --package-lock=false playwright@1.55.0
+      - name: Install Google Chrome with proprietary media codecs
+        run: npx playwright install --with-deps chrome
+      - name: Verify real browser HLS playback
+        run: node scripts/hls-browser-playback-smoke.mjs

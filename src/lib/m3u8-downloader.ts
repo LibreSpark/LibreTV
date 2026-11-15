@@ -51,7 +51,7 @@ export interface DownloadProgress {
   current: number;
   total: number;
   percentage: number;
-  status: 'downloading' | 'processing' | 'done' | 'error';
+  status: 'validating' | 'downloading' | 'merging' | 'done' | 'error';
   message?: string;
 }
 
@@ -197,9 +197,20 @@ async function runStreamingJob(ctx: {
   report: (current: number, total: number, status: DownloadProgress['status']) => void;
 }): Promise<void> {
   const { parsed, format, aesKey, target, pause, signal, total, report } = ctx;
-  // MP4 转封装同样是流式的：push 一片立刻产出 fMP4 片段写出，无需聚合整集
+  if (parsed.initSegment && format !== 'MP4') {
+    throw new Error('该来源是 fMP4，必须选择 MP4 输出格式');
+  }
+  // 原生 fMP4：先写 EXT-X-MAP 初始化段，再按清单顺序拼接 moof/mdat。
+  // TS → MP4：继续使用 mux.js 转封装器，不把 TS 字节伪装成 MP4。
   const transmuxer =
-    format === 'MP4' ? new StreamingTransmuxer(target, { durationSeconds: parsed.totalDuration }) : undefined;
+    format === 'MP4' && !parsed.initSegment
+      ? new StreamingTransmuxer(target, { durationSeconds: parsed.totalDuration })
+      : undefined;
+  if (parsed.initSegment) {
+    const init = await fetchSegmentWithRetry(parsed.initSegment, 0, signal);
+    if (!init) return;
+    await target.write(new Uint8Array(init));
+  }
   for (let i = 1; i <= total; i++) {
     if (signal.aborted) return;
     await pause.waitIfPaused();
@@ -240,6 +251,130 @@ function isMixedContentBlocked(target: string): boolean {
 }
 
 /**
+ * Download a single progressive media file (MP4/WebM/MKV, etc.) through the same
+ * task lifecycle as HLS. Progress is measured in bytes; when Content-Length is
+ * absent the UI still receives the number of bytes written without inventing a
+ * percentage. Browser CORS policy remains authoritative.
+ */
+export async function runDirectDownloadJob(opts: DownloadJobOptions): Promise<void> {
+  const { url, signal, pause, onProgress, target } = opts;
+  const report = (current: number, total: number, status: DownloadProgress['status'], message?: string) => {
+    onProgress({ current, total, percentage: total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0, status, message });
+  };
+
+  report(0, 0, 'validating');
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url, typeof location === 'undefined' ? 'https://libretv.invalid' : location.href);
+  } catch {
+    throw new Error('下载地址无效');
+  }
+  if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+    throw new Error('仅支持 HTTP(S) 视频地址');
+  }
+  if (typeof location !== 'undefined' && location.protocol === 'https:' && parsedUrl.protocol === 'http:') {
+    throw new Error('该来源是 HTTP 地址，HTTPS 页面无法直连下载（混合内容被拦截），请更换 HTTPS 来源');
+  }
+
+  // 只对响应头设置连接超时；不能把 60 秒总时限套在整个文件流上，
+  // 否则大电影/慢速网络会在下载 60 秒后被误杀。
+  const requestController = new AbortController();
+  const abortRequest = () => requestController.abort(signal.reason);
+  if (signal.aborted) abortRequest();
+  else signal.addEventListener('abort', abortRequest, { once: true });
+  const headerTimeout = setTimeout(
+    () => requestController.abort(new DOMException('Request timed out', 'TimeoutError')),
+    60_000,
+  );
+  let response: Response;
+  try {
+    response = await fetch(parsedUrl.href, {
+      signal: requestController.signal,
+      headers: { Accept: 'video/*,application/octet-stream,application/mp4,*/*;q=0.5' },
+    });
+  } catch (error) {
+    signal.removeEventListener('abort', abortRequest);
+    if (signal.aborted) throw error;
+    if (requestController.signal.reason instanceof DOMException && requestController.signal.reason.name === 'TimeoutError') {
+      throw new Error('视频下载请求超时，请重试或更换来源');
+    }
+    throw new Error('无法直连该视频来源（可能是跨域 CORS 限制或域名不可达），请更换来源或使用支持跨域的媒体源');
+  } finally {
+    clearTimeout(headerTimeout);
+  }
+  if (!response.ok) {
+    signal.removeEventListener('abort', abortRequest);
+    throw new Error(`视频源返回 HTTP ${response.status}`);
+  }
+  if (!response.body) {
+    signal.removeEventListener('abort', abortRequest);
+    throw new Error('浏览器未提供可读取的视频数据流');
+  }
+
+  const contentType = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  const allowedType = !contentType || contentType.startsWith('video/') ||
+    contentType === 'application/octet-stream' || contentType === 'application/mp4' ||
+    contentType === 'application/x-matroska' || contentType === 'binary/octet-stream';
+  if (!allowedType) {
+    signal.removeEventListener('abort', abortRequest);
+    throw new Error(`来源返回的不是视频文件（${contentType}）`);
+  }
+
+  const lengthHeader = response.headers.get('content-length');
+  const parsedLength = lengthHeader ? Number(lengthHeader) : 0;
+  const total = Number.isSafeInteger(parsedLength) && parsedLength > 0 ? parsedLength : 0;
+  let current = 0;
+  const reader = response.body.getReader();
+  report(0, total, 'downloading');
+  try {
+    while (true) {
+      if (signal.aborted) {
+        await reader.cancel().catch(() => undefined);
+        return;
+      }
+      await pause.waitIfPaused();
+      let readTimer: ReturnType<typeof setTimeout> | undefined;
+      let next: ReadableStreamReadResult<Uint8Array>;
+      try {
+        next = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => {
+            readTimer = setTimeout(() => {
+              const timeout = new DOMException('No media data received for 60 seconds', 'TimeoutError');
+              requestController.abort(timeout);
+              reject(timeout);
+            }, 60_000);
+          }),
+        ]);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+          throw new Error('视频下载已连续 60 秒没有收到新数据，请检查网络或更换来源');
+        }
+        throw error;
+      } finally {
+        if (readTimer) clearTimeout(readTimer);
+      }
+      if (next.done) break;
+      if (!next.value?.byteLength) continue;
+      await target.write(next.value);
+      current += next.value.byteLength;
+      report(current, total, 'downloading');
+    }
+    if (total > 0 && current !== total) {
+      throw new Error(`视频下载不完整：预期 ${total} 字节，实际收到 ${current} 字节`);
+    }
+    await target.close();
+    report(current, total || current, 'done');
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+    signal.removeEventListener('abort', abortRequest);
+  }
+}
+
+/**
  * 执行一次整集下载。调用方（DownloadManager）负责：
  * 在用户手势内 pickSaveTarget、构造 AbortSignal/PauseResumeController、
  * 更新 Dexie 任务状态；本函数只负责解析 → 并发下载 → 顺序写出。
@@ -265,6 +400,7 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
   };
 
   // —— 解析（重试 2 次） ——
+  report(0, 0, 'validating');
   // 代理模式：m3u8 经 /api/proxy 拉取，代理会把内容里的分片/key 一并重写为代理
   // 地址，因此后续分片请求自动同源——这是直连被 CORS / 混合内容拦下时的兜底
   // （与播放器一致：player-shell 遇致命直连错误也会改走代理）。
@@ -284,6 +420,7 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
     throw new Error(describeParseFailure(url, lastErr));
   }
   if (parsed.byterange) throw new Error('该集使用 BYTERANGE 分片，暂不支持下载');
+  if (parsed.initSegment && format !== 'MP4') throw new Error('该来源是 fMP4，必须选择 MP4 输出格式');
 
   const total = parsed.segments.length;
   report(0, total, 'downloading');
@@ -291,9 +428,23 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
   // —— AES key 预取 ——
   let aesKey: ArrayBuffer | undefined;
   if (parsed.aesConf) {
-    const res = await fetch(parsed.aesConf.uri, { signal: jobSignal });
+    let res: Response;
+    try {
+      res = await fetch(parsed.aesConf.uri, {
+        signal: AbortSignal.any([AbortSignal.timeout(SEGMENT_TIMEOUT_MS), jobSignal]),
+      });
+    } catch (error) {
+      if (jobSignal.aborted) throw error;
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        throw new Error('解密密钥请求超时，请重试或更换来源');
+      }
+      throw new Error(`解密密钥请求失败：${error instanceof Error ? error.message : String(error)}`);
+    }
     if (!res.ok) throw new Error(`解密密钥加载失败：HTTP ${res.status}`);
     aesKey = await res.arrayBuffer();
+    if (aesKey.byteLength !== 16) {
+      throw new Error(`AES-128 密钥长度异常：应为 16 字节，实际收到 ${aesKey.byteLength} 字节`);
+    }
   }
 
   // —— 无 Cache Storage（HTTP 页面 / 老浏览器）：退化为串行「边下边写」 ——
@@ -354,8 +505,25 @@ export async function runDownloadJob(opts: DownloadJobOptions): Promise<void> {
   if (jobSignal.aborted) return;
 
   // —— 顺序写出（转封装 / 拼接） ——
-  report(total, total, 'processing');
-  if (format === 'MP4') {
+  report(total, total, 'merging');
+  if (parsed.initSegment) {
+    // 原生 fMP4 不能再送入 TS transmuxer；初始化段 + 分片本身就是 fragmented MP4。
+    const init = await fetchSegmentWithRetry(parsed.initSegment, 0, jobSignal);
+    if (!init) return;
+    await target.write(new Uint8Array(init));
+    for (let i = 1; i <= total; i++) {
+      if (jobSignal.aborted) return;
+      await pause.waitIfPaused();
+      const resp = await cache.match(new Request(chunkKey(i)));
+      if (!resp) throw new Error(`分片 ${i} 缓存丢失，请重试`);
+      let data = await resp.arrayBuffer();
+      if (aesKey && parsed.aesConf) {
+        data = await decryptSegment(data, aesKey, parsed.aesConf.iv, parsed.mediaSequence, i - 1);
+      }
+      await target.write(new Uint8Array(data));
+    }
+    await target.close();
+  } else if (format === 'MP4') {
     // 传入整集时长：mux.js 恒把 moov 时长写成 0xFFFFFFFF（timescale 90000
     // → 播放器显示 13:15:21），必须在写出 initSegment 前回填真实值
     const transmuxer = new StreamingTransmuxer(target, { durationSeconds: parsed.totalDuration });

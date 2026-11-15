@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { GlassPanel } from '@/components/ui/glass';
 import { Icon } from './icon';
 
 /**
@@ -186,7 +187,7 @@ export function Drawer({
           aria-hidden
         />
       )}
-      <div
+      <GlassPanel
         ref={panelRef}
         role="dialog"
         aria-modal={modal || undefined}
@@ -225,7 +226,7 @@ export function Drawer({
           {children}
         </div>
         {footer && <div className="shrink-0 border-t border-line bg-surface-raised px-4 py-3">{footer}</div>}
-      </div>
+      </GlassPanel>
     </div>
   );
 }

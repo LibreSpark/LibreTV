@@ -91,6 +91,18 @@ def initialize() -> None:
         c.execute("UPDATE collector_jobs SET status='cancelled',lease_owner=NULL,lease_until=NULL,updated_at=? WHERE status='cancel_requested' AND lease_until IS NOT NULL AND lease_until<=?", (now, now))
         for row in cancelled:
             event(c, row["id"], "cancelled_after_worker_lease_expired", {})
+        retired = c.execute(
+            "SELECT id,job_type FROM collector_jobs WHERE job_type IN ('seedhub_sync','seedhub_detail_sync') AND status NOT IN ('succeeded','partial','failed','cancelled')"
+        ).fetchall()
+        c.execute(
+            """UPDATE collector_jobs SET status='cancelled',lease_owner=NULL,lease_until=NULL,
+               cancelled_at=COALESCE(cancelled_at,?),updated_at=?
+               WHERE job_type IN ('seedhub_sync','seedhub_detail_sync')
+               AND status NOT IN ('succeeded','partial','failed','cancelled')""",
+            (now, now),
+        )
+        for row in retired:
+            event(c, row["id"], "seedhub_collection_retired", {"job_type": row["job_type"]})
 
 
 def require_auth(authorization: str | None) -> None:
@@ -430,13 +442,40 @@ def register_candidate_playback(candidate_id: str, evidence: dict) -> dict:
 def api_submit_job(payload: dict, authorization: str | None = Header(default=None)):
     require_auth(authorization)
     request = payload.get("payload")
-    if not isinstance(request,dict) or not isinstance(request.get("url"),str):
-        raise HTTPException(status_code=400,detail="A crawl payload with URL is required")
+    job_type = str(payload.get("job_type") or "crawl")
+    if not isinstance(request,dict):
+        raise HTTPException(status_code=400,detail="A job payload is required")
+    if job_type == "discover":
+        if "url" in request:
+            raise HTTPException(status_code=400,detail="Discovery jobs use the fixed system directory")
+    elif job_type == "crawl":
+        if not isinstance(request.get("url"),str):
+            raise HTTPException(status_code=400,detail="A crawl payload with URL is required")
+    else:
+        raise HTTPException(status_code=400,detail="Unsupported job type; SeedHub collection has been retired")
     key = str(payload.get("idempotency_key") or "")
     try:
-        return submit_job("crawl",request,key)
+        return submit_job(job_type,request,key)
     except ValueError as exc:
         raise HTTPException(status_code=400,detail=str(exc))
+
+
+@router.get("/v1/sites")
+def api_sites(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """Return only the persisted public-site discovery allowlist for bounded Agent selection."""
+    require_auth(authorization)
+    with connect() as conn:
+        table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sites'").fetchone()
+        if not table:
+            return {"sites": []}
+        rows = conn.execute(
+            "SELECT host,title,url,directory,discovered_at FROM sites ORDER BY discovered_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return {"sites": [dict(row) for row in rows]}
 
 
 @router.get("/v1/jobs")
@@ -516,11 +555,11 @@ def api_upsert_resource(payload: dict, authorization: str | None = Header(defaul
 def api_search_resources(q: str = "", verified_only: bool = True, limit: int = Query(default=30,ge=1,le=100), authorization: str | None = Header(default=None)):
     require_auth(authorization)
     with connect() as c:
-        sql = "SELECT * FROM registry_resources WHERE 1=1"
+        sql = "SELECT r.*,s.name AS source_name,s.host AS source_host FROM registry_resources r LEFT JOIN registry_sources s ON s.id=r.source_id WHERE 1=1"
         args: list[Any] = []
-        if verified_only: sql += " AND validation_state='validated' AND playback_state='PLAYER_CONFIRMED' AND access_state='PUBLIC'"
-        if q.strip(): sql += " AND (title LIKE ? OR resource_key LIKE ?)"; args.extend([f"%{q[:100]}%",f"%{q[:100]}%"])
-        rows=c.execute(sql+" ORDER BY updated_at DESC LIMIT ?",(*args,limit)).fetchall()
+        if verified_only: sql += " AND r.validation_state='validated' AND r.playback_state='PLAYER_CONFIRMED' AND r.access_state='PUBLIC' AND r.resource_type='DIRECT_MEDIA' AND r.media_format IN ('hls','mp4','webm')"
+        if q.strip(): sql += " AND (r.title LIKE ? OR r.resource_key LIKE ?)"; args.extend([f"%{q[:100]}%",f"%{q[:100]}%"])
+        rows=c.execute(sql+" ORDER BY r.updated_at DESC LIMIT ?",(*args,limit)).fetchall()
     return {"resources":[dict(r) for r in rows]}
 
 

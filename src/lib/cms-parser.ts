@@ -51,22 +51,33 @@ export function parseSearchList(
  * 部分源（如量子 lziapi、非凡 ffzy）第一条线路是网页中转页（…/share/xxx，不可播），
  * 真实 m3u8 在后面的线路里，因此优先取包含 m3u8 直链的线路；均无 m3u8 时回退第一条。
  */
-export function extractEpisodesFromPlayUrl(playUrl: string): string[] {
+export function extractEpisodeItemsFromPlayUrl(playUrl: string): { title: string; url: string }[] {
   if (!playUrl) return [];
+  const separatorChar = String.fromCharCode(36);
   const groups = playUrl
-    .split('$$$')
+    .split(separatorChar.repeat(3))
     .map((group) =>
       group
         .split('#')
-        .map((ep) => {
-          const parts = ep.split('$');
-          return parts.length > 1 ? parts[1] : '';
+        .map((episode) => {
+          const separator = episode.indexOf(separatorChar);
+          if (separator < 0) return null;
+          const title = episode.slice(0, separator).trim();
+          const url = episode.slice(separator + 1).trim();
+          return url.startsWith('http://') || url.startsWith('https://')
+            ? { title, url }
+            : null;
         })
-        .filter((url) => url.startsWith('http://') || url.startsWith('https://'))
+        .filter((episode): episode is { title: string; url: string } => episode !== null)
     )
-    .filter((eps) => eps.length > 0);
+    .filter((episodes) => episodes.length > 0);
   if (groups.length === 0) return [];
-  return groups.find((eps) => eps.some((url) => url.includes('.m3u8'))) ?? groups[0];
+  return groups.find((episodes) => episodes.some((episode) => episode.url.includes('.m3u8'))) ?? groups[0];
+}
+
+/** 兼容旧播放器的 URL 列表接口；分集名称通过 VideoDetail.episodeItems 作为可选字段提供。 */
+export function extractEpisodesFromPlayUrl(playUrl: string): string[] {
+  return extractEpisodeItemsFromPlayUrl(playUrl).map((episode) => episode.url);
 }
 
 /** 从简介文本中兜底提取 m3u8 链接 */
@@ -74,6 +85,39 @@ export function extractM3u8FromText(text: string): string[] {
   if (!text) return [];
   const matches = text.match(M3U8_PATTERN) || [];
   return matches.map((link) => link.replace(/^\$/, ''));
+}
+
+/** 根据 CMS 分类识别电影；不能只依赖「电影」二字，因为 Apple CMS 常用「动作片/科幻片」等类型名。 */
+export function isMovieType(typeName: string | undefined, episodeCount = 0): boolean {
+  const type = (typeName ?? '').trim().toLowerCase();
+  if (/电视剧|连续剧|剧集|番剧|动漫|动画番剧|综艺|纪录剧|tv\s*series|series|anime|variety/.test(type)) return false;
+  if (/电影|movie|film|动作片|喜剧片|爱情片|科幻片|恐怖片|剧情片|战争片|犯罪片|悬疑片|惊悚片|动画电影|短片|院线/.test(type)) return true;
+  // 分类缺失或第三方自定义分类时，只有单条播放地址才按单片处理；
+  // 多集资源默认展示分集，避免把未知类型的剧集隐藏掉。
+  return episodeCount <= 1;
+}
+
+/** 将 CMS 简介中的 HTML 转为纯文本，不把不可信标记交给 React 渲染。 */
+export function cmsDescriptionToText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value
+    .replace(/<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, ' ')
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*\/(?:p|div|li|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || undefined;
 }
 
 /** 详情 JSON 响应 → 统一详情 */
@@ -86,16 +130,64 @@ export function parseDetail(
     throw new Error('获取到的详情内容无效');
   }
   const vod = d.list[0];
-  let episodes = extractEpisodesFromPlayUrl(String(vod.vod_play_url ?? ''));
+  const episodeItems = extractEpisodeItemsFromPlayUrl(String(vod.vod_play_url ?? ''));
+  // Optional CMS extension: per-episode records can carry their own still and metadata.
+  // Match by the exact episode URL; never infer artwork from the title-level vod_pic or array position.
+  const rawEpisodeMetadata = Array.isArray(vod.vod_episode_list)
+    ? vod.vod_episode_list.filter(
+        (entry): entry is Record<string, unknown> =>
+          Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
+      )
+    : [];
+  const episodeItemsWithMetadata = episodeItems.map((episode) => {
+    const metadata = rawEpisodeMetadata.find((entry) => {
+      const entryUrl = str(entry.url) || str(entry.play_url) || str(entry.vod_play_url);
+      return entryUrl === episode.url;
+    });
+    if (!metadata) return episode;
+    const stillPath = str(metadata.still_path);
+    const stillPathUrl = stillPath
+      ? (/^https?:\/\//i.test(stillPath)
+        ? stillPath
+        : /^\/[^?#\s]+$/.test(stillPath)
+          ? `https://image.tmdb.org/t/p/w500${stillPath}`
+          : undefined)
+      : undefined;
+    const rawStill = stillPathUrl
+      || str(metadata.screenshot_url)
+      || str(metadata.screenshot)
+      || str(metadata.image_url)
+      || str(metadata.image);
+    const image = rawStill && /^https?:\/\/[^\s]+$/i.test(rawStill) ? rawStill : undefined;
+    const episodeName = str(metadata.episode_name) || str(metadata.name) || str(metadata.title);
+    const description = cmsDescriptionToText(metadata.description ?? metadata.overview ?? metadata.vod_content);
+    const duration = str(metadata.duration) || str(metadata.runtime);
+    const capturedAt = str(metadata.image_captured_at) || str(metadata.captured_at) || str(metadata.extracted_at);
+    return {
+      ...episode,
+      ...(image ? {
+        image,
+        imageSourceUrl: image,
+        imageSourceEpisodeUrl: episode.url,
+        ...(capturedAt ? { imageCapturedAt: capturedAt } : {}),
+      } : {}),
+      ...(episodeName ? { episodeName } : {}),
+      ...(description ? { description } : {}),
+      ...(duration ? { duration } : {}),
+    };
+  });
+  let episodes = episodeItems.map((episode) => episode.url);
   if (episodes.length === 0) {
     episodes = extractM3u8FromText(String(vod.vod_content ?? ''));
   }
   return {
     episodes,
+    ...(episodeItems.length > 0 ? { episodeItems: episodeItemsWithMetadata } : {}),
     videoInfo: {
       title: str(vod.vod_name),
+      originalTitle: str(vod.vod_en),
       cover: str(vod.vod_pic),
-      desc: str(vod.vod_content),
+      desc: cmsDescriptionToText(vod.vod_content),
       typeName: str(vod.type_name),
       year: str(vod.vod_year),
       area: str(vod.vod_area),

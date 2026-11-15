@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Apply host-level Docker egress filtering for the Scrapling collector only.
+# Apply host-level Docker egress filtering for both Scrapling API and worker containers.
 # Run on the Docker host as root after creating the Compose network.
-# Override COLLECTOR_CIDR if SCRAPLING_NETWORK_SUBNET / static IP is changed.
-COLLECTOR_CIDR="${COLLECTOR_CIDR:-172.30.60.10/32}"
+# The /31 covers API .10 and worker .11; override if either static IP changes.
+COLLECTOR_CIDR="${COLLECTOR_CIDR:-172.30.60.10/31}"
 CHAIN="LIBRETV-SCRAPLING-EGRESS"
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -52,7 +52,7 @@ done
 iptables -w -A "$CHAIN" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
 iptables -w -A "$CHAIN" -j RETURN
 
-# Replace any previous jump for this collector source without disturbing
+# Replace any previous jump for both collector containers without disturbing
 # unrelated DOCKER-USER rules.
 while iptables -w -C DOCKER-USER -s "$COLLECTOR_CIDR" -j "$CHAIN" 2>/dev/null; do
   iptables -w -D DOCKER-USER -s "$COLLECTOR_CIDR" -j "$CHAIN"
@@ -60,7 +60,7 @@ done
 iptables -w -I DOCKER-USER 1 -s "$COLLECTOR_CIDR" -j "$CHAIN"
 
 # DOCKER-USER only sees forwarded packets. Block direct access from the
-# collector to host-local services as well (bridge gateway / host interfaces).
+# API and worker containers to host-local services as well (bridge gateway / host interfaces).
 while iptables -w -C INPUT -s "$COLLECTOR_CIDR" -j DROP 2>/dev/null; do
   iptables -w -D INPUT -s "$COLLECTOR_CIDR" -j DROP
 done
@@ -70,7 +70,7 @@ iptables -w -I INPUT 1 -s "$COLLECTOR_CIDR" -j DROP
 iptables -w -C DOCKER-USER -s "$COLLECTOR_CIDR" -j "$CHAIN"
 iptables -w -C INPUT -s "$COLLECTOR_CIDR" -j DROP
 
-echo "Verified IPv4 egress restrictions for Scrapling collector $COLLECTOR_CIDR."
+echo "Verified IPv4 egress restrictions for Scrapling API and worker $COLLECTOR_CIDR."
 echo "The collector may reach public IPv4 destinations, but private/reserved ranges are blocked."
 echo "IPv6 is disabled in the collector container by docker-compose.yml."
 echo "To remove these rules: iptables -D DOCKER-USER -s $COLLECTOR_CIDR -j $CHAIN; iptables -D INPUT -s $COLLECTOR_CIDR -j DROP; iptables -F $CHAIN; iptables -X $CHAIN"

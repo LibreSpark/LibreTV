@@ -84,17 +84,22 @@ export function FridayStyles() {
           border: 1px solid rgba(255,255,255,.27);
           border-radius: 25px;
           color: #fff;
-          background:
-            linear-gradient(145deg,rgba(255,255,255,.15),rgba(255,255,255,.035) 45%,rgba(255,255,255,.075)),
-            rgba(12,15,25,.83);
-          -webkit-backdrop-filter: blur(25px) saturate(165%);
-          backdrop-filter: blur(25px) saturate(165%);
-          box-shadow: 0 18px 55px rgba(0,0,0,.32),
-            inset 0 1px 0 rgba(255,255,255,.3),
-            inset 0 -1px 0 rgba(255,255,255,.06);
+          background: rgba(12,15,25,.10);
+          -webkit-backdrop-filter: blur(2px) saturate(108%);
+          backdrop-filter: blur(2px) saturate(108%);
+          box-shadow: 0 8px 24px rgba(0,0,0,.16),
+            inset 0 1px 0 rgba(255,255,255,.10);
           transform-origin: bottom right;
           animation: friday-capsule-in .42s cubic-bezier(.18,.82,.2,1);
           pointer-events: auto;
+        }
+
+        .friday-root .friday-panel[data-liquid-glass-engine="ready"] {
+          background: transparent !important;
+          border-color: transparent !important;
+          box-shadow: none !important;
+          -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
         }
 
         @keyframes friday-capsule-in {

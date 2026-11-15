@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { V4HomepageHeader } from '@/components/home/V4HomepageHeader';
-import { HomeInlinePlayer } from '@/components/home/HomeInlinePlayer';
+import { SourceManagerDrawer } from '@/components/source-manager';
+import { Icon } from '@/components/icon';
 import { requestShowDownloadManager } from '@/components/download-manager';
 import { AnimeRecommendationSection, RecommendSection } from '@/components/douban-section';
 import { DoubanCard } from '@/components/video-card';
@@ -15,8 +17,9 @@ import { db, removeFavorite, type FavoriteEntry, type HistoryEntry } from '@/lib
 import { isInDisabledSubscription, isSourceDisabled, resolveSource, useAppStore } from '@/lib/store';
 import type { DoubanItem, SearchResultItem, SourceConfig } from '@/lib/types';
 import { api } from '@/lib/client-api';
+import { collectorFetch } from '@/lib/collector-browser-config';
 import { validateSourceUrl } from '@/lib/utils';
-import { buildWatchUrl, formatTime } from '@/lib/utils';
+import { formatTime } from '@/lib/utils';
 
 type Screen = 'movies' | 'tv' | 'anime' | 'variety' | 'overseas' | 'resources' | 'me' | 'settings';
 const COPY: Record<Screen, { eyebrow: string; title: string; subtitle: string }> = {
@@ -27,19 +30,26 @@ const COPY: Record<Screen, { eyebrow: string; title: string; subtitle: string }>
   anime: { eyebrow: 'LIBRARY / ANIME', title: '动漫', subtitle: '按星期查看 Bangumi 当季放送，追踪正在更新的新番。' },
   resources: { eyebrow: 'LIBRARY / SOURCES', title: '资源', subtitle: '管理真实接入的点播源、订阅和源健康状态，不展示虚构网盘结果。' },
   me: { eyebrow: 'PERSONAL / LIBRARY', title: '我的', subtitle: '本机观看记录与播放进度保存在你的设备上。' },
-  settings: { eyebrow: '', title: '设置', subtitle: '播放、外观、网络、语音与数据选项沿用现有设置模块。' },
+  settings: { eyebrow: '', title: '设置', subtitle: '' },
 };
 
 export function V4SpatialScreen({ screen }: { screen: Screen }) {
   const copy = COPY[screen];
+  const router = useRouter();
   const selectedKeys = useAppStore((s) => s.selectedKeys);
   const customAPIs = useAppStore((s) => s.customAPIs);
   const envSources = useAppStore((s) => s.envSources);
   const yellowFilter = useAppStore((s) => s.yellowFilter);
   const sourceHealth = useAppStore((s) => s.sourceHealth);
   const subscriptions = useAppStore((s) => s.subscriptions);
-  const [quickPlayItem, setQuickPlayItem] = useState<SearchResultItem | null>(null);
   const [playbackError, setPlaybackError] = useState('');
+  const openDetail = (item: SearchResultItem, extra?: { rating?: string; poster?: string }) => {
+    const params = new URLSearchParams({ source: item.sourceKey, id: item.vodId, title: item.name, sourceName: item.sourceName });
+    if (item.pic || extra?.poster) params.set('pic', item.pic || extra?.poster || '');
+    if (extra?.rating) params.set('rating', extra.rating);
+    if (item.sourceUrl) params.set('sourceUrl', item.sourceUrl);
+    router.push('/detail?' + params.toString());
+  };
   const selectedSources = selectedKeys
     .map((key) => resolveSource({ customAPIs, envSources }, key))
     .filter((source): source is SourceConfig => Boolean(
@@ -62,43 +72,69 @@ export function V4SpatialScreen({ screen }: { screen: Screen }) {
         setPlaybackError('暂未在已启用的点播源中找到《' + movie.title + '》的准确资源，请更换点播源后重试。');
         return;
       }
-      setQuickPlayItem(match);
+      openDetail(match, { rating: movie.rating, poster: movie.cover });
     } catch (error) {
       setPlaybackError(error instanceof Error ? error.message : '获取影片详情失败，请稍后重试。');
     }
   };
   return (
     <div className="v4-spatial-screen min-h-screen" data-screen={screen}>
-      <V4HomepageHeader />
+      {screen !== 'me' ? <V4HomepageHeader /> : null}
       <main className="v4-spatial-main">
-        <div className="v4-spatial-heading">
-          <div>
-            {copy.eyebrow ? <span className="v4-spatial-eyebrow">{copy.eyebrow}</span> : null}
-            <h1>{copy.title}</h1>
-            <p>{copy.subtitle}</p>
+        {screen !== 'me' ? (
+          <div className="v4-spatial-heading">
+            <div>
+              {copy.eyebrow ? <span className="v4-spatial-eyebrow">{copy.eyebrow}</span> : null}
+              <h1>{copy.title}</h1>
+              {copy.subtitle ? <p>{copy.subtitle}</p> : null}
+            </div>
           </div>
-          {screen === 'settings' ? (
-            <button type="button" className="v4-spatial-primary" onClick={() => window.dispatchEvent(new CustomEvent('libretv:open-source-manager'))}>
-              打开完整设置
-            </button>
-          ) : null}
-        </div>
+        ) : null}
 
-        {screen === 'movies' ? <CatalogScreen category="movie" onPick={openRecommendation} /> : null}
-        {screen === 'tv' ? <CatalogScreen category="tv" onPick={openRecommendation} /> : null}
+        {screen === 'movies' ? <><CatalogScreen category="movie" onPick={openRecommendation} /><SeedHubCatalogSection category="movies" /></> : null}
+        {screen === 'tv' ? <><CatalogScreen category="tv" onPick={openRecommendation} /><SeedHubCatalogSection category="series" /></> : null}
         {screen === 'variety' ? <CatalogScreen category="variety" onPick={openRecommendation} /> : null}
         {screen === 'overseas' ? <CatalogScreen category="overseas" onPick={openRecommendation} /> : null}
-        {screen === 'anime' ? <AnimeScreen onPick={openRecommendation} /> : null}
-        {screen === 'resources' ? <ResourcesScreen onPick={setQuickPlayItem} /> : null}
+        {screen === 'anime' ? <><AnimeScreen onPick={openRecommendation} /><SeedHubCatalogSection category="anime" /></> : null}
+        {screen === 'resources' ? <ResourcesScreen onPick={openDetail} /> : null}
         {screen === 'me' ? <MeScreen /> : null}
         {screen === 'settings' ? <SettingsScreen /> : null}
       </main>
       {playbackError ? <p className="v4-spatial-footnote" role="status">{playbackError}</p> : null}
-      <HomeInlinePlayer item={quickPlayItem} onClose={() => setQuickPlayItem(null)} />
     </div>
   );
 }
 
+type SeedHubCategory = 'movies' | 'series' | 'anime';
+type SeedHubDetail = { title?: string; description?: string; poster_url?: string | null; still_urls?: string[]; metadata?: Record<string, string>; source_url?: string; mode?: string };
+type SeedHubCatalogItem = { source_url: string; title: string; category: SeedHubCategory; poster_url?: string | null; detail?: SeedHubDetail | null };
+const SEEDHUB_LABEL: Record<SeedHubCategory, string> = { movies: '电影', series: '剧集', anime: '动漫' };
+
+function SeedHubCatalogSection({ category }: { category: SeedHubCategory }) {
+  const router = useRouter();
+  const imageProxyMode = useAppStore((s) => s.imageProxyMode);
+  const customImageProxy = useAppStore((s) => s.customImageProxy);
+  const catalog = useQuery({
+    queryKey: ['seedhub-catalog', category],
+    queryFn: async () => {
+      const response = await collectorFetch('/api/resource-collector?action=seedhub-catalog&category=' + category + '&limit=24&offset=0');
+      const payload = await response.json() as { items?: SeedHubCatalogItem[]; total?: number; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'SeedHub 采集库暂不可用。');
+      return { items: Array.isArray(payload.items) ? payload.items : [], total: Number(payload.total) || 0 };
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+  return (
+    <section className="v4-spatial-panel" aria-label={'SeedHub ' + SEEDHUB_LABEL[category] + '采集库'}>
+      <div className="v4-spatial-panel-head"><h2>SeedHub {SEEDHUB_LABEL[category]}</h2><span>{catalog.data ? '已采集 ' + catalog.data.total + ' 条' : '独立采集目录'}</span></div>
+      {catalog.isError ? <div className="v4-spatial-empty" role="status"><strong>SeedHub 采集库暂不可用</strong><p>{catalog.error instanceof Error ? catalog.error.message : '请检查设置中的 Scrapling HTTPS 地址和 Token，并确认采集服务已部署。'}</p></div>
+      : catalog.isLoading ? <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3" aria-busy="true">{Array.from({ length: 6 }, (_, index) => <div key={index} className="aspect-[2/3] rounded-lg bg-chip animate-pulse" />)}</div>
+      : !catalog.data?.items.length ? <div className="v4-spatial-empty">当前没有可展示的 SeedHub 目录记录。</div>
+      : <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">{catalog.data.items.map((item) => <button key={item.source_url} type="button" onClick={() => router.push('/seedhub?url=' + encodeURIComponent(item.source_url))} className="group min-w-0 overflow-hidden rounded-xl text-left" aria-label={'查看 ' + item.title + ' 的 SeedHub 详情'}><div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-chip">{item.poster_url ? <SmartImage url={item.poster_url} mode={imageProxyMode} customProxy={customImageProxy} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105" /> : <div className="flex h-full items-center justify-center px-2 text-center text-xs text-faint">暂无真实海报</div>}</div><strong className="mt-2 block line-clamp-2 text-xs text-content">{item.title}</strong><span className="mt-1 block text-[10px] text-faint">SeedHub · 详情资料</span></button>)}</div>}
+    </section>
+  );
+}
 type CatalogCategory = 'movie' | 'tv' | 'variety' | 'overseas';
 
 const CATALOG_TAGS: Record<CatalogCategory, string[]> = {
@@ -159,7 +195,7 @@ function CatalogScreen({ category, onPick }: { category: CatalogCategory; onPick
         <div className="v4-spatial-empty">该分类暂无推荐内容。</div>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
-          {items.map((item) => <DoubanCard key={item.id} item={item} isTv={type === 'tv'} enableTmdbFallback onClick={() => onPick(item)} />)}
+          {items.map((item) => <DoubanCard key={item.id} item={item} onClick={() => onPick(item)} />)}
         </div>
       )}
     </section>
@@ -282,58 +318,90 @@ function MeScreen() {
   const downloads = useLiveQuery(() => db.downloads.orderBy('createdAt').reverse().limit(20).toArray(), []);
   const favorites = useLiveQuery(() => db.favorites.orderBy('addedAt').reverse().toArray(), []);
   const liveFavorites = useAppStore((state) => state.liveFavorites);
+  const [showFavorites, setShowFavorites] = useState(false);
+
   return (
-    <div className="v4-me-layout">
-      <section className="v4-me-cover" aria-label="我的个人空间封面">
-        <div className="v4-me-cover-art" aria-hidden="true">
-          <span className="v4-me-cover-orbit v4-me-cover-orbit-one" />
-          <span className="v4-me-cover-orbit v4-me-cover-orbit-two" />
-          <span className="v4-me-cover-glow" />
+    <div className="v4-me-layout v52-me-layout">
+      <header className="v52-me-header">
+        <div className="v52-me-heading">
+          <h2>我的空间</h2>
+          <span>PERSONAL LIBRARY</span>
         </div>
-        <div className="v4-me-cover-profile">
-          <div className="v4-me-profile-avatar" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="8" r="3.5" />
-              <path d="M4.8 20c.7-3.4 3.1-5.2 7.2-5.2s6.5 1.8 7.2 5.2" />
-            </svg>
-          </div>
-          <div className="v4-me-cover-copy">
-            <span className="v4-me-cover-eyebrow">LIBRETV · PERSONAL SPACE</span>
-            <h2>我的空间</h2>
-            <p>收藏你的观影轨迹，接着上次的进度继续观看。</p>
-          </div>
-          <div className="v4-me-local-badge"><span />仅保存在本机</div>
+      </header>
+
+      <section className="v52-me-section v52-me-continue" aria-label="继续观看">
+        <div className="v52-me-section-head">
+          <h3>继续观看</h3>
+          {history && history.length > 0 ? (
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('libretv:open-history-panel'))}>
+              全部 <span aria-hidden="true">›</span>
+            </button>
+          ) : null}
         </div>
+        {!history ? (
+          <p className="v52-me-empty">正在读取本机观看记录…</p>
+        ) : history.length === 0 ? (
+          <div className="v52-me-empty">
+            <strong>尚无继续观看</strong>
+            <span>开始播放影片后，播放进度会显示在这里。</span>
+          </div>
+        ) : (
+          <div className="v52-me-poster-rail">
+            {history.map((item) => <MeHistoryCard key={item.id} item={item} />)}
+          </div>
+        )}
       </section>
 
-      <section className="v4-spatial-panel v4-me-history-panel">
-        <div className="v4-spatial-panel-head"><h2>继续观看</h2><span>{history?.length ?? 0} 条本机记录</span></div>
-        {!history ? <div className="v4-spatial-empty">正在读取本机观看记录…</div> : history.length === 0 ? (
-          <div className="v4-spatial-empty"><strong>还没有观看记录</strong><p>播放过的影片和进度会自动出现在这里。</p></div>
-        ) : (
-          <div className="v4-me-history-grid">{history.map((item) => <MeHistoryCard key={item.id} item={item} />)}</div>
-        )}
+      <section className="v52-me-section v52-me-library" aria-label="媒体库">
+        <div className="v52-me-section-head"><h3>媒体库</h3></div>
+        <div className="v52-me-library-grid">
+          <button type="button" className="v52-me-library-tile" aria-expanded={showFavorites}
+            onClick={() => setShowFavorites((value) => !value)}>
+            <span className="v52-me-tile-icon v52-me-heart"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.8c0 4.1-8.8 10-8.8 10s-8.8-5.9-8.8-10a4.7 4.7 0 0 1 8.8-2.3 4.7 4.7 0 0 1 8.8 2.3Z" /></svg></span>
+            <strong>影视收藏</strong>
+            <small>{favorites?.length ?? 0} 部收藏影片</small>
+            <span className="v52-me-tile-chevron" aria-hidden="true">›</span>
+          </button>
+          <button type="button" className="v52-me-library-tile" onClick={() => window.dispatchEvent(new CustomEvent('libretv:open-history-panel'))}>
+            <span className="v52-me-tile-icon v52-me-clock"><Icon name="clock" /></span>
+            <strong>观看历史</strong>
+            <small>{history?.length ?? 0} 条最近记录</small>
+            <span className="v52-me-tile-chevron" aria-hidden="true">›</span>
+          </button>
+        </div>
+        {showFavorites ? (
+          <div className="v52-me-favorites-content">
+            {!favorites ? <p className="v52-me-empty">正在读取影视收藏…</p> : favorites.length === 0 ? (
+              <p className="v52-me-empty">还没有收藏影片，收藏后会显示在这里。</p>
+            ) : (
+              <div className="v52-me-favorites-list">
+                {favorites.map((item) => <MeFavoriteCard key={item.id} item={item} />)}
+              </div>
+            )}
+          </div>
+        ) : null}
       </section>
-      <section className="v4-spatial-panel v4-me-history-panel">
-        <div className="v4-spatial-panel-head"><h2>影视收藏</h2><span>{favorites?.length ?? 0} 部影片</span></div>
-        {!favorites ? <div className="v4-spatial-empty">正在读取影视收藏…</div> : favorites.length === 0 ? (
-          <div className="v4-spatial-empty"><strong>还没有收藏影视</strong><p>在电影或电视剧搜索结果卡片上点击心形按钮，即可保存到这里。</p></div>
-        ) : (
-          <div className="v4-me-history-grid">{favorites.map((item) => <MeFavoriteCard key={item.id} item={item} />)}</div>
-        )}
-      </section>
-      <section className="v4-spatial-panel v4-me-library-actions">
-        <button type="button" className="v4-settings-card" onClick={() => window.dispatchEvent(new CustomEvent('libretv:open-history-panel'))}>
-          <div><strong>全部观看历史</strong><p>{history?.length ?? 0} 条最近记录 · 搜索、删除与继续播放</p></div><b aria-hidden="true">›</b>
-        </button>
-        <Link href="/search" className="v4-settings-card"><div><strong>搜索记录</strong><p>查看最近搜索并快速重新搜索</p></div><b aria-hidden="true">›</b></Link>
-        <Link href="/live" className="v4-settings-card"><div><strong>频道收藏</strong><p>{liveFavorites.length} 个已收藏频道</p></div><b aria-hidden="true">›</b></Link>
-        <button type="button" className="v4-settings-card" onClick={() => requestShowDownloadManager()}>
-          <div><strong>下载管理</strong><p>{downloads?.length ?? 0} 个本机下载任务 · 查看进度与管理文件</p></div><b aria-hidden="true">›</b>
-        </button>
-      </section>
-      <section className="v4-spatial-panel v4-me-settings-entry">
-        <Link href="/settings" className="v4-settings-card"><div><strong>设置</strong><p>外观、播放、资源管理、采集中心与隐私设置</p></div><b aria-hidden="true">›</b></Link>
+
+      <section className="v52-me-section v52-me-other" aria-label="其他功能">
+        <div className="v52-me-section-head"><h3>其他功能</h3></div>
+        <div className="v52-me-list">
+          <Link href="/search" className="v52-me-list-row">
+            <span className="v52-me-list-icon"><Icon name="search" /></span>
+            <strong>搜索记录</strong><span className="v52-me-chevron" aria-hidden="true">›</span>
+          </Link>
+          <Link href="/live" className="v52-me-list-row">
+            <span className="v52-me-list-icon"><Icon name="radio" /></span>
+            <strong>频道收藏</strong><small>{liveFavorites.length} 个</small><span className="v52-me-chevron" aria-hidden="true">›</span>
+          </Link>
+          <button type="button" className="v52-me-list-row" onClick={() => requestShowDownloadManager()}>
+            <span className="v52-me-list-icon"><Icon name="download" /></span>
+            <strong>下载管理</strong><small>{downloads?.length ?? 0} 个任务</small><span className="v52-me-chevron" aria-hidden="true">›</span>
+          </button>
+          <Link href="/settings" className="v52-me-list-row">
+            <span className="v52-me-list-icon"><Icon name="gear" /></span>
+            <strong>设置</strong><span className="v52-me-chevron" aria-hidden="true">›</span>
+          </Link>
+        </div>
       </section>
     </div>
   );
@@ -345,7 +413,11 @@ function MeFavoriteCard({ item }: { item: FavoriteEntry }) {
   const customAPIs = useAppStore((state) => state.customAPIs);
   const envSources = useAppStore((state) => state.envSources);
   const source = resolveSource({ customAPIs, envSources }, item.sourceKey);
-  const href = buildWatchUrl({ sourceKey: item.sourceKey, vodId: item.vodId, index: 0, title: item.title, sourceUrl: source?.url ?? item.sourceUrl, detail: source?.detail });
+  const params = new URLSearchParams({ source: item.sourceKey, id: item.vodId, title: item.title, sourceName: item.sourceName });
+  if (item.pic) params.set('pic', item.pic);
+  const sourceUrl = source?.url ?? item.sourceUrl;
+  if (sourceUrl) params.set('sourceUrl', sourceUrl);
+  const href = '/detail?' + params.toString();
   return (
     <article className="v4-me-history-card relative">
       <Link href={href} className="flex min-w-0 flex-1 items-center gap-3">
@@ -363,7 +435,11 @@ function MeHistoryCard({ item }: { item: HistoryEntry }) {
   const customAPIs = useAppStore((s) => s.customAPIs);
   const envSources = useAppStore((s) => s.envSources);
   const source = resolveSource({ customAPIs, envSources }, item.sourceKey);
-  const href = buildWatchUrl({ sourceKey: item.sourceKey, vodId: item.vodId, index: item.episodeIndex, title: item.title, sourceUrl: source?.url ?? item.sourceUrl, detail: source?.detail });
+  const params = new URLSearchParams({ source: item.sourceKey, id: item.vodId, title: item.title, sourceName: source?.name ?? item.sourceKey });
+  if (item.pic) params.set('pic', item.pic);
+  const sourceUrl = source?.url ?? item.sourceUrl;
+  if (sourceUrl) params.set('sourceUrl', sourceUrl);
+  const href = '/detail?' + params.toString();
   const percent = item.duration > 0 ? Math.max(0, Math.min(100, Math.round(item.playbackPosition / item.duration * 100))) : 0;
   return (
     <Link className="v4-me-history-card" href={href}>
@@ -376,40 +452,43 @@ function MeHistoryCard({ item }: { item: HistoryEntry }) {
 }
 
 function SettingsScreen() {
-  const groups = [
-    { title: '播放与过滤', description: '自动连播、片头片尾跳过、广告过滤与播放缓存', page: 'playback' },
-    { title: '语言设置', description: '界面语言与 Friday 对话语言', page: 'language' },
-    { title: '首页与内容', description: '首页推荐与内容偏好', page: 'home' },
-    { title: '外观模式', description: '浅色、深色与跟随系统主题', page: 'appearance' },
-    { title: '封面图加载', description: '海报图片代理与加载偏好', page: 'image' },
-    { title: '点播源管理', description: '管理点播来源、优先级与健康检测', page: 'vod' },
-    { title: '直播设置', description: '管理直播源与频道', page: 'live' },
-    { title: '资源订阅', description: '管理点播与直播资源订阅', page: 'subs' },
-    { title: '资源采集中心', description: 'FMHY 网站发现目录与 Scrapling 采集引擎', page: 'collector' },
-    { title: 'Friday 语音', description: '助手角色、语音音色、唤醒词与对话语言', page: 'voice' },
-    { title: '配置导入与导出', description: '备份或恢复 LibreTV 本机配置', page: 'io' },
-    { title: '本机缓存', description: '查看和管理本机视频缓存', page: 'cache' },
-  ] as const;
-
-  const openCategory = (page: string) => {
-    try {
-      window.localStorage.setItem('libretv-settings-open-page', page);
-    } catch {
-      // 即使浏览器禁用本地存储，也仍然打开设置抽屉。
-    }
-    window.dispatchEvent(new CustomEvent('libretv:open-source-manager'));
-  };
+  const downloads = useLiveQuery(
+    () => db.downloads.orderBy('createdAt').reverse().toArray(),
+    [],
+  );
+  const activeCount = (downloads ?? []).filter((task) =>
+    ['queued', 'waiting', 'validating', 'downloading', 'merging', 'paused'].includes(task.status),
+  ).length;
 
   return (
-    <section className="v4-spatial-panel">
-      <div className="v4-settings-grid">
-        {groups.map((group) => (
-          <button key={group.title} type="button" className="v4-settings-card" onClick={() => openCategory(group.page)}>
-            <div><strong>{group.title}</strong><p>{group.description}</p></div><b aria-hidden="true">›</b>
+    <div className="mx-auto w-full max-w-5xl space-y-5 px-4 pb-12 sm:px-6">
+
+      <SourceManagerDrawer open embedded onClose={() => undefined} />
+      <section className="card p-4 sm:p-5" aria-labelledby="settings-downloads-title">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+              <Icon name="download" />
+            </span>
+            <div className="min-w-0">
+              <h2 id="settings-downloads-title" className="text-base font-semibold text-content">下载管理</h2>
+              <p className="mt-1 text-xs text-faint">
+                {downloads ? `共 ${downloads.length} 个任务 · ${activeCount} 个进行中或待处理` : '正在读取下载任务…'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            onClick={() => requestShowDownloadManager()}
+          >
+            管理任务
           </button>
-        ))}
-      </div>
-      <p className="v4-spatial-footnote">每个分类直接进入对应的实际设置面板；选项沿用 LibreTV 现有配置与本机持久化，不创建重复配置。</p>
-    </section>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-faint">
+          查看下载进度与状态，暂停、继续、取消、重试或删除任务。下载完成状态以实际文件保存结果为准。
+        </p>
+      </section>
+    </div>
   );
 }

@@ -1,0 +1,430 @@
+/* PR #84 — one global iPhone layout contract.
+   Loaded after all legacy/page-specific styles so no route can redefine the dock. */
+
+@media (max-width: 700px) {
+  /* The portal component is the only tab bar; */
+  body > .v4-mobile-tabbar::before {
+    content: '' !important;
+    position: absolute !important;
+    z-index: -1 !important;
+    top: -18px !important;
+    right: 0 !important;
+    left: 0 !important;
+    height: 18px !important;
+    display: block !important;
+    pointer-events: none !important;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,.16)) !important;
+  }
+  body > .v4-mobile-tabbar::after { display: none !important; content: none !important; }
+  body > .v4-mobile-tabbar > a {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    width: 100% !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    color: rgba(255,255,255,.72) !important;
+    background: transparent !important;
+    font-size: 10px !important;
+    font-weight: 550 !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+    text-decoration: none !important;
+  }
+  body > .v4-mobile-tabbar > a svg {
+    display: block !important;
+    width: 18px !important;
+    height: 18px !important;
+    flex: 0 0 18px !important;
+    stroke: currentColor !important;
+    stroke-width: 1.9 !important;
+  }
+  body > .v4-mobile-tabbar > a span {
+    display: block !important;
+    color: inherit !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+  }
+  body > .v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.15) !important;
+    box-shadow: none !important;
+  }
+  body > .v4-mobile-tabbar > a.is-active svg,
+  body > .v4-mobile-tabbar > a.is-active span {
+    color: #fff !important;
+    stroke: #fff !important;
+    fill: none !important;
+  }
+  body > .v4-mobile-tabbar > a i { display: none !important; }
+
+  /* Content always scrolls completely above the same floating dock. */
+  body:has(.v4-home) .v4-home {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+  body .v4-search-page {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+    scroll-padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+  body .v4-search-page .v4-search-main { padding-bottom: 24px !important; }
+  body .v4-spatial-screen[data-screen="settings"] > .v4-spatial-main {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+  body .v4-spatial-screen[data-screen="settings"] .settings-embedded-root {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+
+
+  /* The fourth dock destination (Me) must also scroll clear of the fixed dock. */
+  body .v4-spatial-screen[data-screen="me"] > .v4-spatial-main {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+    scroll-padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+
+  /* Full-bleed hero: artwork reaches the physical viewport top.
+     The header alone observes the iOS safe area; the image is never pushed down. */
+  body:has(.v4-home) .v4-home {
+    position: relative !important;
+  }
+  body:has(.v4-home) .v4-home > .v4-header {
+    position: absolute !important;
+    z-index: 30 !important;
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    inset: 0 0 auto !important;
+    padding-top: 0 !important;
+  }
+  body:has(.v4-home) .v4-home > .v4-header .v4-header-inner {
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px 0 !important;
+    box-sizing: border-box !important;
+  }
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive {
+    padding-top: 0 !important;
+  }
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image,
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image > *,
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image img {
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: center 30% !important;
+    transform: none !important;
+    transform-origin: center center !important;
+  }
+
+
+  /* Settings is a first-level destination: same left-aligned Large Title as Search. */
+  .settings-large-title, .settings-embedded-root .settings-large-title {
+    display: block !important;
+    margin: 0 auto 24px !important;
+    padding: 0 2px 4px !important;
+    text-align: left !important;
+  }
+  .settings-large-title h1, .settings-embedded-root .settings-large-title h1 {
+    margin: 0 !important;
+    color: #fff !important;
+    font-size: 42px !important;
+    line-height: 1.06 !important;
+    font-weight: 760 !important;
+    letter-spacing: -1.6px !important;
+    text-align: left !important;
+  }
+  .settings-large-title p, .settings-embedded-root .settings-large-title p {
+    margin: 8px 0 0 !important;
+    color: #a1a1a6 !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    text-align: left !important;
+  }
+  .v4-search-page .v4-search-heading h1 {
+    font-size: 42px !important;
+    line-height: 1.06 !important;
+    letter-spacing: -1.6px !important;
+  }
+}
+
+@media (min-width: 701px) {
+}
+
+
+/* PR84: homepage header intentionally has no brand/logo; keep utility actions at the right edge. */
+.v4-home .v4-header-inner--no-brand {
+  display: flex !important;
+  justify-content: flex-end !important;
+}
+.v4-home .v4-header-inner--no-brand .v4-header-actions {
+  margin-left: auto !important;
+}
+
+
+/* PR84 — iPhone Liquid Glass dock: translucent optical surface, specular rim,
+   and a soft glass selection lens. Geometry and tab interactions stay unchanged. */
+@media (max-width: 700px) {
+}
+
+@media (prefers-reduced-transparency: reduce) and (max-width: 700px) {
+}
+
+
+/* PR84 — iPhone SF typography pass.
+   Keep this global font stack, while title and metadata refinements stay scoped
+   to the Me and Settings destinations. */
+html,
+body,
+button,
+input,
+textarea,
+select {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+.v4-spatial-screen[data-screen="me"] .v52-me-heading h2 {
+  font-size: 34px !important;
+  line-height: 1.08 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.5px !important;
+}
+
+.v4-spatial-screen[data-screen="me"] .v52-me-heading > span {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 1.2px !important;
+  text-transform: uppercase !important;
+  color: #77777f !important;
+}
+
+.v4-spatial-screen[data-screen="settings"] .settings-large-title h1,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .settings-large-title h1 {
+  font-size: 34px !important;
+  line-height: 1.08 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.5px !important;
+}
+
+/* Secondary card descriptions: quieter, consistent iOS secondary-label tone. */
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile small,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row small,
+.v4-spatial-screen[data-screen="me"] .v52-me-empty,
+.v4-spatial-screen[data-screen="me"] .v52-me-empty span,
+.v4-spatial-screen[data-screen="me"] .v4-me-history-copy > span {
+  color: #8e8e93 !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+
+/* Stable-width counters prevent visual jitter when live counts change. */
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile small,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row small {
+  font-variant-numeric: tabular-nums !important;
+  font-feature-settings: "tnum" 1 !important;
+}
+
+
+/* PR84 visual contrast correction — neutral iOS dark hierarchy.
+   Keep semantic per-feature icon colors and existing interaction accents untouched. */
+.v4-spatial-screen[data-screen="me"] .v52-me-heading h2 {
+  color: #f5f5f7 !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-heading > span {
+  color: #8e8e93 !important;
+}
+.v4-spatial-screen[data-screen="me"] h3,
+.v4-spatial-screen[data-screen="me"] [class*="section-title"] {
+  color: #d1d1d6 !important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-large-title h1,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .settings-large-title h1 {
+  color: #f5f5f7 !important;
+}
+.v4-spatial-screen[data-screen="settings"] .ipad-settings-content > section > h3 {
+  color: #d1d1d6 !important;
+}
+/* Settings index needs enough scroll runway for the fixed dock and Safari chrome. */
+@media (max-width: 700px) {
+  body .v4-spatial-screen[data-screen="settings"] > .v4-spatial-main {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+    scroll-padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+  body .v4-spatial-screen[data-screen="settings"] .settings-embedded-root {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+}
+
+
+/* PR84 final palette: native iOS neutral dark mode; blue remains a selected-tab accent only. */
+:root {
+  --bg-page: #000000;
+  --bg-card: #171717;
+  --border-line: rgba(255, 255, 255, 0.08);
+  --text-title: #f5f5f7;
+  --text-section: #d1d1d6;
+  --text-secondary: #98989f;
+  --text-aux: #8e8e93;
+  --interaction-press: rgba(255, 255, 255, 0.05);
+}
+
+/* Apply the neutral hierarchy to the two first-level destinations only. */
+.v4-spatial-screen[data-screen="me"],
+.v4-spatial-screen[data-screen="settings"] {
+  color: var(--text-title);
+  background-color: var(--bg-page);
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-heading h2,
+.v4-spatial-screen[data-screen="settings"] .settings-large-title h1 {
+  color: var(--text-title) !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-heading > span {
+  color: var(--text-aux) !important;
+}
+.v4-spatial-screen[data-screen="me"] h3,
+.v4-spatial-screen[data-screen="me"] [class*="section-title"],
+.v4-spatial-screen[data-screen="settings"] .ipad-settings-content > section > h3 {
+  color: var(--text-section) !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile small,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row small,
+.v4-spatial-screen[data-screen="me"] .v52-me-empty,
+.v4-spatial-screen[data-screen="me"] .v52-me-empty span,
+.v4-spatial-screen[data-screen="me"] .v4-me-history-copy > span {
+  color: var(--text-secondary) !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row {
+  border-color: var(--border-line) !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile,
+.v4-spatial-screen[data-screen="me"] .v52-me-empty {
+  background-color: var(--bg-card);
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile small,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row small {
+  font-variant-numeric: tabular-nums !important;
+  font-feature-settings: "tnum" 1 !important;
+}
+
+/* Ordinary icons on Me/Settings are subdued; semantic selected states are preserved. */
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row svg,
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile svg,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root svg {
+  color: var(--text-aux);
+}
+
+/* Neutral physical press feedback; suppress the browser's blue tap flash. */
+.v4-spatial-screen[data-screen="me"] a,
+.v4-spatial-screen[data-screen="me"] button,
+.v4-spatial-screen[data-screen="settings"] a,
+.v4-spatial-screen[data-screen="settings"] button {
+  -webkit-tap-highlight-color: transparent !important;
+}
+.v4-spatial-screen[data-screen="me"] a:active,
+.v4-spatial-screen[data-screen="me"] button:active,
+.v4-spatial-screen[data-screen="settings"] a:active,
+.v4-spatial-screen[data-screen="settings"] button:active {
+  background-color: var(--interaction-press) !important;
+  transition: background-color 80ms ease-out !important;
+}
+
+/* iPhone Liquid Glass dock: optical depth, visible refraction cues and moving specular light.
+   SVG displacement remains a progressive enhancement; CSS glass is the Safari fallback. */
+@media (max-width: 700px) {
+}
+@keyframes pr84-liquid-dock-glint {
+  0% { background-position: 0 0, 110% 0; }
+  100% { background-position: 0 0, -110% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+}
+
+
+/* PR84 CSS rescue: route-scoped black canvas and persistent dark glass header. */
+/* Next.js App Router has no #root mount node; scope the real document canvas
+   to the cinema homepage and movie-detail route instead of inventing one. */
+html:has(body .v4-home),
+body:has(.v4-home),
+body:has(.movie-detail-page) {
+  min-height: 100%;
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  color: #fff;
+}
+.v4-home {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+/* Cinema header controls float over the hero; the empty wrapper is transparent
+   and never paints a detached black card above the artwork. */
+body .v4-home > .v4-header,
+body .v4-home > .v4-header.is-scrolled,
+body .v4-home > .v4-header.is-overlay,
+body .v4-home > .v4-header.is-overlay.is-scrolled {
+  position: absolute !important;
+  inset: 0 0 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+body .v4-home > .v4-header .v4-header-inner {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+
+/* PR84 episode artwork: preserve the same readable text stack with or without a still. */
+.movie-detail-episode-card {
+  background: #111 !important;
+  isolation: isolate;
+}
+.movie-detail-episode-placeholder {
+  background: #111 !important;
+  z-index: 0 !important;
+}
+.movie-detail-episode-image {
+  z-index: 1 !important;
+}
+.movie-detail-episode-card-gradient {
+  z-index: 2 !important;
+  pointer-events: none !important;
+}
+.movie-detail-episode-card-hit {
+  z-index: 3 !important;
+}
+.movie-detail-episode-card-content {
+  z-index: 5 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: #fff !important;
+}
+.movie-detail-episode-card-more,
+.movie-detail-episode-card-progress {
+  z-index: 6 !important;
+}

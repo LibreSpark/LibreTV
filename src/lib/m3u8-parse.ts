@@ -34,6 +34,8 @@ export interface ParsedPlaylist {
   /** master 播放列表时非空（已按 preferredHeight 选档） */
   variants?: ParsedVariant[];
   segments: ParsedSegment[];
+  /** fMP4 EXT-X-MAP 初始化分段的绝对 URL；存在时媒体分片按 fMP4 直接拼接 */
+  initSegment?: string;
   /** AES-128 解密参数；method=NONE 时为 undefined */
   aesConf?: AesConf;
   /** 出现 EXT-X-BYTERANGE：分片为原文件切片，无法独立缓存，该集禁用缓存 */
@@ -90,9 +92,14 @@ function parseExtInf(line: string): number {
 
 function parseAesConf(line: string): AesConf | undefined {
   const method = line.match(/METHOD=([^,]+)/)?.[1];
-  if (!method || method === 'NONE') return undefined;
+  if (!method) throw new Error('HLS EXT-X-KEY 缺少 METHOD');
+  if (method === 'NONE') return undefined;
+  // Only identity AES-128-CBC is implemented; fail closed for DRM/SAMPLE-AES.
+  if (method !== 'AES-128') throw new Error(`暂不支持 HLS 加密方式：${method}`);
+  const keyFormat = line.match(/KEYFORMAT="([^"]+)"/)?.[1];
+  if (keyFormat && keyFormat !== 'identity') throw new Error(`暂不支持 HLS KEYFORMAT：${keyFormat}`);
   const uri = line.match(/URI="([^"]+)"/)?.[1];
-  if (!uri) return undefined;
+  if (!uri) throw new Error('HLS AES-128 密钥缺少 URI');
   const iv = line.match(/IV=0[xX]([0-9a-fA-F]+)/)?.[1];
   return { method, uri, iv };
 }
@@ -154,15 +161,36 @@ export async function parseM3u8Playlist(
   // —— media：分片 / 时长 / AES / BYTERANGE ——
   const segments: ParsedSegment[] = [];
   let aesConf: AesConf | undefined;
+  let encryptionIdentity: string | undefined;
+  let initSegment: string | undefined;
   let byterange = false;
   let pendingDuration = 0;
   const mediaSequence = parseInt(text.match(/^#EXT-X-MEDIA-SEQUENCE:(\d+)/m)?.[1] || '0', 10) || 0;
   for (const raw of text.split('\n')) {
     const line = raw.trim();
+    if (line.startsWith('#EXT-X-MAP')) {
+      const uri = line.match(/URI="([^"]+)"/)?.[1];
+      if (!uri) throw new Error('HLS EXT-X-MAP 缺少初始化分段 URI');
+      if (/BYTERANGE=/i.test(line)) throw new Error('fMP4 初始化分段 BYTERANGE 暂不支持');
+      const absoluteUri = makeAbsolute(uri, base);
+      if (initSegment && initSegment !== absoluteUri) {
+        throw new Error('HLS 在同一下载任务中切换了多个初始化分段，暂不支持');
+      }
+      initSegment = absoluteUri;
+      continue;
+    }
     if (line.startsWith('#EXT-X-KEY')) {
-      // 取最后一次出现的 KEY（逐段换 key 的源不在支持范围）
       const conf = parseAesConf(line);
-      if (conf) aesConf = { ...conf, uri: makeAbsolute(conf.uri, base) };
+      const nextConf = conf ? { ...conf, uri: makeAbsolute(conf.uri, base) } : undefined;
+      const nextIdentity = nextConf ? nextConf.method + '|' + nextConf.uri + '|' + (nextConf.iv ?? '') : 'NONE';
+      const previousIdentity = encryptionIdentity ?? 'NONE';
+      // ParsedPlaylist carries one key for the whole media playlist. Fail closed
+      // instead of applying the last key to segments that used a different key.
+      if (segments.length > 0 && previousIdentity !== nextIdentity) {
+        throw new Error('暂不支持 HLS 分片级密钥轮换或加密状态切换');
+      }
+      encryptionIdentity = nextIdentity;
+      aesConf = nextConf;
       continue;
     }
     if (line.startsWith('#EXT-X-BYTERANGE')) {
@@ -180,6 +208,7 @@ export async function parseM3u8Playlist(
   if (!segments.length) throw new Error('m3u8 未解析到分片');
   return {
     segments,
+    initSegment,
     aesConf,
     byterange,
     totalDuration: segments.reduce((sum, s) => sum + s.duration, 0),

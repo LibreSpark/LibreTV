@@ -52,6 +52,23 @@ describe('PlaybackRecovery 决策表', () => {
     expect(r.onFatal('mediaError', 'bufferAppendError').action).toBe('switch-source');
   });
 
+  it('密钥加载失败按网络错误退避，超过重试上限后换源', () => {
+    const r = new PlaybackRecovery();
+    expect(r.onFatal('networkError', 'keyLoadError')).toMatchObject({
+      action: 'retry', attempt: 1, delayMs: 800,
+    });
+    r.onFatal('networkError', 'keyLoadError');
+    r.onFatal('networkError', 'keyLoadError');
+    expect(r.onFatal('networkError', 'keyLoadError').action).toBe('switch-source');
+  });
+
+  it('直播滑动窗口刷新失败（levelLoadError）按网络错误退避', () => {
+    const r = new PlaybackRecovery();
+    expect(r.onFatal('networkError', 'levelLoadError')).toMatchObject({
+      action: 'retry', attempt: 1, delayMs: 800,
+    });
+  });
+
   it('未知致命类型换源', () => {
     const r = new PlaybackRecovery();
     expect(r.onFatal('someWeirdError', 'whatever').action).toBe('switch-source');
@@ -108,6 +125,7 @@ describe('describeHlsError', () => {
   it('常见 details 映射中文文案', () => {
     expect(describeHlsError('networkError', 'manifestLoadError')).toBe('播放列表加载失败');
     expect(describeHlsError('networkError', 'fragLoadError')).toBe('视频分片加载失败');
+    expect(describeHlsError('networkError', 'keyLoadError')).toBe('解密密钥加载失败');
     expect(describeHlsError('mediaError', '')).toBe('媒体解码错误');
     expect(describeHlsError('otherError', 'xyz')).toBe('播放错误（xyz）');
   });

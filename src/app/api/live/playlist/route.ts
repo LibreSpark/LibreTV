@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guardRequest, jsonError } from '@/lib/api-guard';
 import { checkLiveUrlAllowed } from '@/lib/ssrf';
-import { fetchUpstream } from '@/lib/fetch-utils';
+import { fetchLiveUpstream } from '@/lib/fetch-utils';
 import { getLiveCache, setLiveCache } from '@/lib/live-cache';
 import { parseM3u } from '@/lib/m3u-parser';
 import type { LivePlaylistResponse } from '@/lib/types';
@@ -10,6 +10,34 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_PLAYLIST_BYTES = 5 * 1024 * 1024;
+
+async function readTextLimited(res: Response, maxBytes: number): Promise<string> {
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new Error('M3U 订阅文件超过 5MB 限制');
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error('M3U 订阅文件超过 5MB 限制');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(merged);
+}
 
 function cacheKey(url: string): string {
   return `live:playlist:${url}`;
@@ -66,14 +94,12 @@ export async function GET(req: Request) {
   if (!playlist) {
     let text: string;
     try {
-      // allowPrivate：与直播流代理同一把尺子，LIVE_ALLOW_PRIVATE=1 时自建内网 IPTV 订阅才能拉通。
-      // 此前漏传该参数，fetchUpstream 的逐跳校验会回落到点播侧 checkUpstreamAllowed，
-      // 内网订阅源在第一跳即被判为「目标地址不在允许范围内」，导致直播源无法添加/启用。
-      const res = await fetchUpstream(url, { timeoutMs: 15000, retries: 1, allowPrivate: true, signal: req.signal });
+      // 直播请求使用独立策略；内网例外仅在 LIVE_ALLOW_PRIVATE=1 时生效。
+      const res = await fetchLiveUpstream(url, { timeoutMs: 15000, retries: 1, signal: req.signal });
       if (!res.ok) {
         return jsonError(`订阅地址请求失败: ${res.status}`, 502);
       }
-      text = await res.text();
+      text = await readTextLimited(res, MAX_PLAYLIST_BYTES);
     } catch (err) {
       return jsonError(`订阅地址请求失败: ${err instanceof Error ? err.message : '未知错误'}`, 502);
     }

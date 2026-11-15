@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 import { V4HomepageHeader } from '@/components/home/V4HomepageHeader';
@@ -10,9 +10,8 @@ import { V4HomepageHero } from '@/components/home/V4HomepageHero';
 import { V4HomepageContent } from '@/components/home/V4HomepageContent';
 import { useFridayDetailBridge } from '@/components/friday/useFridayDetailBridge';
 import { useHomeSearchController } from '@/components/home/useHomeSearchController';
-import { DetailModal } from '@/components/detail-modal';
-import { HomeInlinePlayer } from '@/components/home/HomeInlinePlayer';
 import { RegistryInlinePlayer } from '@/components/home/RegistryInlinePlayer';
+import { SmartImage } from '@/components/smart-image';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -22,10 +21,11 @@ import {
 } from '@/lib/store';
 import { api } from '@/lib/client-api';
 import type {
+  DoubanItem,
   SearchResultItem,
   SourceSearchOutcome,
-  DoubanItem,
   RegistrySearchResource,
+  SeedHubSearchItem,
 } from '@/lib/types';
 import {
   formatDisableTtl,
@@ -34,7 +34,7 @@ import {
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
 import { rankSourcesByHealth } from '@/lib/source-ranking';
-import { rankMovieCandidatesByQuality, rankSourcesByPlaybackQuality } from '@/lib/playback-telemetry';
+import { rankSourcesByPlaybackQuality } from '@/lib/playback-telemetry';
 
 const RESULT_PAGE_SIZE = 60;
 
@@ -48,6 +48,7 @@ export default function HomePage() {
 
 function HomeContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { toast } = useToast();
 
   const routeQuery = searchParams.get('q') ?? searchParams.get('s') ?? '';
@@ -58,10 +59,10 @@ function HomeContent() {
   const sourceHealth = useAppStore((s) => s.sourceHealth);
   const playbackHealth = useAppStore((s) => s.playbackHealth);
   const subscriptions = useAppStore((s) => s.subscriptions);
+  const imageProxyMode = useAppStore((s) => s.imageProxyMode);
+  const customImageProxy = useAppStore((s) => s.customImageProxy);
 
   const [detailItem, setDetailItem] =
-    useState<SearchResultItem | null>(null);
-  const [quickPlayItem, setQuickPlayItem] =
     useState<SearchResultItem | null>(null);
   const [registryPlayItem, setRegistryPlayItem] =
     useState<RegistrySearchResource | null>(null);
@@ -69,6 +70,48 @@ function HomeContent() {
     useState<SourceSearchOutcome[]>([]);
 
   useFridayDetailBridge(setDetailItem, toast);
+
+  const openDetail = (item: SearchResultItem, extra?: { rating?: string; poster?: string }) => {
+    const params = new URLSearchParams({ source: item.sourceKey, id: item.vodId, title: item.name, sourceName: item.sourceName });
+    if (item.pic || extra?.poster) params.set('pic', item.pic || extra?.poster || '');
+    if (extra?.rating) params.set('rating', extra.rating);
+    if (item.sourceUrl) params.set('sourceUrl', item.sourceUrl);
+    router.push('/detail?' + params.toString());
+  };
+  
+  const handleHomepagePick = async (movie: DoubanItem) => {
+    if (selectedSources.length === 0) {
+      toast('请先在设置中启用至少一个可用点播源。', 'warning');
+      return;
+    }
+    try {
+      const response = await api.search(movie.title, selectedSources, yellowFilter);
+      const normalize = (value: string) => value.replace(/[\\s\\p{P}\\p{S}]/gu, '').toLocaleLowerCase();
+      const target = normalize(movie.title);
+      const match = response.list.find((entry) => normalize(entry.name) === target);
+      if (!match) {
+        toast('暂未在已启用的点播源中找到《' + movie.title + '》的准确资源。', 'warning');
+        return;
+      }
+      openDetail(match, { rating: movie.rating, poster: movie.cover });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '获取影片详情失败，请稍后重试。', 'error');
+    }
+  };
+
+  const openedFridayDetailRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!detailItem) {
+      openedFridayDetailRef.current = null;
+      return;
+    }
+    const key = detailItem.sourceKey + ':' + detailItem.vodId;
+    if (openedFridayDetailRef.current === key) return;
+    openedFridayDetailRef.current = key;
+    openDetail(detailItem);
+    setDetailItem(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailItem]);
 
   const sourceName = (key: string) =>
     customAPIs.find((a) => a.key === key)?.name ??
@@ -94,33 +137,6 @@ function HomeContent() {
 
   const { activeQuery: urlQuery } = useHomeSearchController(routeQuery, toast);
 
-  // 推荐卡片必须先用当前启用的采集源解析真实 vodId，不能把豆瓣 ID 当作资源站 ID。
-  const openRecommendation = async (movie: DoubanItem) => {
-    if (selectedSources.length === 0) {
-      toast('请先在设置中启用至少一个点播源，才能查看影片详情', 'warning');
-      return;
-    }
-    try {
-      const result = await api.search(movie.title, selectedSources, yellowFilter);
-      const normalizeTitle = (value: string) =>
-        value.replace(/[\\s\\p{P}\\p{S}]/gu, '').toLocaleLowerCase();
-      const normalizedTitle = normalizeTitle(movie.title);
-      const matches = result.list.filter((entry) => normalizeTitle(entry.name) === normalizedTitle);
-      if (matches.length === 0) {
-        toast(`暂未在已启用的点播源中找到《${movie.title}》的准确详情，请更换点播源后重试`, 'warning');
-        return;
-      }
-      const currentStore = useAppStore.getState();
-      const rankedMatches = rankMovieCandidatesByQuality(
-        matches,
-        currentStore.qualityMap,
-        currentStore.playbackHealth,
-      );
-      setQuickPlayItem(rankedMatches[0]);
-    } catch (error) {
-      toast(error instanceof Error ? error.message : '获取影片详情失败，请稍后重试', 'error');
-    }
-  };
 
   const disabledSources = useMemo(
     () => selectedKeys.filter((key) => isSourceDisabled({ sourceHealth }, key)),
@@ -178,6 +194,7 @@ function HomeContent() {
   );
 
   const registryResources = searchQuery.data?.registryResources ?? [];
+  const seedhubItems: SeedHubSearchItem[] = searchQuery.data?.seedhubItems ?? [];
 
   const failures =
     searchQuery.data?.failures ??
@@ -206,7 +223,7 @@ function HomeContent() {
     <div className="v4-home min-h-screen flex flex-col">
       <V4HomepageHeader overlay={!urlQuery} />
       <main className={urlQuery ? "v4-home-main" : "v4-home-main v4-home-main--cinema"}>
-        {!urlQuery && <V4HomepageHero onPick={openRecommendation} />}
+        {!urlQuery && <><V4HomepageHero onPick={handleHomepagePick} /><V4HomepageContent onPick={handleHomepagePick} /></>}
         {urlQuery && (
           <section aria-label="搜索结果" className="mb-10">
             <div className="flex items-center justify-between mb-3">
@@ -226,6 +243,27 @@ function HomeContent() {
                 )}
               </h2>
             </div>
+            {seedhubItems.length > 0 && (
+              <div className="mb-5" aria-label="SeedHub 已采集目录">
+                <div className="mb-2 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-content">已采集影片资料 · SeedHub</h3>
+                  <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-600">目录资料</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {seedhubItems.map((item) => (
+                    <button key={item.source_url + ':' + item.category} type="button"
+                      onClick={() => router.push('/seedhub?url=' + encodeURIComponent(item.source_url) + '&category=' + item.category)}
+                      className="overflow-hidden rounded-xl border border-line bg-card text-left transition hover:border-accent">
+                      <span className="relative block aspect-video bg-chip">
+                        {item.poster_url ? <SmartImage url={item.poster_url} mode={imageProxyMode} customProxy={customImageProxy} alt={item.title} className="absolute inset-0 h-full w-full object-cover" /> : null}
+                      </span>
+                      <span className="block truncate px-3 py-2 text-sm font-medium text-content">{item.title}</span>
+                      <span className="block px-3 pb-3 text-xs text-muted">{item.category === 'movies' ? '电影' : item.category === 'series' ? '电视剧' : '动漫'} · SeedHub 目录</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {registryResources.length > 0 && (
               <div className="mb-5" aria-label="公开媒体资源">
                 <div className="mb-2 flex items-center gap-2">
@@ -276,7 +314,7 @@ function HomeContent() {
                 {offSubscriptionSources.map((key) => sourceName(key)).join('、')}
               </div>
             )}
-            {selectedSources.length === 0 && registryResources.length === 0 ? (
+            {selectedSources.length === 0 && registryResources.length === 0 && seedhubItems.length === 0 ? (
               <NoSourceGuide hasSources={customAPIs.length > 0 || envSources.length > 0} />
             ) : list.length > 0 ? (
               <>
@@ -286,7 +324,7 @@ function HomeContent() {
                       key={group.key}
                       group={group}
                       sources={selectedSources}
-                      onOpen={(item) => setQuickPlayItem(item)}
+                      onOpen={openDetail}
                     />
                   ))}
                 </div>
@@ -301,7 +339,7 @@ function HomeContent() {
                   </div>
                 )}
               </>
-            ) : registryResources.length > 0 ? null : isSearching ? (
+            ) : registryResources.length > 0 || seedhubItems.length > 0 ? null : isSearching ? (
               <ResultsSkeleton />
             ) : searchQuery.isError || failures.length > 0 ? (
               <div className="flex flex-col items-center gap-3 py-8" role="alert">
@@ -325,10 +363,8 @@ function HomeContent() {
             )}
           </section>
         )}
-        {!urlQuery && <V4HomepageContent onPick={openRecommendation} />}
+
       </main>
-      <DetailModal item={detailItem} onClose={() => setDetailItem(null)} />
-      <HomeInlinePlayer item={quickPlayItem} onClose={() => setQuickPlayItem(null)} />
       <RegistryInlinePlayer resource={registryPlayItem} onClose={() => setRegistryPlayItem(null)} />
     </div>
   );

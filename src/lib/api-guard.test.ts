@@ -47,6 +47,26 @@ describe('guardPrivateFeatureRequest', () => {
     await expect(response?.json()).resolves.toMatchObject({ code: 'COLLECTOR_NOT_CONFIGURED' });
   });
 
+  it('allows only SeedHub read endpoints through a server-configured public Preview Collector', () => {
+    vi.stubEnv('AUTH_DISABLED', 'true');
+    vi.stubEnv('SCRAPLING_API_BASE', 'https://collector.example');
+    vi.stubEnv('SCRAPLING_API_TOKEN', 'server-only-token');
+
+    expect(guardPrivateFeatureRequest(new Request(
+      'https://preview.example/api/resource-collector?action=seedhub-catalog&category=movies'
+    ))).toBeNull();
+    expect(guardPrivateFeatureRequest(new Request(
+      'https://preview.example/api/resource-collector?action=seedhub-detail&url=https%3A%2F%2Fwww.seedhub.cc%2Fmovies%2F1%2F'
+    ))).toBeNull();
+    expect(guardPrivateFeatureRequest(new Request(
+      'https://preview.example/api/resource-collector?action=jobs'
+    ))?.status).toBe(503);
+    expect(guardPrivateFeatureRequest(new Request(
+      'https://preview.example/api/resource-collector',
+      { method: 'POST' }
+    ))?.status).toBe(503);
+  });
+
   it('allows a public preview caller to provide its own browser-local Collector credentials', () => {
     vi.stubEnv('AUTH_DISABLED', 'true');
     vi.stubEnv('SCRAPLING_API_BASE', 'https://collector.example');

@@ -15,7 +15,10 @@ export function getEnvSources(): SourceConfig[] {
       if (typeof item !== 'object' || item === null) {
         throw new Error(`第 ${i + 1} 项不是对象`);
       }
-      const { name, url, detail, isAdult } = item as Record<string, unknown>;
+      const { key: rawKey, name, url, detail, isAdult } = item as Record<string, unknown>;
+      const configuredKey = typeof rawKey === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(rawKey.trim())
+        ? rawKey.trim()
+        : `env_${i}`;
       if (typeof name !== 'string' || !name.trim()) {
         throw new Error(`第 ${i + 1} 项缺少 name`);
       }
@@ -23,7 +26,7 @@ export function getEnvSources(): SourceConfig[] {
         throw new Error(`第 ${i + 1} 项的 url 必须以 http:// 或 https:// 开头`);
       }
       return {
-        key: `env_${i}`,
+        key: configuredKey,
         name: name.trim(),
         url: url.trim().replace(/\/+$/, ''),
         detail: typeof detail === 'string' && detail.trim() ? detail.trim() : undefined,

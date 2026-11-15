@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { guardRequest, jsonError } from '@/lib/api-guard';
-import { fetchUpstreamWithMeta } from '@/lib/fetch-utils';
+import { fetchLiveUpstreamWithMeta } from '@/lib/fetch-utils';
 import { withHostLimit } from '@/lib/host-gate';
 
 export const runtime = 'nodejs';
@@ -36,6 +36,64 @@ export const dynamic = 'force-dynamic';
  */
 
 const MAX_URLS = 50;
+const MAX_PROBE_BODY_BYTES = 64 * 1024;
+const MAX_MANIFEST_BYTES = 1024 * 1024;
+
+/** 流式读取客户端请求体，超限时立即取消，不把任意大的 body 先读入内存。 */
+async function readRequestTextLimited(req: Request, maxBytes: number): Promise<string> {
+  if (!req.body) return '';
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error('REQUEST_BODY_TOO_LARGE');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
+}
+
+async function readTextLimited(res: Response, maxBytes: number): Promise<string> {
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new Error('播放列表超过 1MB 限制');
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error('播放列表超过 1MB 限制');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(merged);
+}
 const CONCURRENCY = 16;
 /**
  * 单个频道三级探测的总预算（含各级请求）。
@@ -145,11 +203,10 @@ async function fetchHeadersOnly(
 
   // allowPrivate：与直播流代理同一把尺子，LIVE_ALLOW_PRIVATE=1 时自建内网 IPTV 才能测通；
   // fetchUpstreamWithMeta 内部逐跳做 SSRF 校验，此处不再重复预检（省一次 DNS 解析）
-  const { res, finalUrl } = await fetchUpstreamWithMeta(url, {
+  const { res, finalUrl } = await fetchLiveUpstreamWithMeta(url, {
     timeoutMs,
     retries: 0,
     headers,
-    allowPrivate: true,
     signal: requestSignal,
   });
   const contentType = res.headers.get('content-type') || '';
@@ -160,7 +217,7 @@ async function fetchHeadersOnly(
   let text: string | undefined;
   if (isM3u8) {
     // m3u8 是小文本，读取以供解析；分片则不读取
-    text = await res.text();
+    text = await readTextLimited(res, MAX_MANIFEST_BYTES);
   } else if (res.body) {
     try { await res.body.cancel(); } catch { /* 忽略 */ }
   }
@@ -227,7 +284,7 @@ function elapsed(start: number): number {
 async function measureThroughput(segmentUrl: string, referer?: string, requestSignal?: AbortSignal): Promise<number | undefined> {
   const start = performance.now();
   try {
-    const { res } = await fetchUpstreamWithMeta(segmentUrl, {
+    const { res } = await fetchLiveUpstreamWithMeta(segmentUrl, {
       timeoutMs: 3000,
       retries: 0,
       headers: {
@@ -236,7 +293,6 @@ async function measureThroughput(segmentUrl: string, referer?: string, requestSi
         Range: `bytes=0-${THROUGHPUT_BYTES - 1}`,
         ...(referer ? { Referer: referer } : {}),
       },
-      allowPrivate: true,
       signal: requestSignal,
     });
     if (!res.ok || !res.body) return undefined;
@@ -510,14 +566,28 @@ export async function POST(req: Request) {
 
   let body: { urls?: unknown };
   try {
-    body = (await req.json()) as { urls?: unknown };
-  } catch {
+    const declared = Number(req.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > MAX_PROBE_BODY_BYTES) {
+      return jsonError('请求体超过 64KB 限制', 413);
+    }
+    const raw = await readRequestTextLimited(req, MAX_PROBE_BODY_BYTES);
+    body = JSON.parse(raw) as { urls?: unknown };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'REQUEST_BODY_TOO_LARGE') {
+      return jsonError('请求体超过 64KB 限制', 413);
+    }
     return jsonError('无效请求体', 400);
   }
   if (!Array.isArray(body.urls)) return jsonError('urls 必须为字符串数组', 400);
 
   const urls = [...new Set(
-    body.urls.filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u))
+    body.urls.filter((u): u is string => {
+      if (typeof u !== 'string' || u.length > 4096) return false;
+      try {
+        const parsed = new URL(u);
+        return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !parsed.username && !parsed.password;
+      } catch { return false; }
+    })
   )].slice(0, MAX_URLS);
   const stream = new URL(req.url).searchParams.get('stream') === '1';
   if (urls.length === 0) {

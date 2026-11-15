@@ -1,0 +1,1246 @@
+/* Shared dock geometry tokens. Only this stylesheet owns dock position and dimensions. */
+:root {
+  --tabbar-height: 68px;
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --tabbar-scroll-clearance: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px);
+}
+
+/* PR #84 — Apple TV edge-to-edge iPhone dock and cinematic poster finishing.
+   High-specificity route-scoped selectors intentionally override the legacy capsule rules. */
+@media (max-width: 700px) {
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar {
+    position: fixed !important;
+    z-index: 10000 !important;
+    inset: auto 0 0 0 !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: calc(var(--tabbar-height) + var(--safe-area-bottom)) !important;
+    min-height: calc(var(--tabbar-height) + var(--safe-area-bottom)) !important;
+    margin: 0 !important;
+    padding: 8px max(12px, env(safe-area-inset-left, 0px)) calc(8px + var(--safe-area-bottom)) max(12px, env(safe-area-inset-right, 0px)) !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    outline: 0 !important;
+    border-radius: 0 !important;
+    background: rgba(25, 25, 25, .70) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.15) !important;
+    -webkit-backdrop-filter: blur(40px) saturate(150%) !important;
+    backdrop-filter: blur(40px) saturate(150%) !important;
+    isolation: isolate !important;
+    transform: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar::before,
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar::after {
+    content: none !important;
+    display: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a {
+    position: relative !important;
+    z-index: 1 !important;
+    display: flex !important;
+    width: 100% !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 20px !important;
+    color: rgba(255,255,255,.76) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    text-decoration: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.15) !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a svg {
+    display: block !important;
+    width: 19px !important;
+    height: 19px !important;
+    flex: 0 0 19px !important;
+    stroke: currentColor !important;
+    filter: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a span {
+    display: block !important;
+    color: inherit !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a i {
+    display: none !important;
+  }
+
+  /* Homepage search: transparent icon-only control, including its real inner button. */
+  html body:has(.v4-home) .v4-header-actions > .v4-search {
+    color: #fff !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  html body:has(.v4-home) .v4-header-actions > .v4-search > .liquid-glass-button-content {
+    color: #fff !important;
+    background: transparent !important;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+  }
+  html body:has(.v4-home) .v4-header-actions > .v4-search svg {
+    color: #fff !important;
+    stroke: currentColor !important;
+    fill: none !important;
+  }
+
+  /* Continue-watching empty state. */
+  body:has(.v4-home) .v4-history-empty {
+    border: 0 !important;
+    border-radius: 14px !important;
+    background: #1c1c1e !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    color: #a1a1a6 !important;
+  }
+
+  /* Apple TV-style ranking watermark and readable poster title gradient. */
+  body:has(.v4-home) .v4-apple-poster-rank {
+    color: rgba(255,255,255,.4) !important;
+    font-weight: 900 !important;
+    text-shadow: none !important;
+  }
+  body:has(.v4-home) .v4-apple-poster-caption {
+    z-index: 2 !important;
+  }
+  body:has(.v4-home) .v4-apple-poster-caption strong,
+  body:has(.v4-home) .v4-apple-poster-caption small {
+    text-shadow: 0 1px 8px rgba(0,0,0,.9) !important;
+  }
+
+  /* iOS-style hero pagination. */
+  body:has(.v4-home) .v4-hero-dots button {
+    background: rgba(255,255,255,.34) !important;
+  }
+  body:has(.v4-home) .v4-hero-dots button.is-active {
+    background: #fff !important;
+  }
+
+  body:has(.v4-home) .v4-continue-section {
+    margin-top: 42px !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) and (max-width: 700px) {
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar {
+    background: rgba(25,25,25,.96) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+
+/* PR #84 follow-up — true edge-to-edge Safari glass dock.
+   The dock is a real full-width nav; keep the engine's rounded demo layer out
+   of this surface and let WebKit composite the native backdrop blur. */
+@media (max-width: 700px) {
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9999 !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: calc(var(--tabbar-height) + var(--safe-area-bottom)) !important;
+    min-height: calc(var(--tabbar-height) + var(--safe-area-bottom)) !important;
+    margin: 0 !important;
+    padding: 8px 12px calc(8px + var(--safe-area-bottom)) !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    border-top: 1px solid rgba(255,255,255,.1) !important;
+    border-radius: 0 !important;
+    background: rgba(25,25,25,.7) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: blur(40px) !important;
+    backdrop-filter: blur(40px) !important;
+    transform: none !important;
+    isolation: isolate !important;
+  }
+
+  /* The upstream optical demo uses a rounded 999px lens; Safari's native
+     backdrop-filter is the correct full-bleed glass renderer for this dock. */
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > .liquid-glass-engine-slot {
+    display: none !important;
+  }
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar::before,
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 18px !important;
+    color: rgba(255,255,255,.72) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.15) !important;
+    box-shadow: none !important;
+  }
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a svg,
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a.is-active svg {
+    color: #fff !important;
+    stroke: #fff !important;
+    fill: none !important;
+    filter: none !important;
+  }
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar > a.is-active span {
+    color: #fff !important;
+  }
+
+  /* Keep the last content row fully reachable above the full-width dock. */
+  body:has(.v4-home) .v4-home {
+    padding-bottom: 0 !important;
+  }
+  body:has(.v4-home) .v4-home-main,
+  body:has(.v4-home) .v4-home-main--cinema {
+    padding-bottom: 100px !important;
+  }
+  body .v4-search-page {
+    padding-bottom: 0 !important;
+    scroll-padding-bottom: 100px !important;
+  }
+  body .v4-search-page .v4-search-main {
+    padding-bottom: 100px !important;
+    scroll-padding-bottom: 100px !important;
+  }
+  body .v4-spatial-screen {
+    padding-bottom: 0 !important;
+    scroll-padding-bottom: 100px !important;
+  }
+  body .v4-spatial-screen > .v4-spatial-main {
+    padding-bottom: 100px !important;
+    scroll-padding-bottom: 100px !important;
+  }
+
+  /* Homepage search is icon-only: remove the white GlassButton surface. */
+  body:has(.v4-home) .v4-header-actions .v4-search,
+  body:has(.v4-home) .v4-header-actions .v4-search:hover,
+  body:has(.v4-home) .v4-header-actions .v4-search:focus,
+  body:has(.v4-home) .v4-header-actions .v4-search:active {
+    color: #fff !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  body:has(.v4-home) .v4-header-actions .v4-search::before,
+  body:has(.v4-home) .v4-header-actions .v4-search::after,
+  body:has(.v4-home) .v4-header-actions .v4-search > * {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+  }
+  body:has(.v4-home) .v4-header-actions .v4-search svg {
+    color: #fff !important;
+    stroke: #fff !important;
+    fill: none !important;
+  }
+
+  /* Ranking numbers are quiet translucent-white watermarks. */
+  body:has(.v4-home) .v4-apple-poster-rank {
+    color: rgba(255,255,255,.25) !important;
+    -webkit-text-fill-color: rgba(255,255,255,.25) !important;
+    font-weight: 900 !important;
+    text-shadow: none !important;
+  }
+}
+
+
+/* PR84 P0 regression repair — remove the legacy floating-dock cascade and
+   restore WebKit backdrop sampling from the page behind the viewport dock. */
+@media (max-width: 700px) {
+  /* Safari backdrop-filter must not be trapped by a clipped/transformed root.
+     The dock is portaled directly to body; keep both root ancestors neutral. */
+  html:has(body .v4-home, body .v4-search-page, body .v4-spatial-screen),
+  body:has(.v4-home, .v4-search-page, .v4-spatial-screen) {
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    contain: none !important;
+  }
+
+  /* This selector intentionally outranks every older body > dock capsule rule. */
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 2147483000 !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    height: calc(var(--tabbar-height) + var(--safe-area-bottom)) !important;
+    min-height: calc(var(--tabbar-height) + var(--safe-area-bottom)) !important;
+    margin: 0 !important;
+    padding: 7px 12px calc(7px + var(--safe-area-bottom)) !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    border-top: 0 !important;
+    border-radius: 0 !important;
+    outline: 0 !important;
+    background: rgba(25,25,25,.70) !important;
+    background-color: rgba(25,25,25,.70) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: blur(40px) saturate(165%) !important;
+    backdrop-filter: blur(40px) saturate(165%) !important;
+    transform: none !important;
+    isolation: auto !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] > .liquid-glass-engine-slot,
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"]::before,
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"]::after {
+    display: none !important;
+    content: none !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] > a {
+    position: relative !important;
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 16px !important;
+    color: rgba(255,255,255,.76) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.14) !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] > a svg {
+    color: #fff !important;
+    stroke: #fff !important;
+    fill: none !important;
+    filter: none !important;
+  }
+
+  /* Kill the white GlassButton wrapper, native button paint and optical layer. */
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search:hover,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search:focus,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search:active {
+    display: inline-flex !important;
+    flex: 0 0 36px !important;
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    outline: 0 !important;
+    color: #fff !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search::before,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search::after,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search > .liquid-glass-engine-slot {
+    display: none !important;
+    content: none !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search > .liquid-glass-button-content,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search > .liquid-glass-button-content:hover,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search > .liquid-glass-button-content:focus,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search > .liquid-glass-button-content:active {
+    display: inline-flex !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    outline: 0 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    color: #fff !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search svg {
+    width: 18px !important;
+    height: 18px !important;
+    color: #fff !important;
+    stroke: #fff !important;
+    fill: none !important;
+  }
+
+  /* The full-width dock covers only its safe-area band; reserve scroll tail. */
+  body:has(.v4-home) .v4-home-main,
+  body:has(.v4-home) .v4-home-main--cinema,
+  body .v4-search-page .v4-search-main,
+  body .v4-spatial-screen > .v4-spatial-main {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+    scroll-padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+}
+
+
+/* PR84 material pass — darker, heavier Apple-style glass + guaranteed scroll tail.
+   Use the real project selectors; the generic .bottom-nav/.search-btn names in
+   the design note are placeholders, not classes present in this app. */
+@media (max-width: 700px) {
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen)
+    > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] {
+    background: rgba(25, 25, 25, 0.70) !important;
+    background-color: rgba(25, 25, 25, 0.70) !important;
+    background-image: none !important;
+    -webkit-backdrop-filter: blur(40px) saturate(155%) !important;
+    backdrop-filter: blur(40px) saturate(155%) !important;
+    border: 0 !important;
+    border-top: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    box-shadow: none !important;
+    padding-bottom: calc(7px + var(--safe-area-bottom)) !important;
+  }
+
+  /* Strip native button paint as well as every GlassButton wrapper layer. */
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search button,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search .liquid-glass-button-content {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+  }
+
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search *,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search *::before,
+  html body:has(.v4-home) .v4-header .v4-header-actions > .v4-search *::after {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Keep the final poster row scrollable above the fixed dock. */
+  body:has(.v4-home) .v4-home-main,
+  body:has(.v4-home) .v4-home-main--cinema,
+  body .v4-search-page .v4-search-main,
+  body .v4-spatial-screen > .v4-spatial-main {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+    scroll-padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+}
+
+
+/* PR84 P0 follow-up: the earlier inline Hero selector is more specific than
+   pr84-layout-recovery.css. Reassert the agreed compact first-viewport budget
+   in this final stylesheet so the older 560px rule cannot win. */
+@media (max-width: 700px) {
+  html body:has(.v4-home) .v4-home .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image img {
+    object-position: center 85% !important;
+  }
+
+  html body:has(.v4-home) .v4-home .v4-home-main--cinema > .v4-hero-immersive {
+    height: min(55vh, calc(100vh - 68px - env(safe-area-inset-top, 0px) - 132px)) !important;
+    height: min(55svh, calc(100svh - 68px - env(safe-area-inset-top, 0px) - 132px)) !important;
+    min-height: 360px !important;
+    max-height: 520px !important;
+  }
+}
+
+/* MobileTabBar is portaled to body on every route. The older desktop hide
+   selector targeted a non-existent data-homepage-dock attribute. */
+@media (min-width: 701px) {
+  html body > nav.v4-mobile-tabbar {
+    display: none !important;
+  }
+}
+
+
+/* PR #84 — detail page visual repair. The global dock was previously scoped
+   only to home/search/spatial routes, leaving /detail exposed to SVG defaults. */
+@media (max-width: 700px) {
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    z-index: 2147483000 !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    justify-items: stretch !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+    margin: 0 !important;
+    padding: 7px 12px calc(7px + env(safe-area-inset-bottom, 0px)) !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    border-top: 0 !important;
+    border-radius: 0 !important;
+    background: rgba(25,25,25,.70) !important;
+    background-color: rgba(25,25,25,.70) !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: blur(40px) saturate(165%) !important;
+    backdrop-filter: blur(40px) saturate(165%) !important;
+    transform: none !important;
+  }
+
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar > .liquid-glass-engine-slot,
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar::before,
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar > a {
+    position: relative !important;
+    display: flex !important;
+    flex: 1 1 0 !important;
+    flex-shrink: 0 !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    justify-self: stretch !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 3px !important;
+    border: 0 !important;
+    border-radius: 18px !important;
+    color: rgba(255,255,255,.72) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    text-align: center !important;
+    text-decoration: none !important;
+  }
+
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.15) !important;
+  }
+
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar > a > svg {
+    display: block !important;
+    flex: 0 0 24px !important;
+    flex-shrink: 0 !important;
+    width: 24px !important;
+    min-width: 24px !important;
+    max-width: 24px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+    margin: 0 auto !important;
+    overflow: visible !important;
+    stroke: currentColor !important;
+  }
+
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar > a > span {
+    display: block !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: inherit !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+  }
+
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar > a > i {
+    display: none !important;
+  }
+}
+
+/* Cinematic detail hero: long lower falloff makes copy and actions sit in black. */
+.movie-detail-page {
+  background: #000 !important;
+  color: #fff;
+}
+.movie-detail-hero {
+  min-height: 620px;
+  background: #000;
+}
+.movie-detail-hero__image {
+  opacity: .86 !important;
+  object-position: center 24%;
+}
+.movie-detail-hero__scrim {
+  background: linear-gradient(180deg,
+    rgba(0,0,0,.12) 0%,
+    rgba(0,0,0,.08) 30%,
+    rgba(0,0,0,.38) 52%,
+    rgba(0,0,0,.82) 76%,
+    #000 100%);
+}
+.movie-detail-hero__bottom-gradient {
+  height: 72%;
+  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.32) 28%, rgba(0,0,0,.88) 72%, #000 100%);
+}
+.movie-detail-hero__side-gradient {
+  background: linear-gradient(90deg, rgba(0,0,0,.46) 0%, transparent 75%);
+}
+.movie-detail-glass-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(255,255,255,.15);
+  -webkit-backdrop-filter: blur(10px) saturate(145%);
+  backdrop-filter: blur(10px) saturate(145%);
+  box-shadow: 0 2px 12px rgba(0,0,0,.12);
+}
+.movie-detail-glass-control > span {
+  font-size: 25px;
+  line-height: 1;
+}
+.movie-detail-source-pill {
+  width: auto;
+  min-width: 0;
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: rgba(255,255,255,.9);
+}
+.movie-detail-source-pill > span { font-size: inherit; }
+.movie-detail-eyebrow {
+  letter-spacing: 1.5px !important;
+  color: rgba(255,255,255,.72) !important;
+}
+.movie-detail-title {
+  font-weight: 800 !important;
+  text-shadow: 0 2px 24px rgba(0,0,0,.24);
+}
+.movie-detail-description {
+  color: rgba(255,255,255,.82) !important;
+  text-shadow: 0 1px 12px rgba(0,0,0,.55);
+}
+.movie-detail-actions button:not(:first-child) {
+  border-color: rgba(255,255,255,.25) !important;
+  background: rgba(255,255,255,.14) !important;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+/* Compact episode picker: real episode titles and progress, no duplicated poster art. */
+.movie-detail-episode-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.movie-detail-episode-tile {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 76px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  overflow: hidden;
+  padding: 12px 13px 14px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(255,255,255,.055);
+  text-align: left;
+  transition: background .18s ease, border-color .18s ease;
+}
+.movie-detail-episode-tile:active {
+  background: rgba(255,255,255,.13);
+}
+.movie-detail-episode-tile-number {
+  color: rgba(255,255,255,.48);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .12em;
+  font-variant-numeric: tabular-nums;
+}
+.movie-detail-episode-tile-title {
+  width: 100%;
+  overflow: hidden;
+  color: rgba(255,255,255,.96);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.movie-detail-episode-tile-status {
+  color: rgba(255,255,255,.48);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.movie-detail-episode-tile-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: rgba(255,255,255,.12);
+}
+.movie-detail-episode-tile-progress > span {
+  display: block;
+  height: 100%;
+  background: #fff;
+}
+/* Metadata is editorial text on black, not a large bordered admin panel. */
+.movie-detail-info-grid {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.movie-detail-info-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 14px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+.movie-detail-info-item > span {
+  color: rgba(255,255,255,.43);
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: .04em;
+}
+.movie-detail-info-item > strong {
+  color: rgba(255,255,255,.92);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+  .movie-detail-hero { min-height: 560px; }
+  .movie-detail-hero__content {
+    min-height: 520px !important;
+    padding-top: max(132px, calc(env(safe-area-inset-top, 0px) + 112px)) !important;
+    padding-bottom: 34px !important;
+  }
+  .movie-detail-hero__bottom-gradient { height: 78%; }
+  .movie-detail-title { font-size: clamp(34px, 10vw, 46px) !important; }
+  .movie-detail-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .movie-detail-episode-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .movie-detail-episode-tile { min-height: 72px; padding: 10px 9px 12px; border-radius: 12px; }
+  .movie-detail-episode-tile-title { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .movie-detail-episode-card,
+  .movie-detail-episode-image { transition: none !important; }
+}
+
+
+/* PR84 CSS rescue: compact metadata rows with fixed labels and inset dividers. */
+.movie-detail-info-grid {
+  row-gap: 12px !important;
+  column-gap: 20px !important;
+}
+.movie-detail-info-item {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+  padding: 0 0 10px !important;
+  border-bottom: 0 !important;
+}
+.movie-detail-info-item::after {
+  content: "" !important;
+  position: absolute !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 20px !important;
+  height: 1px !important;
+  background: rgba(255,255,255,.09) !important;
+  pointer-events: none !important;
+}
+.movie-detail-info-item:last-child::after {
+  display: none !important;
+}
+.movie-detail-info-item > span {
+  flex: 0 0 56px !important;
+  width: 56px !important;
+  white-space: nowrap !important;
+  padding-top: 2px !important;
+}
+.movie-detail-info-item > strong {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  line-height: 1.5 !important;
+}
+
+
+/* PR84 cinematic episode shelf — fixed layout, dynamic episode data, verified stills. */
+.movie-detail-episode-list {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 16px !important;
+  width: calc(100% + 40px);
+  margin: 0 -20px;
+  padding: 0 20px 24px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.movie-detail-episode-list::-webkit-scrollbar { display: none !important; }
+.movie-detail-episode-card {
+  position: relative !important;
+  display: block !important;
+  flex: 0 0 85vw !important;
+  flex-shrink: 0 !important;
+  width: 85vw !important;
+  min-width: 85vw !important;
+  aspect-ratio: 16 / 9 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  isolation: isolate;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  border-radius: 12px !important;
+  color: #fff !important;
+  background: #000 !important;
+  text-align: left !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,.28);
+}
+.movie-detail-episode-image {
+  position: absolute !important;
+  z-index: 0 !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+}
+.movie-detail-episode-image[hidden] { display: none !important; }
+.movie-detail-episode-placeholder {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+.movie-detail-episode-placeholder-play {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  align-items: center;
+  justify-content: center;
+  padding-left: 3px;
+  border: 1px solid rgba(255,255,255,.32);
+  border-radius: 50%;
+  color: rgba(255,255,255,.82);
+  background: rgba(255,255,255,.08);
+  font-size: 18px;
+}
+.movie-detail-episode-card-gradient {
+  position: absolute;
+  z-index: 1;
+  inset: 34% 0 0;
+  background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.48) 35%, rgba(0,0,0,.96) 100%);
+  pointer-events: none;
+}
+.movie-detail-episode-card-hit {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.movie-detail-episode-card-content {
+  position: absolute !important;
+  z-index: 3 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 5px !important;
+  padding: 16px 54px 16px 16px !important;
+  color: #fff !important;
+  pointer-events: none;
+}
+.movie-detail-episode-card-number {
+  color: #A1A1A6;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.movie-detail-episode-card-title {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 2px 12px rgba(0,0,0,.5);
+}
+.movie-detail-episode-card-description {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: #A1A1A6;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.movie-detail-episode-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+  color: #A1A1A6;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.movie-detail-episode-card-play {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  color: #A1A1A6;
+  font-size: 9px;
+}
+.movie-detail-episode-card-more {
+  position: absolute;
+  z-index: 5;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0,0,0,.38);
+  font-size: 20px;
+  line-height: 1;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.movie-detail-episode-menu {
+  position: absolute;
+  z-index: 6;
+  right: 10px;
+  bottom: 50px;
+  display: flex;
+  min-width: 132px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 12px;
+  background: rgba(24,24,26,.94);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+.movie-detail-episode-menu :is(button, a) {
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+}
+.movie-detail-episode-menu button:active { background: rgba(255,255,255,.12); }
+.movie-detail-episode-card-progress {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: rgba(255,255,255,.2);
+}
+.movie-detail-episode-card-progress > span {
+  display: block;
+  height: 100%;
+  background: #fff;
+}
+@media (max-width: 380px) {
+  .movie-detail-episode-card-content { padding: 13px 52px 13px 13px !important; }
+}
+
+/* Detail-route dock: full-bleed translucent glass, including the home active pill. */
+@media (max-width: 700px) {
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar {
+    position: fixed !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    background: rgba(25,25,25,0.7) !important;
+    background-color: rgba(25,25,25,0.7) !important;
+    -webkit-backdrop-filter: blur(40px) !important;
+    backdrop-filter: blur(40px) !important;
+  }
+  html body:has(.movie-detail-page) > nav.v4-mobile-tabbar > a.is-active {
+    border-radius: 16px !important;
+    background: rgba(255,255,255,.14) !important;
+    color: #fff !important;
+  }
+}
+
+
+/* PR84: true edge-to-edge black glass dock. Remove legacy hairlines on every mobile route. */
+@media (max-width: 700px) {
+  html body > nav.v4-mobile-tabbar {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    border: 0 !important;
+    outline: 0 !important;
+    border-radius: 0 !important;
+    background: rgba(0, 0, 0, .86) !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: blur(40px) saturate(140%) !important;
+    backdrop-filter: blur(40px) saturate(140%) !important;
+    transform: none !important;
+  }
+  html body > nav.v4-mobile-tabbar::before,
+  html body > nav.v4-mobile-tabbar::after {
+    content: none !important;
+    display: none !important;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+
+/* PR84 final dock material override — black edge-to-edge glass on every mobile route. */
+@media (max-width: 700px) {
+  html body:has(.movie-detail-page, .v4-home, .v4-search-page, .v4-spatial-screen)
+    > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    border: 0 !important;
+    border-top: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    border-left: 0 !important;
+    outline: 0 !important;
+    border-radius: 0 !important;
+    background: rgba(0, 0, 0, .86) !important;
+    background-color: rgba(0, 0, 0, .86) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: blur(40px) saturate(140%) !important;
+    backdrop-filter: blur(40px) saturate(140%) !important;
+    transform: none !important;
+  }
+
+  html body:has(.movie-detail-page, .v4-home, .v4-search-page, .v4-spatial-screen)
+    > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"]::before,
+  html body:has(.movie-detail-page, .v4-home, .v4-search-page, .v4-spatial-screen)
+    > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"]::after {
+    content: none !important;
+    display: none !important;
+    border: 0 !important;
+    outline: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+}
+
+
+/* Final viewport geometry owner for iOS/WebKit: no transformed containing
+   block may capture the fixed dock; the dock is anchored to the screen edge. */
+@media (max-width: 700px) {
+  html:has(body .v4-home, body .v4-search-page, body .v4-spatial-screen),
+  body:has(.v4-home, .v4-search-page, .v4-spatial-screen) {
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    contain: none !important;
+  }
+
+  html body:has(.v4-home, .v4-search-page, .v4-spatial-screen) > nav.v4-mobile-tabbar.liquid-glass[data-liquid-glass="true"] {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    translate: none !important;
+    transform: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    z-index: 2147483000 !important;
+  }
+
+  html body:has(.v4-home) .v4-home .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image,
+  html body:has(.v4-home) .v4-home .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image > *,
+  html body:has(.v4-home) .v4-home .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image img {
+    height: 100% !important;
+    max-height: none !important;
+  }
+}

@@ -88,8 +88,6 @@ function DoubanView({ onPick }: { onPick: (item: DoubanItem) => void }) {
             <DoubanCard
               key={item.id}
               item={item}
-              isTv={type === 'tv'}
-              enableTmdbFallback
               onClick={() => onPick(item)}
             />
           ))}
@@ -138,8 +136,6 @@ function BangumiView({ onPick }: { onPick: (item: DoubanItem) => void }) {
             <DoubanCard
               key={item.id}
               item={item}
-              isTv={item.isTv ?? true}
-              enableTmdbFallback
               onClick={() => onPick(item)}
             />
           ))}
@@ -167,7 +163,7 @@ function HotListView({ onPick }: { onPick: (item: DoubanItem) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} enableTmdbFallback onClick={() => onPick(item)} />
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item)} />
           ))}
         </div>
       )}
@@ -264,8 +260,6 @@ export function AnimeRecommendationSection({ onPick }: { onPick: (item: DoubanIt
             <DoubanCard
               key={item.id}
               item={item}
-              isTv={item.isTv ?? true}
-              enableTmdbFallback
               onClick={() => onPick(item)}
             />
           ))}

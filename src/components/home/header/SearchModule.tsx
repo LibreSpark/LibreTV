@@ -1,1 +1,21 @@
-'use client';import {useRouter} from 'next/navigation';import {useState} from 'react';import {Icon} from '@/components/icon';import {SearchHistoryDropdown,useSearchHistory} from '@/components/search-history';import styles from './Search.module.css';export function SearchModule(){const router=useRouter();const [query,setQuery]=useState('');const [open,setOpen]=useState(false);const h=useSearchHistory(query);const submit=(v:string)=>{const q=v.trim().slice(0,100);if(!q)return;h.close();setOpen(false);h.record(q);router.push('/?s='+encodeURIComponent(q),{scroll:false});};const pick=(v:string)=>{setQuery(v);submit(v);};return <><form id="v4-header-search" className={(open?'v4-search is-open':'v4-search')+' '+styles.root} role="search" onSubmit={e=>{e.preventDefault();submit(query);}}><Icon name="search"/><div className="v4-search-field" ref={h.containerRef}><input aria-label="搜索电影、电视剧" placeholder="搜索电影、电视剧..." autoFocus={open} value={query} maxLength={100} onChange={e=>{setQuery(e.target.value);h.resetActive();}} onFocus={h.onFocus} onKeyDown={e=>{if(e.key==='Escape'&&open){e.preventDefault();setOpen(false);e.currentTarget.blur();return;}h.onKeyDown(e,pick);}} role="combobox" aria-expanded={h.visible} aria-controls="v4-header-search-history" aria-autocomplete="list"/>{h.visible&&<SearchHistoryDropdown id="v4-header-search-history" matches={h.matches} activeIndex={h.activeIndex} onPick={pick} onRemove={h.remove} onClearAll={h.clearAll}/>}</div></form><button type="button" className={"v4-mobile-search-toggle "+styles.toggle} aria-label={open?'关闭搜索':'打开搜索'} aria-expanded={open} aria-controls="v4-header-search" onClick={()=>router.push('/search')}><Icon name="search"/></button></>;}
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { Icon } from '@/components/icon';
+import { GlassButton } from '@/components/ui/glass';
+import styles from './Search.module.css';
+
+export function SearchModule() {
+  const router = useRouter();
+
+  return (
+    <GlassButton
+      className={'v4-search ' + styles.root}
+      aria-label="搜索"
+      title="搜索"
+      onClick={() => router.push('/search')}
+    >
+      <Icon name="search" />
+    </GlassButton>
+  );
+}

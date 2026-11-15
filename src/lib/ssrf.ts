@@ -39,7 +39,10 @@ const BLOCKED_IPV4_CIDRS: Array<[string, number]> = [
   ['127.0.0.0', 8],     // 回环
   ['169.254.0.0', 16],  // 链路本地 / 云元数据
   ['172.16.0.0', 12],   // 私有
-  ['192.0.0.0', 24],    // IETF 协议分配
+  ['192.0.0.0', 24],    // IETF 协议分配（含全球可达例外地址，按保守策略整体拒绝）
+  ['192.31.196.0', 24], // AS112 特殊用途
+  ['192.52.193.0', 24], // AMT 特殊用途
+  ['192.175.48.0', 24], // AS112 特殊用途
   ['192.0.2.0', 24],    // 文档示例
   ['192.88.99.0', 24],  // 6to4 中继（已弃用）
   ['192.168.0.0', 16],  // 私有
@@ -66,12 +69,22 @@ export function isPrivateIP(ip: string): boolean {
 
   if (isIP(value) !== 6) return true;
 
-  // IPv6 未指定、回环、唯一本地、链路本地、多播及文档示例网段。
+  // IPv6 仅接受全球单播空间 2000::/3；其余空间均按非公网地址拒绝。
+  // 这样同时封闭未列全的 IANA 特殊用途、兼容/过渡及未来保留网段。
+  const firstHextet = parseInt(value.split(':')[0] || '0', 16);
+  if (!Number.isFinite(firstHextet) || firstHextet < 0x2000 || firstHextet > 0x3fff) return true;
+  // 以下为全球单播空间内部仍需拒绝的特殊用途范围。
   if (value === '::' || value === '::1') return true;
   if (/^(fc|fd)/i.test(value)) return true;       // fc00::/7
   if (/^fe[89ab]/i.test(value)) return true;      // fe80::/10
   if (/^ff/i.test(value)) return true;            // ff00::/8
-  if (/^2001:db8:/i.test(value)) return true;     // 2001:db8::/32
+  if (/^2001:db8:/i.test(value)) return true;     // 2001:db8::/32 文档示例
+  if (/^2001:/i.test(value)) {
+    const secondHextet = parseInt(value.split(':')[1] || '0', 16);
+    if (Number.isFinite(secondHextet) && secondHextet <= 0x01ff) return true; // 2001::/23 特殊用途
+  }
+  if (/^2002:/i.test(value)) return true;          // 2002::/16 6to4
+  if (/^3fff:/i.test(value)) return true;          // 3fff::/20 文档示例
   return false;
 }
 
@@ -83,6 +96,8 @@ export function isValidProxyUrl(urlString: string): boolean {
   try {
     const parsed = new URL(urlString);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    // URL 中的 userinfo 容易造成鉴权混淆，也可能泄露凭据给重定向目标；上游地址不接受嵌入式账号密码。
+    if (parsed.username || parsed.password) return false;
     const host = stripBrackets(parsed.hostname); // "[::1]" 也要能被黑名单命中
     if (BLOCKED_HOSTNAMES.has(host)) return false;
     if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':')) {
@@ -174,10 +189,15 @@ export function allowLivePrivate(): boolean {
  * 订阅/播放列表若沿用点播那把尺子，会静默过滤掉内网自建源。
  */
 export async function checkLiveUrlAllowed(urlString: string): Promise<UpstreamVerdict> {
+  let parsed: URL;
   try {
-    const parsed = new URL(urlString);
+    parsed = new URL(urlString);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return { ok: false, reason: '直播地址仅支持 http/https 协议' };
+    }
+    // 内网例外只放宽目标 IP 范围，不放宽 URL 结构与凭据校验。
+    if (parsed.username || parsed.password || !parsed.hostname) {
+      return { ok: false, reason: '直播地址格式不安全' };
     }
   } catch {
     return { ok: false, reason: '无效的直播地址' };

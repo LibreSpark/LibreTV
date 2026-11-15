@@ -1,0 +1,44 @@
+name: SeedHub Live Read-only Smoke
+
+on:
+  push:
+    branches:
+      - feature/homepage-cinema-lobby-order-2026-11-11
+    paths:
+      - 'services/scrapling-collector/seedhub.py'
+      - 'services/scrapling-collector/seedhub_live_smoke.py'
+      - '.github/workflows/seedhub-live-readonly-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seedhub-live-read-only-smoke
+  cancel-in-progress: false
+
+jobs:
+  seedhub-live-smoke:
+    name: Probe live SeedHub catalogues and detail metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/homepage-cinema-lobby-order-2026-11-11
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/scrapling-collector/requirements.txt
+
+      - name: Install isolated collector dependencies
+        run: python -m pip install -r services/scrapling-collector/requirements.txt
+
+      - name: Read-only live SeedHub smoke
+        env:
+          PYTHONPATH: services/scrapling-collector
+        run: python services/scrapling-collector/seedhub_live_smoke.py

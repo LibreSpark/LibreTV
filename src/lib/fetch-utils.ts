@@ -5,16 +5,6 @@ import { checkLiveUrlAllowed, checkUpstreamAllowed } from './ssrf';
 export interface FetchOptions extends RequestInit {
   timeoutMs?: number;
   retries?: number;
-  /**
-   * 安全跳转（默认开启）：禁用 fetch 的自动跟随，改为手动逐跳跟随，
-   * 每一跳重新执行 SSRF 校验——否则公网 URL 可 302 跳转到内网地址绕过预检。
-   */
-  safeRedirects?: boolean;
-  /**
-   * 直播场景放行内网地址（自建 IPTV）：仅在部署者设置 LIVE_ALLOW_PRIVATE=1 时生效。
-   * 校验复用 checkLiveUrlAllowed，与直播流代理使用同一把尺子。
-   */
-  allowPrivate?: boolean;
 }
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -29,11 +19,6 @@ export interface FetchResult {
 
 export interface SafeRedirectOptions {
   /**
-   * 直播场景放行内网地址（自建 IPTV）：仅在部署者设置 LIVE_ALLOW_PRIVATE=1 时生效。
-   * 校验复用 checkLiveUrlAllowed，与直播流代理使用同一把尺子。
-   */
-  allowPrivate?: boolean;
-  /**
    * 仅对「响应头等待」限时（直播流专用）：对整个 body 限时会切断
    * HTTP-FLV 单一无限长连接，故拿到响应头后立即清除计时器，body 不再受限。
    * 超时触发即整链失败（内部 controller 已 abort，对齐直播路由原行为）。
@@ -46,12 +31,13 @@ export interface SafeRedirectOptions {
  * 不能用 redirect:'follow'——预检之后 fetch 自动跟随的 3xx 可把请求
  * 带进内网/元数据地址，绕过对首跳的校验。
  */
-export async function fetchWithSafeRedirects(
+async function fetchWithPolicy(
   url: string,
   init: Omit<RequestInit, 'redirect'> = {},
-  options: SafeRedirectOptions = {}
+  options: SafeRedirectOptions = {},
+  allowPrivate = false
 ): Promise<FetchResult> {
-  const { allowPrivate = false, headerTimeoutMs } = options;
+  const { headerTimeoutMs } = options;
   let current = url;
   const controller = new AbortController();
   const externalSignal = init.signal;
@@ -114,13 +100,35 @@ export async function fetchWithSafeRedirects(
   }
 }
 
+export async function fetchUpstreamWithMeta(url: string, options: FetchOptions = {}): Promise<FetchResult> {
+  return fetchWithMetaPolicy(url, options, false);
+}
+
+export async function fetchLiveUpstreamWithMeta(url: string, options: FetchOptions = {}): Promise<FetchResult> {
+  return fetchWithMetaPolicy(url, options, true);
+}
+
+/** 普通公网代理：调用者不能启用内网例外。 */
+export async function fetchWithSafeRedirects(url: string, init: Omit<RequestInit, 'redirect'> = {}, options: SafeRedirectOptions = {}): Promise<FetchResult> {
+  return fetchWithPolicy(url, init, options, false);
+}
+
+/** 直播专用代理：内网放行仍受 LIVE_ALLOW_PRIVATE=1 约束。 */
+export async function fetchLiveWithSafeRedirects(url: string, init: Omit<RequestInit, 'redirect'> = {}, options: SafeRedirectOptions = {}): Promise<FetchResult> {
+  return fetchWithPolicy(url, init, options, true);
+}
+
 export async function fetchUpstream(url: string, options: FetchOptions = {}): Promise<Response> {
   return (await fetchUpstreamWithMeta(url, options)).res;
 }
 
+export async function fetchLiveUpstream(url: string, options: FetchOptions = {}): Promise<Response> {
+  return (await fetchLiveUpstreamWithMeta(url, options)).res;
+}
+
 /** 同 fetchUpstream，额外返回重定向后的最终 URL */
-export async function fetchUpstreamWithMeta(url: string, options: FetchOptions = {}): Promise<FetchResult> {
-  const { timeoutMs = 8000, retries = 0, safeRedirects = true, allowPrivate = false, ...init } = options;
+async function fetchWithMetaPolicy(url: string, options: FetchOptions, allowPrivate: boolean): Promise<FetchResult> {
+  const { timeoutMs = 8000, retries = 0, ...init } = options;
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -130,15 +138,7 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
       : timeoutSignal;
 
     try {
-      if (!safeRedirects) {
-        const res = await fetch(url, {
-          ...init,
-          signal,
-          redirect: init.redirect ?? 'follow',
-        });
-        return { res, finalUrl: res.url || url };
-      }
-      return await fetchWithSafeRedirects(url, { ...init, signal }, { allowPrivate });
+      return await fetchWithPolicy(url, { ...init, signal }, {}, allowPrivate);
     } catch (err) {
       lastError = err;
       if (init.signal?.aborted) throw err;

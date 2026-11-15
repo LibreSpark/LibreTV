@@ -31,7 +31,8 @@
     "react-dom": "^19.0.0",
     "zod": "^3.24.1",
     "zustand": "^5.0.2",
-    "wrangler": "^4.148.0"
+    "wrangler": "^4.148.0",
+    "liquid-glass-react": "1.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

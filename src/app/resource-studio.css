@@ -1,0 +1,186 @@
+/* PR #84 — Resource Studio page isolation.
+   This route owns its dark surface and shared dock geometry without changing other routes. */
+:root {
+  --resource-studio-bg: #08080a;
+  --resource-studio-surface: rgba(27, 27, 31, .82);
+  --resource-studio-border: rgba(255, 255, 255, .10);
+  --resource-studio-text: #f5f5f7;
+  --resource-studio-muted: #a1a1aa;
+}
+@media (max-width: 700px) {
+  html:has(body .resource-studio-page),
+  body:has(.resource-studio-page) {
+    min-height: 100%;
+    background: var(--resource-studio-bg) !important;
+    background-color: var(--resource-studio-bg) !important;
+    color: var(--resource-studio-text);
+    color-scheme: dark;
+  }
+  body:has(.resource-studio-page) {
+    overflow-x: hidden;
+  }
+  /* The shared nav is portaled to body. Scope this geometry to this route only. */
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar {
+    position: fixed !important;
+    z-index: 10000 !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-around !important;
+    gap: 2px !important;
+    box-sizing: border-box !important;
+    width: min(92vw, 420px) !important;
+    min-width: 0 !important;
+    max-width: 420px !important;
+    height: 68px !important;
+    min-height: 68px !important;
+    max-height: 68px !important;
+    margin: 0 !important;
+    padding: 6px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255,255,255,.13) !important;
+    border-radius: 999px !important;
+    background: rgba(25,25,28,.82) !important;
+    background-image: none !important;
+    box-shadow: 0 10px 36px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(155%) !important;
+    backdrop-filter: blur(28px) saturate(155%) !important;
+    transform: translateX(-50%) !important;
+    isolation: isolate !important;
+  }
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar::before,
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar::after,
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar > .liquid-glass-engine-slot {
+    display: none !important;
+    content: none !important;
+  }
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar > a {
+    position: relative !important;
+    display: flex !important;
+    flex: 1 1 0 !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    box-sizing: border-box !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 54px !important;
+    min-height: 54px !important;
+    max-height: 54px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    color: rgba(255,255,255,.72) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+  }
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.14) !important;
+  }
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar > a svg {
+    display: block !important;
+    flex: 0 0 19px !important;
+    width: 19px !important;
+    height: 19px !important;
+    stroke: currentColor !important;
+    filter: none !important;
+  }
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar > a span {
+    display: block !important;
+    color: inherit !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+  }
+  body:has(.resource-studio-page) > nav.v4-mobile-tabbar > a i { display: none !important; }
+
+  .resource-studio-page {
+    box-sizing: border-box;
+    min-height: 100svh;
+    width: 100%;
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(132px + env(safe-area-inset-bottom, 0px)) !important;
+    background: var(--resource-studio-bg) !important;
+    color: var(--resource-studio-text) !important;
+  }
+  .resource-studio-page > div {
+    width: 100%;
+    max-width: 1280px;
+    margin-inline: auto;
+  }
+  .resource-studio-page header { gap: 14px; }
+  .resource-studio-page header > div:first-child { min-width: 0; }
+  .resource-studio-page header p:first-child { color: #c4b5fd !important; }
+  .resource-studio-page h1,
+  .resource-studio-page h2,
+  .resource-studio-page h3 { color: #f5f5f7 !important; }
+  .resource-studio-page p,
+  .resource-studio-page label { color: var(--resource-studio-muted); }
+  .resource-studio-page section,
+  .resource-studio-page article {
+    border-color: var(--resource-studio-border) !important;
+  }
+  .resource-studio-page section.rounded-2xl {
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-color: var(--resource-studio-border) !important;
+    border-radius: 20px !important;
+    background: var(--resource-studio-surface) !important;
+    box-shadow: 0 12px 32px rgba(0,0,0,.18) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+    backdrop-filter: blur(18px) saturate(130%);
+  }
+  .resource-studio-page [class*="border-[var(--border)]"],
+  .resource-studio-page button,
+  .resource-studio-page input {
+    border-color: rgba(255,255,255,.13) !important;
+  }
+  .resource-studio-page button:not(:disabled) { color: #f5f5f7; }
+  .resource-studio-page input {
+    color: #f5f5f7 !important;
+    background: rgba(255,255,255,.045) !important;
+  }
+  .resource-studio-page input::placeholder { color: #85858d !important; }
+  .resource-studio-page [role="alert"] {
+    border: 1px solid rgba(248,113,113,.24) !important;
+    border-radius: 14px !important;
+    color: #fca5a5 !important;
+    background: rgba(127,29,29,.22) !important;
+  }
+  .resource-studio-page [role="status"] {
+    border: 1px solid rgba(74,222,128,.20) !important;
+    color: #86efac !important;
+    background: rgba(20,83,45,.22) !important;
+  }
+  .resource-studio-page .text-red-600 { color: #fca5a5 !important; }
+  .resource-studio-page .text-emerald-700 { color: #86efac !important; }
+  .resource-studio-page .bg-emerald-500\/10 { background: rgba(20,83,45,.24) !important; }
+  .resource-studio-page .divide-y > * + * { border-color: rgba(255,255,255,.09) !important; }
+}
+@media (min-width: 701px) {
+  .resource-studio-page {
+    min-height: 100vh;
+    padding-bottom: 48px;
+    background: #08080a;
+    color: #f5f5f7;
+  }
+  html:has(body .resource-studio-page),
+  body:has(.resource-studio-page) {
+    background: #08080a !important;
+    color-scheme: dark;
+  }
+  .resource-studio-page section.rounded-2xl {
+    border-color: rgba(255,255,255,.10) !important;
+    background: rgba(27,27,31,.82) !important;
+  }
+}

@@ -8,6 +8,43 @@
  * 复杂度高、收益边际——大文件场景建议直接使用 FS Access 浏览器。
  */
 
+/**
+ * Sanitize untrusted media titles before passing them to a browser file picker
+ * or an anchor download attribute.
+ */
+export function sanitizeDownloadFilename(filename: string): string {
+  let safe = filename
+    .normalize('NFKC')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[\u202a-\u202e\u2066-\u2069]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+/, '')
+    .replace(/[. ]+$/, '');
+
+  if (!safe) safe = 'LibreTV-download';
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(safe)) safe = '_' + safe;
+
+  const extension = safe.match(/(\.[a-z0-9]{1,8})$/i)?.[1] ?? '';
+  const stem = extension ? safe.slice(0, -extension.length) : safe;
+  safe = stem.slice(0, Math.max(1, 180 - extension.length)).replace(/[. ]+$/, '') + extension;
+  return safe || 'LibreTV-download';
+}
+
+export function suggestDownloadFilename(title: string, url: string): string {
+  let extension = '';
+  try {
+    const pathname = new URL(url, 'https://libretv.invalid').pathname;
+    extension = pathname.match(/\.([a-z0-9]{1,8})$/i)?.[1] ?? '';
+  } catch {
+    // Keep the sanitized title when the URL cannot provide a safe extension.
+  }
+  const trimmedTitle = title.trim();
+  const hasExtension = /\.[a-z0-9]{1,8}$/i.test(trimmedTitle);
+  return sanitizeDownloadFilename(hasExtension || !extension ? trimmedTitle : trimmedTitle + '.' + extension);
+}
+
 export interface SaveTarget {
   /** 'fs' = 磁盘直写；'memory' = 内存聚合 */
   kind: 'fs' | 'memory';
@@ -31,6 +68,7 @@ export class UserCancelledError extends Error {
 }
 
 function memoryTarget(filename: string, confirmOverBytes = 500 * 1024 * 1024): SaveTarget {
+  const safeFilename = sanitizeDownloadFilename(filename);
   const chunks: Uint8Array[] = [];
   let bytes = 0;
   let done = false;
@@ -41,7 +79,7 @@ function memoryTarget(filename: string, confirmOverBytes = 500 * 1024 * 1024): S
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
+    a.download = safeFilename;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -75,6 +113,7 @@ function memoryTarget(filename: string, confirmOverBytes = 500 * 1024 * 1024): S
  * 用户取消文件选择器时抛出 UserCancelledError。
  */
 export async function pickSaveTarget(filename: string, estimatedBytes?: number): Promise<SaveTarget> {
+  const safeFilename = sanitizeDownloadFilename(filename);
   if (supportsFileSystemAccess()) {
     try {
       // Safari 会暴露 showSaveFilePicker 之外的旧实现；直接 try/catch 兜底
@@ -85,7 +124,7 @@ export async function pickSaveTarget(filename: string, estimatedBytes?: number):
           }) => Promise<{ createWritable: () => Promise<WritableStream> }>;
         }
       ).showSaveFilePicker;
-      const handle = await picker({ suggestedName: filename });
+      const handle = await picker({ suggestedName: safeFilename });
       const writable = await handle.createWritable();
       const writer = writable.getWriter();
       return {
@@ -114,5 +153,5 @@ export async function pickSaveTarget(filename: string, estimatedBytes?: number):
       throw new UserCancelledError();
     }
   }
-  return memoryTarget(filename);
+  return memoryTarget(safeFilename);
 }

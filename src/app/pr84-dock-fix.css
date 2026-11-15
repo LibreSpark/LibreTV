@@ -1,0 +1,157 @@
+/* PR #84 Friday launcher placement and page scroll clearance.
+   Dock position, dimensions and surface are owned by pr84-apple-tv-dock.css. */
+
+@media (max-width: 700px) {
+
+  /* Keep the Friday 3D sigil outside the dock's rightmost navigation cell. */
+  body .friday-root .friday-fab {
+    right: 16px !important;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+    left: auto !important;
+    top: auto !important;
+    width: 52px !important;
+    height: 52px !important;
+    opacity: .88 !important;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.18)) !important;
+  }
+
+  body .friday-root .friday-fab .friday-orb {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  body .friday-root .friday-restore {
+    right: 16px !important;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+    width: 44px !important;
+    height: 44px !important;
+    opacity: .88 !important;
+  }
+
+  /* Reserve real scroll space so the dock cannot cut through the last row. */
+  body:has(.v4-home) .v4-home {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+
+  body:has(.v4-home) .v4-home-main,
+  body:has(.v4-home) .v4-home-main--cinema {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+
+  body .v4-search-page {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+    scroll-padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+
+  body .v4-search-page .v4-search-main {
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+}
+
+@media (min-width: 701px) {
+  body .friday-root .friday-fab,
+  body .friday-root .friday-restore {
+    opacity: 1;
+  }
+}
+
+/* P0: settings route final paint + interaction contract.
+   This stylesheet is loaded after all shared theme and mobile overrides. */
+html:has(body .v4-spatial-screen[data-screen="settings"]),
+body:has(.v4-spatial-screen[data-screen="settings"]),
+body:has(.v4-spatial-screen[data-screen="settings"])>div,
+body:has(.v4-spatial-screen[data-screen="settings"]) #__next {
+  min-height:100vh!important;
+  min-height:100svh!important;
+  background:#000!important;
+  background-color:#000!important;
+  background-image:none!important;
+  color:#f5f5f7!important;
+  color-scheme:dark!important;
+}
+html:has(body .v4-spatial-screen[data-screen="settings"])::after,
+body:has(.v4-spatial-screen[data-screen="settings"])::after {
+  background:#000!important;
+  background-color:#000!important;
+}
+.v4-spatial-screen[data-screen="settings"],
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-main,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root,
+.v4-spatial-screen[data-screen="settings"] .ipad-settings-content {
+  min-height:100vh;
+  min-height:100svh;
+  background:#000!important;
+  background-color:#000!important;
+  background-image:none!important;
+  color:#f5f5f7!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-heading h1,
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-heading h1 * {
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  opacity:1!important;
+}
+/* The category rows are full-width buttons inside each rounded settings card. */
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button:hover,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button:active,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button:focus,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button:focus-visible {
+  background:#2c2c2e!important;
+  background-color:#2c2c2e!important;
+  background-image:none!important;
+  color:#f5f5f7!important;
+  -webkit-text-fill-color:#f5f5f7!important;
+  -webkit-tap-highlight-color:transparent!important;
+  box-shadow:none!important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button * {
+  -webkit-tap-highlight-color:transparent!important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button span,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content section > div > button strong {
+  color:#f5f5f7!important;
+  -webkit-text-fill-color:#f5f5f7!important;
+}
+/* Ensure the final setting (including Friday voice) can scroll above the fixed dock. */
+.v4-spatial-screen[data-screen="settings"] {
+  padding-bottom: var(--tabbar-scroll-clearance)!important;
+  scroll-padding-bottom: var(--tabbar-scroll-clearance)!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-main {
+  padding-bottom: var(--tabbar-scroll-clearance)!important;
+  scroll-padding-bottom: var(--tabbar-scroll-clearance)!important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content {
+  padding-bottom: var(--tabbar-scroll-clearance)!important;
+  scroll-padding-bottom: var(--tabbar-scroll-clearance)!important;
+}
+
+
+/* PR84 /me-only interaction repair.
+   Reuse the existing Friday voice orb as the header action instead of letting
+   the fixed launcher float over the settings row. The shared dock geometry
+   and every other route remain unchanged. */
+@media (max-width: 700px) {
+  body:has(.v4-spatial-screen[data-screen="me"]) .friday-root .friday-fab {
+    top: calc(62px + env(safe-area-inset-top, 0px)) !important;
+    right: 18px !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 40px !important;
+    height: 40px !important;
+    z-index: 2147483647 !important;
+    opacity: 1 !important;
+    touch-action: manipulation !important;
+  }
+
+  body:has(.v4-spatial-screen[data-screen="me"]) .friday-root .friday-fab .friday-orb {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  body:has(.v4-spatial-screen[data-screen="me"]) .v52-me-avatar {
+    visibility: hidden !important;
+  }
+}

@@ -1,0 +1,1226 @@
+/* PR #84 — mobile watch page repair.
+   Scoped to /watch so the home, search, settings and detail layouts remain unchanged. */
+@media (max-width: 700px) {
+  /* Compact title-first header: one unboxed back glyph, then the title and episode. */
+  .watch-topbar {
+    min-height: calc(56px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    background: rgba(8, 8, 10, .92) !important;
+    border-bottom: 1px solid rgba(255,255,255,.08) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
+    backdrop-filter: blur(18px) saturate(140%) !important;
+  }
+  .watch-topbar-inner {
+    width: 100% !important;
+    min-height: 56px !important;
+    justify-content: flex-start !important;
+    gap: 10px !important;
+    padding: 0 14px !important;
+    box-sizing: border-box !important;
+  }
+  .watch-topbar-left {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+  .watch-topbar-left .watch-topbar-back {
+    display: inline-flex !important;
+    flex: 0 0 28px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 28px !important;
+    height: 42px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    color: #fff !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .watch-topbar-left .watch-topbar-back svg {
+    width: 23px !important;
+    height: 23px !important;
+    stroke: currentColor !important;
+    stroke-width: 1.8 !important;
+  }
+  .watch-topbar-title {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    text-align: left !important;
+  }
+  .watch-topbar-title h1 {
+    color: #fff !important;
+    font-size: 14px !important;
+    line-height: 1.25 !important;
+    text-align: left !important;
+  }
+  .watch-topbar-title p {
+    margin-top: 2px !important;
+    color: rgba(255,255,255,.54) !important;
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+    text-align: left !important;
+  }
+
+  /* A real four-column dock on the watch route; do not inherit LiquidGlass's
+     floating vertical demo layout. It is portaled directly under body. */
+  html body:has(.netflix-watch) {
+    overflow-x: clip !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 30 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    justify-content: space-around !important;
+    align-items: center !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    height: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+    margin: 0 !important;
+    padding: 7px 10px calc(7px + env(safe-area-inset-bottom, 0px)) !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: rgba(18,18,20,.82) !important;
+    box-shadow: 0 -8px 28px rgba(0,0,0,.22) !important;
+    -webkit-backdrop-filter: blur(32px) saturate(155%) !important;
+    backdrop-filter: blur(32px) saturate(155%) !important;
+    transform: none !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar::before,
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar::after,
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar > .liquid-glass-engine-slot {
+    display: none !important;
+    content: none !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar > a {
+    display: flex !important;
+    flex: 1 1 0 !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    width: 25% !important;
+    min-width: 0 !important;
+    max-width: 25% !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 14px !important;
+    color: rgba(255,255,255,.72) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    text-decoration: none !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.12) !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar > a > svg {
+    display: block !important;
+    flex: 0 0 20px !important;
+    width: 20px !important;
+    height: 20px !important;
+    stroke: currentColor !important;
+    fill: none !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar > a > span {
+    display: block !important;
+    width: auto !important;
+    color: inherit !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+
+  .netflix-watch {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .netflix-title-row p {
+    margin-top: 3px !important;
+    color: rgba(255,255,255,.48) !important;
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+  }
+  .netflix-related-section {
+    margin-top: 24px !important;
+    margin-bottom: 24px !important;
+  }
+  .netflix-related-section .netflix-section-heading {
+    margin-bottom: 20px !important;
+  }
+}
+
+/* The gradient belongs to ArtPlayer's real bottom control surface, so it
+   follows its controls in normal and fullscreen playback without tinting video. */
+.netflix-player-frame .artplayer .art-bottom,
+.netflix-player-frame .art-video-player .art-bottom {
+  background: linear-gradient(to top, rgba(0,0,0,.8) 0%, rgba(0,0,0,.38) 48%, transparent 100%) !important;
+  border-radius: 0 !important;
+}
+
+/* Compact quality indicator; the detailed menu remains unchanged. */
+.player-quality-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  max-width: calc(100vw - 24px) !important;
+  padding: 4px 8px !important;
+  border: 1px solid rgba(255,255,255,.13) !important;
+  border-radius: 999px !important;
+  color: rgba(255,255,255,.9) !important;
+  background: rgba(0,0,0,.42) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+}
+.player-quality-badge > span {
+  margin-left: 2px !important;
+  color: rgba(255,255,255,.62) !important;
+}
+@media (max-width: 700px) {
+  .player-quality-badge { padding: 3px 7px !important; font-size: 12px !important; }
+}
+
+/* PR #84 — Apple TV dark watch canvas.
+   The watch route is intentionally dark regardless of the user's global theme;
+   this prevents the light-theme root/body gradient from exposing a white lower canvas. */
+html:has(.netflix-watch) {
+  color-scheme: dark !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+html:has(.netflix-watch) body,
+html:has(.netflix-watch) body > #root,
+html:has(.netflix-watch) body > #__next,
+html:has(.netflix-watch) body .page-container,
+html:has(.netflix-watch) body .min-h-screen:has(.netflix-watch),
+html:has(.netflix-watch) body .netflix-watch {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+html:has(.netflix-watch) body {
+  background-image: none !important;
+}
+html:has(.netflix-watch) .watch-topbar {
+  background: rgba(0, 0, 0, .92) !important;
+  border-bottom-color: rgba(255, 255, 255, .10) !important;
+}
+html:has(.netflix-watch) .watch-topbar-left > a.watch-topbar-back {
+  display: none !important;
+}
+html:has(.netflix-watch) .watch-topbar-left .watch-topbar-back {
+  color: #ffffff !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+html:has(.netflix-watch) .watch-topbar-left .watch-topbar-back svg {
+  stroke: #ffffff !important;
+  stroke-width: 1.6 !important;
+}
+html:has(.netflix-watch) .watch-topbar-title h1,
+html:has(.netflix-watch) .netflix-title-row h1,
+html:has(.netflix-watch) .netflix-section-heading h2 {
+  color: #ffffff !important;
+}
+html:has(.netflix-watch) .watch-topbar-title p,
+html:has(.netflix-watch) .netflix-title-row p,
+html:has(.netflix-watch) .netflix-section-heading p,
+html:has(.netflix-watch) .netflix-section-heading a,
+html:has(.netflix-watch) .netflix-watch .text-muted,
+html:has(.netflix-watch) .netflix-watch .text-faint {
+  color: #a1a1a6 !important;
+}
+html:has(.netflix-watch) .netflix-watch,
+html:has(.netflix-watch) .netflix-watch main,
+html:has(.netflix-watch) .netflix-below-player,
+html:has(.netflix-watch) .netflix-related-section {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+html:has(.netflix-watch) .netflix-history-card {
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, .08) !important;
+  border-radius: 18px !important;
+  background: #1c1c1e !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28) !important;
+}
+html:has(.netflix-watch) .netflix-history-meta {
+  background: #1c1c1e !important;
+}
+html:has(.netflix-watch) .netflix-history-meta strong {
+  color: #ffffff !important;
+}
+html:has(.netflix-watch) .netflix-history-meta span {
+  color: #a1a1a6 !important;
+}
+html:has(.netflix-watch) .netflix-history-progress {
+  background: rgba(255, 255, 255, .16) !important;
+}
+html:has(.netflix-watch) .player-quality-badge {
+  border: 0 !important;
+  border-color: transparent !important;
+  border-radius: 999px !important;
+  background: rgba(0, 0, 0, .5) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
+}
+/* PR84 watch acceptance follow-up: keep the final related-poster row above the
+   fixed dock, remove the floating Friday sigil from the viewing canvas, and
+   keep playback feedback visually quiet. */
+@media (max-width: 700px) {
+  html:has(.netflix-watch) body main.netflix-watch,
+  html:has(.netflix-watch) body .page-container:has(.netflix-watch) {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
+    scroll-padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html:has(.netflix-watch) body .friday-root .friday-fab,
+  html:has(.netflix-watch) body .friday-root .friday-restore {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.15) !important;
+  }
+}
+html:has(.netflix-watch) .netflix-player-frame .artplayer .art-controls .art-control,
+html:has(.netflix-watch) .netflix-player-frame .art-video-player .art-controls .art-control {
+  min-width: 40px !important;
+  min-height: 40px !important;
+}
+html:has(.netflix-watch) .netflix-player-frame .artplayer .art-controls .art-control svg,
+html:has(.netflix-watch) .netflix-player-frame .art-video-player .art-controls .art-control svg {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+
+/* PR84 follow-up: keep the last related-poster row fully scrollable above the fixed dock. */
+@media (max-width: 700px) {
+  html body:has(.netflix-watch) .netflix-watch {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html body:has(.netflix-watch) > nav.v4-mobile-tabbar > a.is-active {
+    color: #fff !important;
+    background: rgba(255,255,255,.15) !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Keep the brand mark centered while cropping the obsolete slogan beneath it. */
+.netflix-player-frame > .absolute.inset-0.bg-black.pointer-events-none[style*="player-poster.png"] {
+  clip-path: inset(0 0 43% 0) !important;
+  background-position: center center !important;
+}
+
+/* PR84 playback surface: recommendations/history do not belong on /watch;
+   keep the fixed dock below normal source/episode panels instead of covering them. */
+html:has(.netflix-watch) .netflix-related-section,
+html:has(.netflix-watch) .netflix-below-player,
+html:has(.netflix-watch) .netflix-next-preview {
+  display: none !important;
+}
+html:has(.netflix-watch) .netflix-watch-sidebar {
+  position: relative !important;
+  z-index: 40 !important;
+  min-width: 0 !important;
+  isolation: isolate !important;
+}
+html:has(.netflix-watch) .netflix-sidebar-content {
+  position: relative !important;
+  z-index: 2 !important;
+  max-height: min(72vh, 720px);
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  /* The fixed mobile dock sits above page content; reserve its full height
+     inside the scrollable panel so the final source/episode row can scroll clear. */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+}
+html:has(.netflix-watch) .netflix-player-frame video {
+  -webkit-appearance: none;
+}
+
+
+
+/* PR84 single source of truth for ArtPlayer timeline geometry.
+   The 16px element is the seek target; its centered rail is only 2px.
+   Keep these rules after the watch-theme rules so they cannot be overwritten. */
+.netflix-player-frame .artplayer .art-progress,
+.netflix-player-frame .art-video-player .art-progress,
+html:has(.netflix-watch) .netflix-player-frame .artplayer .art-progress,
+html:has(.netflix-watch) .netflix-player-frame .art-video-player .art-progress {
+  position: relative !important;
+  box-sizing: border-box !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  max-height: 16px !important;
+  margin-block: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: linear-gradient(
+    to bottom,
+    transparent calc(50% - 1px),
+    rgba(255,255,255,.42) calc(50% - 1px),
+    rgba(255,255,255,.42) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  ) !important;
+  box-shadow: none !important;
+}
+.netflix-player-frame .artplayer .art-progress-bar,
+.netflix-player-frame .art-video-player .art-progress-bar,
+html:has(.netflix-watch) .netflix-player-frame .artplayer .art-progress-bar,
+html:has(.netflix-watch) .netflix-player-frame .art-video-player .art-progress-bar {
+  height: 2px !important;
+  min-height: 2px !important;
+  max-height: 2px !important;
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.netflix-player-frame .artplayer .art-progress-loaded,
+.netflix-player-frame .art-video-player .art-progress-loaded,
+.netflix-player-frame .artplayer .art-progress-played,
+.netflix-player-frame .art-video-player .art-progress-played,
+html:has(.netflix-watch) .netflix-player-frame .artplayer .art-progress-loaded,
+html:has(.netflix-watch) .netflix-player-frame .art-video-player .art-progress-loaded,
+html:has(.netflix-watch) .netflix-player-frame .artplayer .art-progress-played,
+html:has(.netflix-watch) .netflix-player-frame .art-video-player .art-progress-played {
+  height: 2px !important;
+  min-height: 2px !important;
+  max-height: 2px !important;
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+}
+.netflix-player-frame .artplayer .art-progress-indicator,
+.netflix-player-frame .art-video-player .art-progress-indicator,
+html:has(.netflix-watch) .netflix-player-frame .artplayer .art-progress-indicator,
+html:has(.netflix-watch) .netflix-player-frame .art-video-player .art-progress-indicator {
+  width: 6px !important;
+  height: 6px !important;
+  min-width: 6px !important;
+  min-height: 6px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+}
+
+
+/* PR84 viewing flow: /watch is a clean player surface, not a second detail page.
+   Keep the compact topbar and the actual player; remove all below-player
+   metadata, episode/source/detail shelves, history/recommendations and promos. */
+html:has(.netflix-watch) .netflix-watch {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 0 calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+}
+html:has(.netflix-watch) .netflix-watch-grid {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+html:has(.netflix-watch) .netflix-watch-primary {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+html:has(.netflix-watch) .netflix-player-frame {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+html:has(.netflix-watch) .netflix-title-row,
+html:has(.netflix-watch) .netflix-watch-tools,
+html:has(.netflix-watch) .netflix-watch-sidebar,
+html:has(.netflix-watch) .netflix-related-section,
+html:has(.netflix-watch) .netflix-below-player,
+html:has(.netflix-watch) .netflix-next-preview,
+html:has(.netflix-watch) .netflix-autonext-banner,
+html:has(.netflix-watch) .netflix-sidebar-footer,
+html:has(.netflix-watch) .friday-root .friday-fab,
+html:has(.netflix-watch) .friday-root .friday-restore {
+  display: none !important;
+}
+@media (max-width: 700px) {
+  html:has(.netflix-watch) .netflix-watch {
+    padding: 0 0 calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html:has(.netflix-watch) .netflix-player-frame {
+    aspect-ratio: 16 / 9 !important;
+    height: auto !important;
+  }
+}
+
+/* Detail page episode shelf: compact horizontal rows with genuine stills. */
+.movie-detail-page [aria-labelledby="movie-episode-heading"] > .flex.flex-col {
+  gap: 12px !important;
+}
+.movie-detail-page [aria-labelledby="movie-episode-heading"] > .flex.flex-col > button {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  min-height: 104px !important;
+}
+.movie-detail-page [aria-labelledby="movie-episode-heading"] > .flex.flex-col > button > div:first-child {
+  align-self: center !important;
+  width: 38% !important;
+  min-width: 118px !important;
+  max-width: 220px !important;
+  flex: 0 0 38% !important;
+  aspect-ratio: 16 / 9 !important;
+}
+.movie-detail-page [aria-labelledby="movie-episode-heading"] > .flex.flex-col > button > div:last-child {
+  align-self: center !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+@media (max-width: 420px) {
+  .movie-detail-page [aria-labelledby="movie-episode-heading"] > .flex.flex-col > button > div:first-child {
+    min-width: 108px !important;
+  }
+}
+
+
+/* PR84 immersive player surface: the existing PlayerShell stays mounted;
+   utility shelves are available only through the explicit overlay control. */
+html:has(.netflix-watch-shell),
+html:has(.netflix-watch-shell) body {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+html:has(.netflix-watch-shell) body > nav.v4-mobile-tabbar {
+  display: none !important;
+}
+.netflix-watch-shell {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 20 !important;
+  display: block !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+.netflix-watch-shell > .watch-topbar.netflix-watch-overlay-topbar {
+  position: fixed !important;
+  inset: 0 0 auto 0 !important;
+  z-index: 55 !important;
+  min-height: calc(58px + env(safe-area-inset-top, 0px)) !important;
+  padding-top: env(safe-area-inset-top, 0px) !important;
+  border: 0 !important;
+  background: linear-gradient(180deg, rgba(0,0,0,.78), transparent) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.netflix-watch-shell .watch-topbar-inner {
+  min-height: 58px !important;
+  padding: 0 16px !important;
+}
+.netflix-watch-shell .watch-topbar-right {
+  display: flex !important;
+  align-items: center !important;
+  margin-left: auto !important;
+}
+.netflix-watch-shell .watch-topbar-right button {
+  min-height: 36px !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  border-radius: 999px !important;
+  padding: 0 13px !important;
+  color: #fff !important;
+  background: rgba(18,18,20,.58) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  backdrop-filter: blur(18px) !important;
+}
+.netflix-watch-shell > main.netflix-watch {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 21 !important;
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+.netflix-watch-shell .netflix-watch-grid,
+.netflix-watch-shell .netflix-watch-primary {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.netflix-watch-shell .netflix-player-frame {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  aspect-ratio: auto !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+}
+.netflix-watch-shell .netflix-player-frame video,
+.netflix-watch-shell .netflix-player-frame iframe {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  background: #000 !important;
+}
+.netflix-watch-shell .netflix-title-row,
+.netflix-watch-shell .netflix-related-section,
+.netflix-watch-shell .netflix-below-player,
+.netflix-watch-shell .netflix-next-preview,
+.netflix-watch-shell .netflix-autonext-banner,
+.netflix-watch-shell .netflix-sidebar-footer {
+  display: none !important;
+}
+.netflix-watch-shell .netflix-watch-tools {
+  position: fixed !important;
+  inset: auto 12px calc(12px + env(safe-area-inset-bottom, 0px)) 12px !important;
+  z-index: 52 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  width: max-content !important;
+  max-width: calc(100vw - 24px) !important;
+  margin: 0 auto !important;
+  padding: 8px 10px !important;
+  border: 1px solid rgba(255,255,255,.14) !important;
+  border-radius: 18px !important;
+  background: rgba(12,12,14,.72) !important;
+  box-shadow: 0 10px 32px rgba(0,0,0,.32) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(135%) !important;
+  backdrop-filter: blur(22px) saturate(135%) !important;
+}
+.netflix-watch-shell .netflix-watch-tools button {
+  min-height: 34px !important;
+  padding: 0 10px !important;
+  color: rgba(255,255,255,.94) !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,.08) !important;
+  font-size: 12px !important;
+}
+.netflix-watch-shell .netflix-watch-tools label {
+  margin-left: 0 !important;
+  color: rgba(255,255,255,.78) !important;
+}
+.netflix-watch-shell .netflix-watch-utility-panel {
+  display: none !important;
+}
+.netflix-watch-shell .netflix-watch-utility-panel.is-open {
+  position: fixed !important;
+  inset: calc(66px + env(safe-area-inset-top, 0px)) 12px calc(72px + env(safe-area-inset-bottom, 0px)) auto !important;
+  z-index: 60 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(410px, calc(100vw - 24px)) !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  padding: 14px !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  border-radius: 22px !important;
+  background: rgba(15,15,18,.94) !important;
+  box-shadow: 0 18px 60px rgba(0,0,0,.5) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(140%) !important;
+  backdrop-filter: blur(28px) saturate(140%) !important;
+}
+.netflix-watch-shell .netflix-watch-utility-panel.is-open .netflix-sidebar-tabs {
+  flex: 0 0 auto !important;
+}
+.netflix-watch-shell .netflix-watch-utility-panel.is-open .netflix-sidebar-content {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+@media (orientation: landscape) {
+  .netflix-watch-shell .netflix-watch-tools {
+    inset-inline: auto 16px !important;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+    margin: 0 !important;
+  }
+}
+@media (max-width: 700px) {
+  .netflix-watch-shell .watch-topbar-inner {
+    padding-inline: 12px !important;
+  }
+  .netflix-watch-shell .watch-topbar-title h1 {
+    font-size: 13px !important;
+  }
+  .netflix-watch-shell .netflix-watch-tools {
+    gap: 5px !important;
+    padding: 6px 7px !important;
+  }
+  .netflix-watch-shell .netflix-watch-tools button {
+    min-height: 32px !important;
+    padding-inline: 8px !important;
+    font-size: 11px !important;
+  }
+  .netflix-watch-shell .netflix-watch-utility-panel.is-open {
+    inset: calc(62px + env(safe-area-inset-top, 0px)) 8px calc(66px + env(safe-area-inset-bottom, 0px)) 8px !important;
+    width: auto !important;
+    border-radius: 18px !important;
+  }
+}
+
+
+/* PR84 cinematic information panel, matching the reference beneath the player. */
+.watch-cinema-info {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 8px;
+  padding: 18px 20px;
+  border: 1px solid var(--border, rgba(255,255,255,.1));
+  border-radius: 18px;
+  background: var(--surface, rgba(255,255,255,.035));
+}
+.watch-cinema-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.watch-cinema-source {
+  flex: 0 0 auto;
+  max-width: 36%;
+  overflow: hidden;
+  color: var(--text-muted, #999);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-cinema-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.watch-cinema-tabs button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--border, rgba(255,255,255,.12));
+  border-radius: 999px;
+  color: var(--text-muted, #aaa);
+  background: transparent;
+  font-size: 12px;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+.watch-cinema-tabs button.active {
+  color: var(--text-primary, #fff);
+  border-color: transparent;
+  background: var(--surface-hover, rgba(255,255,255,.13));
+}
+.watch-cinema-copy {
+  min-height: 44px;
+  color: var(--text-muted, #aaa);
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.watch-cinema-copy dl {
+  display: grid;
+  gap: 8px;
+}
+.watch-cinema-copy dl > div {
+  display: grid;
+  grid-template-columns: 48px minmax(0,1fr);
+  gap: 10px;
+}
+.watch-cinema-copy dt { color: var(--text-faint, #777); }
+.watch-cinema-copy dd { color: var(--text-muted, #aaa); }
+@media (max-width: 640px) {
+  .watch-cinema-info {
+    gap: 12px;
+    margin-top: 14px;
+    padding: 15px;
+    border-radius: 16px;
+  }
+  .watch-cinema-source { max-width: 32%; }
+  .watch-cinema-tabs { gap: 7px; }
+  .watch-cinema-tabs button { min-height: 32px; padding: 0 14px; }
+}
+
+.watch-cinema-playback {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 7px;
+}
+.watch-cinema-time {
+  grid-column: 1;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted, #aaa);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.watch-cinema-progress {
+  grid-column: 1;
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  accent-color: var(--text-primary, #fff);
+  cursor: pointer;
+}
+.watch-cinema-rate {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border, rgba(255,255,255,.16));
+  border-radius: 50%;
+  color: var(--text-primary, #fff);
+  background: var(--surface-hover, rgba(255,255,255,.08));
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.watch-cinema-rate:focus-visible, .watch-cinema-progress:focus-visible {
+  outline: 2px solid var(--text-primary, #fff);
+  outline-offset: 3px;
+}
+
+
+/* Reference-matched iPhone cinema player: native video remains mounted while
+   every visible control is owned by this page overlay. */
+.netflix-watch-shell .watch-topbar-inner {
+  display:flex !important; align-items:center !important; justify-content:space-between !important;
+}
+.netflix-watch-shell .watch-topbar-left,
+.netflix-watch-shell .watch-topbar-right { display:flex !important; align-items:center !important; gap:12px !important; }
+.cinema-glass-control {
+  display:grid !important; place-items:center !important; flex:0 0 auto !important;
+  width:58px !important; height:58px !important; padding:0 !important;
+  color:#fff !important; border:1px solid rgba(255,255,255,.13) !important;
+  border-radius:50% !important; background:rgba(43,43,45,.68) !important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.14),0 5px 18px rgba(0,0,0,.22) !important;
+  -webkit-backdrop-filter:blur(22px) saturate(125%) !important; backdrop-filter:blur(22px) saturate(125%) !important;
+}
+.cinema-glass-control svg { width:28px !important; height:28px !important; fill:none !important; stroke:currentColor !important; stroke-width:2.4 !important; stroke-linecap:round !important; stroke-linejoin:round !important; }
+.cinema-close-control { width:58px !important; height:58px !important; }
+.cinema-utility-control { width:44px !important; height:44px !important; font-size:18px !important; letter-spacing:2px !important; }
+.cinema-center-controls {
+  position:fixed !important; z-index:48 !important; left:50% !important; top:50% !important;
+  transform:translate(-50%,-50%) !important; display:flex !important; align-items:center !important;
+  justify-content:center !important; gap:clamp(34px,8vw,76px) !important; pointer-events:none !important;
+}
+.cinema-center-controls button { pointer-events:auto !important; }
+.cinema-skip-control { width:clamp(76px,15vw,112px) !important; height:clamp(76px,15vw,112px) !important; }
+.cinema-skip-control svg { width:52% !important; height:52% !important; }
+.cinema-skip-control svg text { fill:currentColor !important; stroke:none !important; font-size:15px !important; font-weight:600 !important; text-anchor:middle !important; }
+.cinema-play-control { width:clamp(112px,21vw,150px) !important; height:clamp(112px,21vw,150px) !important; }
+.cinema-play-control svg { width:54% !important; height:54% !important; stroke-width:7 !important; }
+.netflix-watch-shell .watch-cinema-info {
+  position:fixed !important; z-index:50 !important; left:24px !important; right:24px !important;
+  bottom:calc(22px + env(safe-area-inset-bottom,0px)) !important;
+  display:flex !important; flex-direction:column !important; align-items:stretch !important;
+  gap:12px !important; margin:0 !important; padding:0 !important; border:0 !important;
+  border-radius:0 !important; background:transparent !important; box-shadow:none !important;
+}
+.netflix-watch-shell .watch-cinema-meta { order:1 !important; display:block !important; align-self:stretch !important; }
+.netflix-watch-shell .watch-cinema-playback { order:2 !important; }
+.netflix-watch-shell .watch-cinema-meta h2 { color:#fff !important; font-size:clamp(20px,5vw,28px) !important; line-height:1.2 !important; }
+.netflix-watch-shell .watch-cinema-meta p { color:rgba(255,255,255,.74) !important; }
+.netflix-watch-shell .watch-cinema-source { display:none !important; }
+.netflix-watch-shell .watch-cinema-playback { grid-area:progress !important; display:grid !important; grid-template-columns:auto minmax(0,1fr) auto !important; align-items:center !important; gap:12px !important; }
+.netflix-watch-shell .watch-cinema-time { display:contents !important; color:rgba(255,255,255,.72) !important; font-size:13px !important; font-variant-numeric:tabular-nums !important; }
+.netflix-watch-shell .watch-cinema-progress { grid-column:2 !important; grid-row:1 !important; width:100% !important; height:16px !important; min-height:16px !important; margin:0 !important; padding:0 !important; accent-color:#fff !important; cursor:pointer !important; touch-action:pan-x !important; }
+.netflix-watch-shell .watch-cinema-time span:first-child { grid-column:1 !important; grid-row:1 !important; }
+.netflix-watch-shell .watch-cinema-time span:last-child { grid-column:3 !important; grid-row:1 !important; }
+.netflix-watch-shell .watch-cinema-rate { position:fixed !important; right:40px !important; bottom:calc(126px + env(safe-area-inset-bottom,0px)) !important; width:58px !important; height:58px !important; border:1px solid rgba(255,255,255,.14) !important; border-radius:50% !important; color:#fff !important; background:rgba(43,43,45,.68) !important; font-size:15px !important; }
+.netflix-watch-shell .watch-cinema-tabs { order:3 !important; display:flex !important; flex-wrap:nowrap !important; gap:9px !important; }
+.netflix-watch-shell .watch-cinema-tabs button { min-height:44px !important; padding:0 17px !important; border:1px solid rgba(255,255,255,.12) !important; border-radius:999px !important; color:rgba(255,255,255,.72) !important; background:rgba(43,43,45,.68) !important; font-size:14px !important; white-space:nowrap !important; }
+.netflix-watch-shell .watch-cinema-tabs button.active { color:#fff !important; background:rgba(80,80,84,.78) !important; }
+.netflix-watch-shell .watch-cinema-copy { order:4 !important; display:none !important; }
+.netflix-watch-shell .netflix-title-row,
+.netflix-watch-shell .netflix-watch-tools { display:none !important; }
+.netflix-watch-shell .netflix-watch-utility-panel.is-open { z-index:70 !important; }
+@media (max-width:700px) {
+  .netflix-watch-shell .watch-topbar-inner { padding-inline:40px !important; }
+  .netflix-watch-shell .watch-topbar-right { margin-left:auto !important; }
+  .cinema-center-controls { gap:clamp(30px,9vw,76px) !important; }
+  .netflix-watch-shell .watch-cinema-info { left:40px !important; right:40px !important; bottom:calc(22px + env(safe-area-inset-bottom,0px)) !important; }
+  .netflix-watch-shell .watch-cinema-meta h2 { font-size:24px !important; }
+  .netflix-watch-shell .watch-cinema-tabs button { min-height:44px !important; padding-inline:17px !important; font-size:14px !important; }
+}
+@media (max-height:700px) and (orientation:landscape) {
+  .netflix-watch-shell .watch-cinema-info { left:28px !important; right:28px !important; bottom:calc(12px + env(safe-area-inset-bottom,0px)) !important; gap:7px !important; }
+  .cinema-glass-control { width:46px !important; height:46px !important; }
+  .cinema-play-control { width:88px !important; height:88px !important; }
+  .cinema-skip-control { width:64px !important; height:64px !important; }
+}
+
+/* The native ArtPlayer toolbar is replaced by the reference-style glass controls. */
+.netflix-watch-shell .netflix-player-frame .artplayer .art-bottom,
+.netflix-watch-shell .netflix-player-frame .art-video-player .art-bottom {
+  display:none !important;
+}
+
+
+/* PR84: override the legacy mobile 16:9 rule above. The video frame itself
+   must occupy the full viewport; otherwise ArtPlayer stays 219px tall at y=0
+   while the transport controls are centered against the 844px viewport. */
+html:has(.netflix-watch-shell) .netflix-watch-shell .netflix-player-frame {
+  position:absolute !important;
+  inset:0 !important;
+  display:block !important;
+  width:100vw !important;
+  height:100vh !important;
+  height:100dvh !important;
+  min-height:100dvh !important;
+  max-height:none !important;
+  aspect-ratio:auto !important;
+  margin:0 !important;
+  overflow:hidden !important;
+}
+.netflix-watch-shell .netflix-player-frame > .artplayer,
+.netflix-watch-shell .netflix-player-frame > .art-video-player,
+.netflix-watch-shell .netflix-player-frame .artplayer,
+.netflix-watch-shell .netflix-player-frame .art-video-player {
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:100% !important;
+  max-height:none !important;
+  aspect-ratio:auto !important;
+  margin:0 !important;
+}
+.netflix-watch-shell .netflix-player-frame video,
+.netflix-watch-shell .netflix-player-frame .art-video-player video {
+  position:absolute !important;
+  inset:0 !important;
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+  max-width:100% !important;
+  max-height:100% !important;
+  object-fit:contain !important;
+  object-position:center center !important;
+  margin:auto !important;
+}
+
+
+/* PR84 visual polish from the latest iPhone screenshot:
+   keep transport controls readable without covering actors' faces, and make
+   the range thumb visually proportional to its thin timeline. */
+@media (max-width:700px) {
+  .cinema-center-controls {
+    gap:clamp(22px,6vw,42px) !important;
+  }
+  .cinema-skip-control {
+    width:clamp(64px,12vw,82px) !important;
+    height:clamp(64px,12vw,82px) !important;
+  }
+  .cinema-play-control {
+    width:clamp(96px,18vw,120px) !important;
+    height:clamp(96px,18vw,120px) !important;
+  }
+  .cinema-skip-control svg { width:48% !important; height:48% !important; }
+  .cinema-play-control svg { width:48% !important; height:48% !important; }
+  .netflix-watch-shell .watch-cinema-progress {
+    height:12px !important;
+    min-height:12px !important;
+    appearance:none !important;
+    -webkit-appearance:none !important;
+    background:transparent !important;
+  }
+  .netflix-watch-shell .watch-cinema-progress::-webkit-slider-runnable-track {
+    height:4px !important;
+    border-radius:999px !important;
+    background:rgba(255,255,255,.28) !important;
+  }
+  .netflix-watch-shell .watch-cinema-progress::-webkit-slider-thumb {
+    width:12px !important;
+    height:12px !important;
+    margin-top:-4px !important;
+    border:0 !important;
+    border-radius:50% !important;
+    background:#fff !important;
+    -webkit-appearance:none !important;
+    appearance:none !important;
+  }
+  .netflix-watch-shell .watch-cinema-progress::-moz-range-track {
+    height:4px !important;
+    border-radius:999px !important;
+    background:rgba(255,255,255,.28) !important;
+  }
+  .netflix-watch-shell .watch-cinema-progress::-moz-range-thumb {
+    width:12px !important;
+    height:12px !important;
+    border:0 !important;
+    border-radius:50% !important;
+    background:#fff !important;
+  }
+}
+
+
+/* PR84 watch refinement: keep the video canvas, transport controls and
+   information panel as independent layers. The panel is scrollable so its
+   tabs never sit on top of the active description. */
+.netflix-watch-shell .watch-cinema-info {
+  position: fixed !important;
+  z-index: 50 !important;
+  left: 24px !important;
+  right: 24px !important;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  max-height: min(44dvh, 380px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  padding: 12px 14px !important;
+  border: 1px solid rgba(255,255,255,.14) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(180deg, rgba(12,12,14,.72), rgba(5,5,6,.9)) !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,.32) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(125%) !important;
+  backdrop-filter: blur(18px) saturate(125%) !important;
+}
+.netflix-watch-shell .watch-cinema-meta { order: 1 !important; display: block !important; }
+.netflix-watch-shell .watch-cinema-meta h2 {
+  margin: 0 !important;
+  color: #fff !important;
+  font-size: clamp(20px, 5vw, 25px) !important;
+  line-height: 1.2 !important;
+}
+.netflix-watch-shell .watch-cinema-meta p {
+  margin-top: 5px !important;
+  color: rgba(255,255,255,.76) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+.netflix-watch-shell .watch-cinema-playback {
+  order: 2 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 38px !important;
+  grid-template-rows: auto 16px !important;
+  align-items: center !important;
+  gap: 5px 10px !important;
+}
+.netflix-watch-shell .watch-cinema-time {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  color: rgba(255,255,255,.76) !important;
+  font-size: 11px !important;
+  font-variant-numeric: tabular-nums !important;
+}
+.netflix-watch-shell .watch-cinema-progress {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+  width: 100% !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  margin: 0 !important;
+}
+.netflix-watch-shell .watch-cinema-rate {
+  position: static !important;
+  grid-column: 2 !important;
+  grid-row: 1 / span 2 !important;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  border-radius: 50% !important;
+  color: #fff !important;
+  background: rgba(255,255,255,.1) !important;
+  font-size: 12px !important;
+}
+.netflix-watch-shell .watch-cinema-tabs {
+  order: 3 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+}
+.netflix-watch-shell .watch-cinema-tabs button {
+  min-height: 34px !important;
+  padding: 0 13px !important;
+  font-size: 12px !important;
+}
+.netflix-watch-shell .watch-cinema-copy {
+  order: 4 !important;
+  display: block !important;
+  min-height: 0 !important;
+  max-height: 92px !important;
+  overflow-y: auto !important;
+  padding: 0 2px 2px !important;
+  color: rgba(255,255,255,.78) !important;
+  font-size: 12px !important;
+  line-height: 1.65 !important;
+  overscroll-behavior: contain !important;
+}
+.netflix-watch-shell .watch-cinema-copy p,
+.netflix-watch-shell .watch-cinema-copy dd { color: rgba(255,255,255,.78) !important; }
+.netflix-watch-shell .watch-cinema-copy dt { color: rgba(255,255,255,.52) !important; }
+
+.netflix-watch-shell .cinema-close-control {
+  width: 42px !important;
+  height: 42px !important;
+}
+.netflix-watch-shell .cinema-close-control svg {
+  width: 21px !important;
+  height: 21px !important;
+}
+.netflix-watch-shell .cinema-utility-control {
+  width: 38px !important;
+  height: 38px !important;
+}
+.netflix-watch-shell .cinema-center-controls {
+  gap: clamp(20px, 6vw, 38px) !important;
+}
+.netflix-watch-shell .cinema-skip-control {
+  width: clamp(54px, 12vw, 70px) !important;
+  height: clamp(54px, 12vw, 70px) !important;
+}
+.netflix-watch-shell .cinema-play-control {
+  width: clamp(76px, 17vw, 96px) !important;
+  height: clamp(76px, 17vw, 96px) !important;
+}
+.netflix-watch-shell .cinema-skip-control svg,
+.netflix-watch-shell .cinema-play-control svg {
+  width: 46% !important;
+  height: 46% !important;
+}
+@media (max-width: 700px) {
+  .netflix-watch-shell .watch-cinema-info {
+    left: 14px !important;
+    right: 14px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    max-height: min(46dvh, 390px) !important;
+    padding: 11px 12px !important;
+    gap: 9px !important;
+  }
+  .netflix-watch-shell .watch-cinema-tabs { flex-wrap: wrap !important; }
+  .netflix-watch-shell .watch-cinema-tabs button {
+    min-height: 32px !important;
+    padding-inline: 12px !important;
+    font-size: 12px !important;
+  }
+  .netflix-watch-shell .watch-cinema-copy { max-height: 84px !important; }
+  .netflix-watch-shell .watch-cinema-playback { grid-template-rows: auto 16px !important; }
+  .netflix-watch-shell .cinema-center-controls { gap: clamp(18px, 5vw, 30px) !important; }
+  .netflix-watch-shell .cinema-skip-control {
+    width: clamp(44px, 12vw, 48px) !important;
+    height: clamp(44px, 12vw, 48px) !important;
+  }
+  .netflix-watch-shell .cinema-play-control {
+    width: clamp(62px, 16vw, 68px) !important;
+    height: clamp(62px, 16vw, 68px) !important;
+  }
+}
+@media (max-height: 700px) and (orientation: landscape) {
+  .netflix-watch-shell .watch-cinema-info {
+    max-height: min(58dvh, 300px) !important;
+    left: 20px !important;
+    right: 20px !important;
+  }
+  .netflix-watch-shell .watch-cinema-copy { max-height: 58px !important; }
+  .netflix-watch-shell .cinema-skip-control { width: 42px !important; height: 42px !important; }
+  .netflix-watch-shell .cinema-play-control { width: 60px !important; height: 60px !important; }
+}
+
+
+/* Keep the dedicated fullscreen and AirPlay controls visible on the watch page.
+   Older mobile cleanup rules hid the entire right-hand toolbar. */
+html:has(.netflix-watch) .netflix-watch-shell .watch-topbar-right {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  align-items: center !important;
+  margin-left: auto !important;
+  gap: 8px !important;
+}
+html:has(.netflix-watch) .netflix-watch-shell .watch-topbar-right > button {
+  display: grid !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex: 0 0 auto !important;
+}
+
+
+/* PR84 immersive playback: auto-hide the complete cinema overlay after 3s of playback.
+   The page-level class is driven by real media events and any user interaction. */
+.netflix-watch-shell .watch-topbar,
+.netflix-watch-shell .cinema-center-controls,
+.netflix-watch-shell .watch-cinema-info,
+.netflix-watch-shell .player-quality-controls {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 240ms ease, visibility 240ms step-start;
+}
+.netflix-watch-shell.cinema-controls-hidden .watch-topbar,
+.netflix-watch-shell.cinema-controls-hidden .cinema-center-controls,
+.netflix-watch-shell.cinema-controls-hidden .watch-cinema-info,
+.netflix-watch-shell.cinema-controls-hidden .player-quality-controls {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transition: opacity 240ms ease, visibility 240ms step-end !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .netflix-watch-shell .watch-topbar,
+  .netflix-watch-shell .cinema-center-controls,
+  .netflix-watch-shell .watch-cinema-info,
+  .netflix-watch-shell .player-quality-controls {
+    transition: none !important;
+  }
+}

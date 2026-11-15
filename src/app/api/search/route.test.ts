@@ -92,6 +92,115 @@ describe('POST /api/search', () => {
     expect(data.failures[0].error).toContain('500');
   });
 
+  it('uses browser-local Collector credentials only on an authenticated search request', async () => {
+    const { token } = signSession();
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      expect(url.startsWith('https://collector.example.com/')).toBe(true);
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer browser-collector-token');
+      if (url.includes('/v1/registry/search')) return Response.json({ resources: [] });
+      if (url.includes('/v1/seedhub/search')) return Response.json({ items: [] });
+      return Response.json({});
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const request = new NextRequest('https://local.test/api/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: `${SESSION_COOKIE}=${token}`,
+        'x-scrapling-api-base': 'https://collector.example.com',
+        'x-scrapling-api-token': 'browser-collector-token',
+      },
+      body: JSON.stringify({ wd: '测试影片', sources: [] }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns imported SeedHub catalogue metadata as separate non-playable search results', async () => {
+    const previousBase = process.env.SCRAPLING_API_BASE;
+    const previousToken = process.env.SCRAPLING_API_TOKEN;
+    process.env.SCRAPLING_API_BASE = 'https://collector.example.com';
+    process.env.SCRAPLING_API_TOKEN = 'collector-test-token';
+    const seedhubItem = {
+      source_url: 'https://www.seedhub.cc/movies/130096/',
+      title: '生化危机：爆发夜',
+      category: 'movies' as const,
+      poster_url: 'https://www.seedhub.cc/poster.jpg',
+      discovered_at: 123,
+      detail: { mode: 'metadata-only' },
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/v1/registry/search')) {
+        return Response.json({ resources: [] });
+      }
+      if (url.includes('/v1/seedhub/search')) {
+        return Response.json({ source: 'SeedHub', items: [seedhubItem] });
+      }
+      return Response.json({ list: [], pagecount: 0 });
+    }));
+    try {
+      const response = await POST(makeRequest({ wd: '生化危机', sources: [] }));
+      expect(response.status).toBe(200);
+      const data = await response.json() as SearchResponse;
+      expect(data.seedhubItems).toEqual([seedhubItem]);
+      expect(data.registryResources).toBeUndefined();
+      expect(data.list).toEqual([]);
+    } finally {
+      if (previousBase === undefined) delete process.env.SCRAPLING_API_BASE;
+      else process.env.SCRAPLING_API_BASE = previousBase;
+      if (previousToken === undefined) delete process.env.SCRAPLING_API_TOKEN;
+      else process.env.SCRAPLING_API_TOKEN = previousToken;
+    }
+  });
+
+  it('searches KKPhim REST API and maps its slug, artwork, type and quality fields', async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain('https://phimapi.com/v1/api/tim-kiem?');
+      expect(String(input)).toContain('keyword=' + encodeURIComponent('流浪地球'));
+      return new Response(JSON.stringify({
+        status: 'success',
+        data: {
+          items: [{
+            slug: 'wandering-earth',
+            name: '流浪地球',
+            origin_name: 'The Wandering Earth',
+            poster_url: 'https://images.example.com/wandering-earth.jpg',
+            thumb_url: 'https://images.example.com/wandering-earth-thumb.jpg',
+            type: 'single',
+            year: 2019,
+            quality: 'FHD',
+            lang: 'Vietsub',
+            episode_current: 'Full',
+            country: [{ name: '中国' }],
+          }],
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const response = await POST(makeRequest({
+      wd: '流浪地球',
+      sources: [{ key: 'kkphim', name: 'KKPhim', url: 'https://phimapi.com' }],
+    }));
+    expect(response.status).toBe(200);
+    const data = await response.json() as SearchResponse;
+    expect(data.list).toHaveLength(1);
+    expect(data.list[0]).toMatchObject({
+      sourceKey: 'kkphim',
+      vodId: 'wandering-earth',
+      name: '流浪地球',
+      typeName: '电影',
+      year: '2019',
+      area: '中国',
+      remarks: 'FHD · Vietsub · Full',
+      pic: '/api/img?url=' + encodeURIComponent('https://images.example.com/wandering-earth.jpg'),
+    });
+    expect(data.failures).toEqual([]);
+  });
+
   it('精确命中（忽略标点差异）排在最前', async () => {
     mockUpstream();
     const res = await POST(makeRequest({ wd: '测试剧', sources: [SOURCES[0]], filterAdult: true }));

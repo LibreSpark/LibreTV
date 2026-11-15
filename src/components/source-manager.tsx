@@ -37,6 +37,7 @@ import { describeParseStats } from '@/lib/tvbox-parser';
 import { collectorFetch, clearScraplingConfig, normalizeScraplingBase, readScraplingConfig, saveScraplingConfig } from '@/lib/collector-browser-config';
 import { registerValidatedCmsSource } from '@/lib/resource-collector-workflow';
 import { ResourceStatsPanel } from '@/components/resource-stats-panel';
+import { requestShowDownloadManager } from '@/components/download-manager';
 
 
 const CollectorPlayerShell = dynamic(
@@ -48,35 +49,44 @@ const CollectorPlayerShell = dynamic(
  * Apple-inspired 设置抽屉：纵向分组首页 → 独立详情页。
  * 具体设置面板继续复用现有业务组件与持久化逻辑。
  */
-type SecondaryTab = 'vod' | 'live' | 'subs' | 'playback' | 'image' | 'home' | 'voice' | 'language' | 'io' | 'cache' | 'collector';
-type SettingsPage = SecondaryTab | 'index' | 'appearance';
+type SecondaryTab = 'vod' | 'live' | 'subs' | 'playback' | 'image' | 'home' | 'voice' | 'language' | 'io' | 'cache' | 'collector' | 'downloads';
+type SettingsPage = SecondaryTab | 'index' | 'appearance' | 'about';
 
-const SETTINGS_SECTIONS: { title: string; items: { id: SettingsPage; label: string; detail: string; icon: IconName }[] }[] = [
-  { title: '偏好设置', items: [
-    { id: 'appearance', label: '外观', detail: '浅色、深色与系统外观', icon: 'gear' },
-    { id: 'playback', label: '播放设置', detail: '画质、自动连播与内容过滤', icon: 'filter' },
-    { id: 'image', label: '封面图加载', detail: '海报与图片加载偏好', icon: 'search' },
-    { id: 'language', label: '语言设置', detail: '界面语言与显示偏好', icon: 'gear' },
+const SETTINGS_SECTIONS: { title: string; color: string; items: { id: SettingsPage; label: string; detail: string; icon: IconName }[] }[] = [
+  { title: '播放设置', color: '#32D7A0', items: [
+    { id: 'playback', label: '播放与过滤', detail: '默认画质、自动连播、片段跳过与缓存', icon: 'play' },
+    { id: 'downloads', label: '下载管理', detail: '查看下载任务、真实进度与保存状态', icon: 'download' },
   ] },
-  { title: '内容与资源', items: [
-    { id: 'vod', label: '影视源管理', detail: '点播源、优先级与健康检测', icon: 'link' },
-    { id: 'live', label: '直播设置', detail: '直播源与频道管理', icon: 'home' },
-    { id: 'subs', label: '资源订阅', detail: '管理已配置的数据源订阅', icon: 'download' },
-    { id: 'collector', label: '资源采集中心', detail: 'FMHY 网站发现目录与 Scrapling 采集引擎', icon: 'search' },
-    { id: 'home', label: '首页与内容', detail: '首页展示与内容偏好', icon: 'home' },
+  { title: '资源站', color: '#55A7FF', items: [
+    { id: 'vod', label: '点播源管理', detail: '资源站、优先级与健康检测', icon: 'database' },
+    { id: 'live', label: '直播源管理', detail: '直播源与频道管理', icon: 'radio' },
+    { id: 'subs', label: '资源订阅', detail: '管理已配置的数据源订阅', icon: 'rss' },
   ] },
-  { title: 'Friday 助手', items: [
-    { id: 'voice', label: '语音与声音', detail: '语音识别、助手角色与语音偏好', icon: 'microphone' },
+  { title: '外观设置', color: '#BF91FF', items: [
+    { id: 'appearance', label: '外观模式', detail: '浅色、深色与系统外观', icon: 'palette' },
+    { id: 'image', label: '封面图加载', detail: '海报与图片加载偏好', icon: 'image' },
+    { id: 'language', label: '语言设置', detail: '界面语言与显示偏好', icon: 'languages' },
+    { id: 'home', label: '首页与内容', detail: '首页展示与内容偏好', icon: 'house' },
   ] },
-  { title: '数据管理', items: [
-    { id: 'io', label: '配置导入与导出', detail: '备份或恢复本机配置', icon: 'download' },
-    { id: 'cache', label: '本机缓存', detail: '查看与管理本机视频缓存', icon: 'clock' },
+  { title: 'Friday AI', color: '#E7A0D7', items: [
+    { id: 'voice', label: 'Friday 语音', detail: '助手角色、语音音色与对话偏好', icon: 'audio-lines' },
+  ] },
+  { title: '隐私与数据', color: '#E8B45E', items: [
+    { id: 'io', label: '配置导入与导出', detail: '备份或恢复本机配置', icon: 'shield-check' },
+    { id: 'cache', label: '本机缓存', detail: '查看和管理本机视频缓存', icon: 'database-backup' },
+  ] },
+  { title: '网络连接', color: '#62C8D5', items: [
+    { id: 'collector', label: '资源采集中心', detail: 'FMHY 目录、Collector 地址与连接测试', icon: 'network' },
+  ] },
+  { title: '关于 LibreTV', color: '#A6ADB8', items: [
+    { id: 'about', label: '关于 LibreTV', detail: '项目简介与版本信息', icon: 'info' },
   ] },
 ];
 
 const SETTINGS_PAGE_META: Record<Exclude<SettingsPage, 'index'>, { title: string; description: string }> = {
   appearance: { title: '外观', description: '自定义 LibreTV 的显示方式。' },
   playback: { title: '播放设置', description: '管理播放体验、画质与内容过滤。' },
+  downloads: { title: '下载管理', description: '查看下载任务、进度、失败原因与文件保存状态。' },
   image: { title: '封面图加载', description: '管理海报和图片的加载行为。' },
   language: { title: '语言设置', description: '选择界面与助手使用的语言。' },
   vod: { title: '影视源管理', description: '管理点播来源及其可用状态。' },
@@ -86,12 +96,30 @@ const SETTINGS_PAGE_META: Record<Exclude<SettingsPage, 'index'>, { title: string
   voice: { title: '语音与声音', description: '配置 Friday 的语音识别和声音偏好。' },
   io: { title: '配置导入与导出', description: '备份或恢复 LibreTV 本机配置。' },
   cache: { title: '本机缓存', description: '查看并管理本机缓存数据。' },
-  collector: { title: '资源采集中心', description: '从 FMHY 目录发现站点，并通过 Scrapling 检查公开媒体链接。' },
+  collector: { title: '采集服务连接', description: '配置 Collector 地址、认证信息并测试连接。' },
+  about: { title: '关于 LibreTV', description: 'LibreTV 是一个以本机配置和个人观影体验为核心的影视浏览与播放界面。' },
+};
+
+const SETTINGS_PAGE_ICONS: Record<Exclude<SettingsPage, 'index'>, { icon: IconName; color: string }> = {
+  playback: { icon: 'play', color: '#32D7A0' },
+  downloads: { icon: 'download', color: '#32D7A0' },
+  vod: { icon: 'database', color: '#55A7FF' },
+  live: { icon: 'radio', color: '#55A7FF' },
+  subs: { icon: 'rss', color: '#55A7FF' },
+  appearance: { icon: 'palette', color: '#BF91FF' },
+  image: { icon: 'image', color: '#BF91FF' },
+  language: { icon: 'languages', color: '#BF91FF' },
+  home: { icon: 'house', color: '#BF91FF' },
+  voice: { icon: 'audio-lines', color: '#E7A0D7' },
+  io: { icon: 'shield-check', color: '#E8B45E' },
+  cache: { icon: 'database-backup', color: '#E8B45E' },
+  collector: { icon: 'network', color: '#62C8D5' },
+  about: { icon: 'info', color: '#A6ADB8' },
 };
 
 const SETTINGS_OPEN_PAGE_KEY = 'libretv-settings-open-page';
 
-export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SourceManagerDrawer({ open, onClose, embedded = false }: { open: boolean; onClose: () => void; embedded?: boolean }) {
   const [activePage, setActivePage] = useState<SettingsPage>('index');
 
   useEffect(() => {
@@ -111,20 +139,15 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
 
   const pageTitle = activePage === 'index' ? '设置' : SETTINGS_PAGE_META[activePage].title;
 
-  return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      title="设置"
-      width="max-w-2xl ipad-settings-drawer"
-      resetScrollKey={activePage}
-    >
+  const settingsContent = (
+    <>
       {activePage === 'index' ? (
+        <>
+        <header className="settings-large-title">
+          <h1>设置</h1>
+          <p>管理 LibreTV 的外观、播放与资源偏好。</p>
+        </header>
         <div className="ipad-settings-content mx-auto w-full max-w-2xl space-y-7 pb-3">
-          <div className="space-y-1">
-            <h2 className="text-3xl font-semibold tracking-tight text-content">设置</h2>
-            <p className="text-sm text-muted">管理 LibreTV 的外观、播放与资源偏好。</p>
-          </div>
           {SETTINGS_SECTIONS.map((section) => (
             <section key={section.title} className="space-y-2">
               <h3 className="px-1 text-xs font-semibold tracking-wide text-muted">{section.title}</h3>
@@ -134,17 +157,17 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
                     key={item.id}
                     type="button"
                     className="group flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-                    onClick={() => setActivePage(item.id)}
+                    onClick={() => item.id === 'downloads' ? requestShowDownloadManager() : setActivePage(item.id)}
                     aria-label={item.label}
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-chip text-muted">
+                    <span className="settings-apple-icon" style={{ color: section.color }}>
                       <Icon name={item.icon} className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-content">{item.label}</span>
                       <span className="mt-0.5 block text-xs text-muted">{item.detail}</span>
                     </span>
-                    <span aria-hidden="true" className="shrink-0 text-xl leading-none text-faint transition-transform group-hover:translate-x-0.5">›</span>
+                    <span aria-hidden="true" className="shrink-0 text-xl leading-none text-[#8E8E93] transition-transform group-hover:translate-x-0.5">›</span>
                   </button>
                 ))}
               </div>
@@ -152,19 +175,23 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
           ))}
           <p className="px-1 text-center text-xs text-faint">LibreTV · 本机设置</p>
         </div>
+        </>
       ) : (
-        <div className="ipad-settings-content mx-auto w-full max-w-2xl space-y-5 pb-3">
-          <button
-            type="button"
-            onClick={() => setActivePage('index')}
-            className="inline-flex min-h-9 items-center gap-1 rounded-lg pr-2 text-sm font-medium text-accent transition-colors hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            aria-label="返回设置"
-          >
-            <span aria-hidden="true" className="text-lg leading-none">‹</span>
-            设置
+        <>
+        <header className="settings-nav-bar">
+          <button type="button" className="settings-nav-back" onClick={() => setActivePage('index')} aria-label="返回设置">
+            <span aria-hidden="true">‹</span><span>设置</span>
           </button>
-          <div className="space-y-1 border-b border-line pb-4">
-            <h2 className="text-2xl font-semibold tracking-tight text-content">{pageTitle}</h2>
+          <span className="settings-nav-center">设置</span>
+        </header>
+        <div className="ipad-settings-content settings-apple-detail mx-auto w-full max-w-2xl space-y-5 pb-3">
+          <div className="settings-apple-detail-heading space-y-1 border-b border-line pb-4">
+            <div className="settings-apple-page-title">
+              <span className="settings-apple-icon" style={{ color: SETTINGS_PAGE_ICONS[activePage].color }}>
+                <Icon name={SETTINGS_PAGE_ICONS[activePage].icon} className="h-5 w-5" />
+              </span>
+              <h2 className="text-2xl font-semibold tracking-tight text-content">{pageTitle}</h2>
+            </div>
             <p className="text-sm text-muted">{SETTINGS_PAGE_META[activePage].description}</p>
           </div>
           {activePage === 'appearance' && (
@@ -187,8 +214,26 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
           {activePage === 'io' && <ConfigIoPanel />}
           {activePage === 'cache' && <VideoCachePanel />}
           {activePage === 'collector' && <ResourceCollectorPanel />}
+          {activePage === 'about' && <section className="settings-apple-about"><h3>LibreTV</h3><p>为个人观影而设计的开放式影视浏览与播放体验。</p><p className="settings-apple-about-note">播放记录、收藏与偏好设置按现有功能保存在当前设备；资源站和网络连接由你配置与管理。</p></section>}
         </div>
+        </>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="settings-embedded-root" data-settings-embedded="true">{settingsContent}</div>;
+  }
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title="设置"
+      width="max-w-2xl ipad-settings-drawer"
+      resetScrollKey={activePage}
+    >
+      {settingsContent}
     </Drawer>
   );
 }
@@ -197,6 +242,7 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
 type CollectorSite = { title: string; url: string; host: string; directory: string };
 type CollectorCandidate = { id?: string; url: string; kind: string; host: string; title?: string; status?: string; access_state?: string; reason?: string; next_action?: string; drm_systems?: string[]; validation?: { cms_shape?: boolean; reachable?: boolean | null; public_host?: boolean; source_url?: string | null; note?: string; media_format?: string; content_type?: string; manifest_valid?: boolean; rejected_reference_count?: number; access?: { access_state?: string; reason?: string } } };
 type CollectorTask = { id: string; url: string; host: string; status: string; created_at: number; updated_at: number; error?: string | null; result_count: number };
+type CollectorJob = { id: string; job_type: string; status: string; error?: string | null; created_at: number; updated_at: number };
 
 function ResourceCollectorPanel() {
   const store = useAppStore();
@@ -206,6 +252,8 @@ function ResourceCollectorPanel() {
   const [playingCandidate, setPlayingCandidate] = useState<CollectorCandidate | null>(null);
   const [candidates, setCandidates] = useState<CollectorCandidate[]>([]);
   const [tasks, setTasks] = useState<CollectorTask[]>([]);
+  const [seedHubJobs, setSeedHubJobs] = useState<CollectorJob[]>([]);
+  const [seedHubPages, setSeedHubPages] = useState(50);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resultMessage, setResultMessage] = useState('');
@@ -292,6 +340,78 @@ function ResourceCollectorPanel() {
       setError(reason instanceof Error ? reason.message : 'Collector 连接测试失败。');
     } finally {
       setTestingConnection(false);
+    }
+  };
+
+  const loadSeedHubJobs = async () => {
+    try {
+      const response = await collectorFetch('/api/resource-collector?action=jobs&limit=50', { cache: 'no-store' });
+      const payload = await response.json();
+      if (response.ok) setSeedHubJobs(Array.isArray(payload.jobs)
+        ? payload.jobs.filter((job: CollectorJob) => job.job_type === 'seedhub_sync' || job.job_type === 'seedhub_detail_sync').slice(0, 8)
+        : []);
+    } catch {
+      // Job history is optional; a failed refresh must not hide the collection controls.
+    }
+  };
+
+  const syncSeedHub = async (category: 'movies' | 'series' | 'anime') => {
+    setBusy(true);
+    setError('');
+    setResultMessage('正在提交 SeedHub 目录采集任务…');
+    try {
+      const response = await collectorFetch('/api/resource-collector', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seedhubSync: true,
+          category,
+          startPage: 1,
+          pages: seedHubPages,
+          idempotencyKey: `seedhub:${category}:${Date.now()}`,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || payload.detail || `SeedHub 任务提交失败（HTTP ${response.status}）。`);
+      setResultMessage(`SeedHub ${category === 'movies' ? '电影' : category === 'series' ? '电视剧' : '动漫'}目录采集任务已提交（${payload.id || payload.job_id || '已排队'}）。请在下方刷新任务状态。`);
+      await loadSeedHubJobs();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'SeedHub 目录采集任务提交失败。');
+      setResultMessage('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncAllSeedHub = async () => {
+    setBusy(true);
+    setError('');
+    setResultMessage('正在提交电影、电视剧和动漫三个目录的全量分页采集任务…');
+    try {
+      const categories = ['movies', 'series', 'anime'] as const;
+      const results = await Promise.all(categories.map(async (category) => {
+        const response = await collectorFetch('/api/resource-collector', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            seedhubSync: true,
+            category,
+            startPage: 1,
+            pages: seedHubPages,
+            idempotencyKey: `seedhub:${category}:all:${Date.now()}`,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || payload.detail || `SeedHub ${category} 任务提交失败（HTTP ${response.status}）。`);
+        return payload;
+      }));
+      setResultMessage(`已提交三个分类的采集任务（${results.map((item) => item.id || item.job_id || '已排队').join('、')}）。后台将自动分页推进至目录末页，并持续补全详情。`);
+      await loadSeedHubJobs();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'SeedHub 全分类任务提交失败。');
+      setResultMessage('');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -459,7 +579,8 @@ function ResourceCollectorPanel() {
 
   const centerItems = [
     { id: 'overview', title: '数据总览', detail: '所有网站和影视资源统计', icon: 'search' as IconName },
-    { id: 'directory', title: 'FMHY 网站目录', detail: '唯一网站发现入口', icon: 'home' as IconName },
+    { id: 'directory', title: 'FMHY 网站目录', detail: '公开资源站网站发现入口', icon: 'home' as IconName },
+    { id: 'seedhub', title: 'SeedHub 内容采集', detail: '同步电影、电视剧、动漫目录与真实元数据', icon: 'database' as IconName },
     { id: 'archives', title: '网站采集档案', detail: '每个网站独立抓取记录', icon: 'database' as IconName },
     { id: 'library', title: '影视资源库', detail: '电影、电视剧、动漫及去重', icon: 'download' as IconName },
     { id: 'monitor', title: '实时任务监控', detail: 'Spider、浏览器和任务队列', icon: 'bolt' as IconName },
@@ -487,7 +608,7 @@ function ResourceCollectorPanel() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setCenterPage(item.id)}
+              onClick={() => { setCenterPage(item.id); if (item.id === 'seedhub') void loadSeedHubJobs(); }}
               className="group flex min-h-[64px] w-full items-center gap-3 rounded-xl px-1 py-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label={item.title}
             >
@@ -511,12 +632,12 @@ function ResourceCollectorPanel() {
       <button
         type="button"
         onClick={() => setCenterPage('index')}
-        className="inline-flex min-h-9 items-center gap-2 rounded-lg pr-2 text-sm font-medium text-accent transition-colors hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="collector-subnav-back"
       >
-        <span aria-hidden="true" className="text-lg leading-none">‹</span>
-        资源采集中心
+        <span aria-hidden="true">‹</span>
+        <span>资源采集中心</span>
       </button>
-      <div className="border-b border-line pb-3">
+      <div className="collector-subpage-heading border-b border-line pb-3">
         <h3 className="text-lg font-semibold text-content">{activeCenterItem?.title}</h3>
         <p className="mt-1 text-xs text-muted">{activeCenterItem?.detail}</p>
       </div>
@@ -524,7 +645,7 @@ function ResourceCollectorPanel() {
       <div hidden={centerPage !== 'connection'} className="rounded-2xl border border-line bg-card p-4 space-y-3">
         <div>
           <h3 className="text-sm font-semibold text-content">Scrapling 连接配置 · 本机 Preview 测试</h3>
-          <p className="mt-1 text-xs leading-5 text-muted">填写 Zo Computer 部署的 Collector 地址与密钥。配置仅保存在当前浏览器 LocalStorage，通过已登录的 LibreTV Worker 代理转发；不会写入 Git 或 Cloudflare 环境变量。当前仅用于独立 Preview 测试。</p>
+          <p className="mt-1 text-xs leading-5 text-muted">填写已经部署并启用 HTTPS 的 Scrapling Collector 公网地址与访问 Token。SeedHub 是公开目录，不需要 SeedHub 账号或密码；这里的 Token 只用于 LibreTV 与你自己的 Collector 服务认证。配置仅保存在当前浏览器 LocalStorage，通过已登录的 LibreTV Worker 代理转发；不会写入 Git 或 Cloudflare 环境变量。当前仅用于独立 Preview 测试。</p>
         </div>
         <label className="block space-y-1">
           <span className="text-xs font-semibold text-content">SCRAPLING_API_BASE · 采集服务地址</span>
@@ -549,6 +670,37 @@ function ResourceCollectorPanel() {
         {configSaved ? <p className="text-[11px] text-success">已保存到此设备的浏览器</p> : null}
         {connectionStatus ? <p className="text-xs text-muted" role="status">{connectionStatus}</p> : null}
         <p className="text-[11px] leading-5 text-muted">仅接受公网 HTTPS 域名（443 端口）；Token 通过 HTTPS Header 发送给 LibreTV Worker，再由 Worker 转发给 Collector。清除后回退到服务端 SCRAPLING_API_BASE / SCRAPLING_API_TOKEN。LocalStorage 中的 Token 可被本机浏览器脚本读取，请只在可信设备的测试 Preview 使用。</p>
+      </div>
+
+      <div hidden={centerPage !== 'seedhub'} className="rounded-2xl border border-line bg-card p-4 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-content">SeedHub 公开目录采集</h3>
+            <p className="mt-1 text-xs leading-5 text-muted">自动分页采集电影、电视剧和动漫的名称、真实海报、详情简介、剧照与元数据；按批次持续推进到目录末页。不提取下载地址，不把下载地址当作在线播放源。</p>
+          </div>
+          <a className="text-xs text-accent underline" href="https://www.seedhub.cc" target="_blank" rel="noreferrer">打开 SeedHub</a>
+        </div>
+        <label className="flex items-center gap-3 text-xs text-muted">
+          每批采集页数
+          <select className="input w-24" value={seedHubPages} onChange={(event) => setSeedHubPages(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}>
+            {[1, 3, 5, 10, 20, 50].map((count) => <option key={count} value={count}>{count} 页</option>)}
+          </select>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => void syncAllSeedHub()}>采集全部分类</button>
+          <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => void syncSeedHub('movies')}>采集电影目录</button>
+          <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => void syncSeedHub('series')}>采集电视剧目录</button>
+          <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => void syncSeedHub('anime')}>采集动漫目录</button>
+          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => void loadSeedHubJobs()}>刷新任务</button>
+        </div>
+        <p className="text-[11px] leading-5 text-muted">采集需要已部署的 Scrapling Collector、有效 Token、持续运行的 Worker，以及服务端出口防火墙确认。出口安全闸门未通过时任务会拒绝访问 SeedHub，不会绕过限制。</p>
+        {seedHubJobs.length ? <div className="space-y-2">
+          <h4 className="text-xs font-semibold text-content">最近 SeedHub 采集任务</h4>
+          {seedHubJobs.map((job) => <div key={job.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-chip p-3">
+            <div className="min-w-0"><span className="block truncate text-xs text-content">任务 {job.id.slice(0, 12)}</span>{job.error ? <span className="mt-1 block text-[10px] text-warning">{job.error}</span> : null}</div>
+            <span className={'shrink-0 text-[10px] font-semibold ' + (job.status === 'succeeded' ? 'text-success' : job.status === 'failed' || job.status === 'partial' ? 'text-warning' : 'text-muted')}>{job.status}</span>
+          </div>)}
+        </div> : <p className="text-xs text-muted">暂无 SeedHub 采集任务记录。</p>}
       </div>
 
       <div hidden={centerPage !== 'directory'} className="rounded-2xl border border-line bg-card p-4">
@@ -1247,13 +1399,13 @@ function ImagePanel() {
   const store = useAppStore();
   const mode = store.imageProxyMode;
   const description: Record<'direct' | 'proxy' | 'custom', string> = {
-    direct: '原站直连；豆瓣封面自动换公共镜像，仍失败回退内置代理。最省服务器流量',
-    proxy: '封面优先经本站服务器转发并伪装来源，失败自动回退公共镜像/直连。最稳定，消耗服务器流量',
-    custom: '使用你填写的模板转发封面图',
+    direct: '封面与逐集剧照原站直连；豆瓣封面自动换公共镜像，仍失败回退内置代理。最省服务器流量',
+    proxy: '封面与逐集剧照优先经本站服务器转发并伪装来源，失败自动回退公共镜像/直连。最稳定，消耗服务器流量',
+    custom: '使用你填写的模板转发封面与逐集剧照，包括风暴等资源站的剧集图片',
   };
   return (
     <section>
-      <SectionTitle title="外观与封面" hint="主题和封面图片加载策略" />
+      <SectionTitle title="外观与封面" hint="主题、封面与剧集图片加载策略" />
       <div className="space-y-2">
         <SelectRow
           label="加载方式"

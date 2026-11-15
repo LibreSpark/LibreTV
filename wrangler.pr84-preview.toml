@@ -1,0 +1,24 @@
+name = "libretv-pr84-preview"
+main = ".open-next/worker.js"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+assets = { directory = ".open-next/assets" }
+
+# Cloudflare-hosted model binding; no external provider API key is required.
+[ai]
+binding = "AI"
+
+# PR #84 专属隔离 Preview；不复用其他功能分支的 Worker。
+workers_dev = true
+preview_urls = false
+
+[vars]
+CMS_SEARCH_API = "https://caiji.dyttzyapi.com/api.php/provide/vod"
+API_60S_BASE = "https://60s.bggdbh.workers.dev"
+LLM_MODEL = "glm-4-flash"
+AUTH_DISABLED = "true"
+DEFAULT_IMAGE_MODE = "proxy"
+DEFAULT_RECOMMEND_SOURCE = "hot-list"
+DEFAULT_SOURCES = '[]'
+
+# 此 Preview 仅用于公开验收；不配置 PASSWORD Worker Secret。

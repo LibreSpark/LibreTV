@@ -35,11 +35,22 @@ export function guardPrivateFeatureRequest(req: Request): NextResponse | null {
   const browserBase = req.headers.get('x-scrapling-api-base')?.trim() ?? '';
   const browserToken = req.headers.get('x-scrapling-api-token')?.trim() ?? '';
 
-  // In a public preview, server-side credentials must never make the proxy
-  // anonymously callable. Only a caller that supplies its own browser-local
-  // Collector credentials may use this route; the downstream client validates
-  // the HTTPS origin and the Collector verifies the bearer token.
+  // Browser-supplied credentials remain supported for operators. A server-
+  // configured Collector may serve only the two bounded SeedHub read endpoints
+  // anonymously; mutations, discovery, task inspection, and crawling stay closed.
   if (browserBase && browserToken) return null;
+  const action = new URL(req.url).searchParams.get('action');
+  // SeedHub catalogue/detail GETs have a repository-backed, read-only snapshot
+  // fallback. They must remain readable when the optional live Collector is
+  // not provisioned; all mutations and other Collector operations stay gated.
+  if (req.method === 'GET' &&
+      (action === 'seedhub-catalog' || action === 'seedhub-detail')) return null;
+
+  const serverCollectorConfigured = Boolean(
+    process.env.SCRAPLING_API_BASE?.trim() && process.env.SCRAPLING_API_TOKEN?.trim()
+  );
+  if (req.method === 'GET' && serverCollectorConfigured &&
+      (action === 'seedhub-catalog' || action === 'seedhub-detail')) return null;
 
   return NextResponse.json(
     { code: 'COLLECTOR_NOT_CONFIGURED', error: '网站无需访问密码。请先在「设置 → 资源采集中心」配置 Scrapling HTTPS 地址和访问 Token。' },

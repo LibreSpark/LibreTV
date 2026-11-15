@@ -1,0 +1,541 @@
+name: Deploy LibreTV PR84 Isolated Preview
+
+on:
+  push:
+    branches:
+      - feature/homepage-cinema-lobby-order-2026-11-11
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: libretv-pr84-preview
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    if: ${{ github.ref == 'refs/heads/feature/homepage-cinema-lobby-order-2026-11-11' }}
+    name: Build and deploy public PR84 preview Worker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact PR84 feature commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript verification
+        run: npm run typecheck
+
+      - name: ESLint verification
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --reporter=dot
+
+      - name: Verify public preview configuration and deployment credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+        run: |
+          grep -Eq '^[[:space:]]*AUTH_DISABLED[[:space:]]*=[[:space:]]*"true"' wrangler.pr84-preview.toml
+          test -n "$CLOUDFLARE_API_TOKEN" || (echo "Missing preview secret: CLOUDFLARE_API_TOKEN" && exit 1)
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "Missing preview secret: CLOUDFLARE_ACCOUNT_ID" && exit 1)
+
+      - name: Build PR84 preview
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npx opennextjs-cloudflare build
+
+      - name: Deploy isolated PR84 Worker
+        id: deploy-preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.pr84-preview.toml
+
+      - name: Report TMDB credential availability without exposing its value
+        env:
+          TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+        run: |
+          if [ -n "$TMDB_READ_ACCESS_TOKEN" ]; then
+            echo "TMDB_READ_ACCESS_TOKEN is configured."
+          else
+            echo "TMDB_READ_ACCESS_TOKEN is not configured; episode playback remains unaffected and external still matching is skipped."
+          fi
+
+      - name: Configure optional TMDB credential on isolated Preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+        run: |
+          if [ -n "$TMDB_READ_ACCESS_TOKEN" ]; then
+            printf '%s' "$TMDB_READ_ACCESS_TOKEN" | npx wrangler secret put TMDB_READ_ACCESS_TOKEN --config wrangler.pr84-preview.toml
+          else
+            echo "TMDB credential absent; skipping Worker secret configuration."
+          fi
+
+      - name: Configure optional persistent Collector on isolated Preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR84_SCRAPLING_API_BASE: ${{ secrets.PR84_SCRAPLING_API_BASE }}
+          PR84_SCRAPLING_API_TOKEN: ${{ secrets.PR84_SCRAPLING_API_TOKEN }}
+        run: |
+          if [ -n "$PR84_SCRAPLING_API_BASE" ] && [ -n "$PR84_SCRAPLING_API_TOKEN" ]; then
+            node --input-type=module <<'NODE'
+            const value = process.env.PR84_SCRAPLING_API_BASE ?? "";
+            const url = new URL(value);
+            const hostname = url.hostname.toLowerCase();
+            const ipLiteral = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
+            if (url.protocol !== "https:" || url.username || url.password ||
+                (url.port && url.port !== "443") || url.pathname !== "/" ||
+                url.search || url.hash || ipLiteral || hostname === "localhost" ||
+                !hostname.includes(".") || /(^|\.)(local|internal|localhost|test|invalid)$/.test(hostname)) {
+              throw new Error("PR84 Collector endpoint must be a public HTTPS hostname without path or credentials");
+            }
+          NODE
+            printf '%s' "$PR84_SCRAPLING_API_BASE" | npx wrangler secret put SCRAPLING_API_BASE --config wrangler.pr84-preview.toml
+            printf '%s' "$PR84_SCRAPLING_API_TOKEN" | npx wrangler secret put SCRAPLING_API_TOKEN --config wrangler.pr84-preview.toml
+            echo "Persistent Collector credentials configured on the isolated PR84 Preview Worker."
+          else
+            echo "Persistent Collector not provisioned; SeedHub catalogue remains in explicit empty state."
+          fi
+
+      - name: Configure optional Resource Supervisor on isolated Preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR84_RESOURCE_AGENT_API_KEY: ${{ secrets.PR84_RESOURCE_AGENT_API_KEY }}
+          PR84_RESOURCE_AGENT_BASE_URL: ${{ secrets.PR84_RESOURCE_AGENT_BASE_URL }}
+          PR84_RESOURCE_AGENT_MODEL: ${{ secrets.PR84_RESOURCE_AGENT_MODEL }}
+          PR84_RESOURCE_OPENCLAW_GATEWAY_URL: ${{ secrets.PR84_RESOURCE_OPENCLAW_GATEWAY_URL }}
+          PR84_RESOURCE_OPENCLAW_GATEWAY_TOKEN: ${{ secrets.PR84_RESOURCE_OPENCLAW_GATEWAY_TOKEN }}
+          PR84_RESOURCE_OPENCLAW_AGENT_ID: ${{ secrets.PR84_RESOURCE_OPENCLAW_AGENT_ID }}
+          PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_ID: ${{ secrets.PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_ID }}
+          PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_SECRET: ${{ secrets.PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_SECRET }}
+        run: |
+          if [ -n "$PR84_RESOURCE_OPENCLAW_GATEWAY_URL" ] && [ -n "$PR84_RESOURCE_OPENCLAW_GATEWAY_TOKEN" ] &&
+             [ -n "$PR84_RESOURCE_OPENCLAW_AGENT_ID" ] && [ -n "$PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_ID" ] &&
+             [ -n "$PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_SECRET" ]; then
+            printf '%s' "$PR84_RESOURCE_OPENCLAW_GATEWAY_URL" | npx wrangler secret put RESOURCE_OPENCLAW_GATEWAY_URL --config wrangler.pr84-preview.toml
+            printf '%s' "$PR84_RESOURCE_OPENCLAW_GATEWAY_TOKEN" | npx wrangler secret put RESOURCE_OPENCLAW_GATEWAY_TOKEN --config wrangler.pr84-preview.toml
+            printf '%s' "$PR84_RESOURCE_OPENCLAW_AGENT_ID" | npx wrangler secret put RESOURCE_OPENCLAW_AGENT_ID --config wrangler.pr84-preview.toml
+            printf '%s' "$PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_ID" | npx wrangler secret put RESOURCE_OPENCLAW_ACCESS_CLIENT_ID --config wrangler.pr84-preview.toml
+            printf '%s' "$PR84_RESOURCE_OPENCLAW_ACCESS_CLIENT_SECRET" | npx wrangler secret put RESOURCE_OPENCLAW_ACCESS_CLIENT_SECRET --config wrangler.pr84-preview.toml
+            echo "Dedicated OpenClaw Resource Supervisor configured on isolated Preview Worker."
+          elif [ -n "$PR84_RESOURCE_AGENT_API_KEY" ]; then
+            printf '%s' "$PR84_RESOURCE_AGENT_API_KEY" | npx wrangler secret put RESOURCE_AGENT_API_KEY --config wrangler.pr84-preview.toml
+            if [ -n "$PR84_RESOURCE_AGENT_BASE_URL" ]; then
+              printf '%s' "$PR84_RESOURCE_AGENT_BASE_URL" | npx wrangler secret put RESOURCE_AGENT_BASE_URL --config wrangler.pr84-preview.toml
+            fi
+            if [ -n "$PR84_RESOURCE_AGENT_MODEL" ]; then
+              printf '%s' "$PR84_RESOURCE_AGENT_MODEL" | npx wrangler secret put RESOURCE_AGENT_MODEL --config wrangler.pr84-preview.toml
+            fi
+            echo "Resource Supervisor model configured on isolated Preview Worker."
+          else
+            echo "No external model secret supplied; the Preview uses its Cloudflare Workers AI binding by default."
+          fi
+
+      - name: Verify default Cloudflare Workers AI inference without enqueuing jobs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR84_PREVIEW_URL: https://libretv-pr84-preview.bggdbh.workers.dev
+        run: |
+          set -euo pipefail
+          SMOKE_TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::$SMOKE_TOKEN"
+          cleanup() {
+            # Remove the temporary variable and any legacy test secret after the probe.
+            npx wrangler deploy --config wrangler.pr84-preview.toml --var "RESOURCE_AGENT_SMOKE_TOKEN:" --keep-vars >/dev/null 2>&1 || true
+            npx wrangler secret delete RESOURCE_AGENT_SMOKE_TOKEN --config wrangler.pr84-preview.toml --force >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          # Inject the one-time token as a Worker binding; secret propagation was not visible to this Node.js route.
+          npx wrangler deploy --config wrangler.pr84-preview.toml --var "RESOURCE_AGENT_SMOKE_TOKEN:$SMOKE_TOKEN" --keep-vars
+          sleep 5
+          export RESOURCE_AGENT_SMOKE_TOKEN="$SMOKE_TOKEN"
+          node --input-type=module <<'NODE'
+          const base = process.env.PR84_PREVIEW_URL;
+          const response = await fetch(new URL("/api/resource-collector/agent", base), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-resource-agent-smoke-token": process.env.RESOURCE_AGENT_SMOKE_TOKEN,
+            },
+            body: JSON.stringify({
+              goal: "只规划发现公开资源站，不要执行爬取或播放任务",
+              dryRun: true
+            }),
+            signal: AbortSignal.timeout(90000),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.dryRun !== true ||
+              payload.provider !== "cloudflare-workers-ai" ||
+              !Number.isInteger(payload.planned) || payload.planned < 1 ||
+              !Array.isArray(payload.tasks) || payload.tasks.length < 1 ||
+              payload.tasks.some((task) => !["discover", "crawl"].includes(task?.job_type))) {
+            throw new Error("Cloudflare Workers AI inference smoke test failed: HTTP " +
+              response.status + " " + JSON.stringify(payload).slice(0, 800));
+          }
+          console.log("PASS default Cloudflare Workers AI inference (no provider API key, no Collector jobs enqueued): " +
+            JSON.stringify({ provider: payload.provider, model: payload.model,
+              planned: payload.planned, taskTypes: payload.tasks.map((task) => task.job_type) }));
+          NODE
+
+      - name: Probe configured CMS candidate without enabling it as a default source
+        env:
+          CANDIDATE_CMS_API: https://caiji.dyttzyapi.com/api.php/provide/vod
+        run: |
+          node --input-type=module <<'NODE'
+          const raw = process.env.CANDIDATE_CMS_API ?? "";
+          const api = new URL(raw);
+          if (api.protocol !== "https:" || api.hostname !== "caiji.dyttzyapi.com" ||
+              api.username || api.password || api.port) {
+            throw new Error("CMS candidate URL is outside the fixed HTTPS allowlist");
+          }
+
+          async function readJson(params) {
+            const url = new URL(api);
+            for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+            const response = await fetch(url, {
+              redirect: "error",
+              signal: AbortSignal.timeout(10000),
+              headers: { Accept: "application/json", "cache-control": "no-cache" },
+            });
+            if (!response.ok) throw new Error("CMS endpoint returned HTTP " + response.status);
+            const text = await response.text();
+            if (Buffer.byteLength(text, "utf8") > 2 * 1024 * 1024) {
+              throw new Error("CMS response exceeded 2 MiB limit");
+            }
+            let payload;
+            try { payload = JSON.parse(text); } catch { throw new Error("CMS response was not valid JSON"); }
+            if (!payload || typeof payload !== "object" || !Array.isArray(payload.list)) {
+              throw new Error("CMS response did not contain a list array");
+            }
+            return payload;
+          }
+
+          try {
+            const search = await readJson({ ac: "videolist", wd: "流浪地球" });
+            const candidate = search.list.find((item) =>
+              item && (typeof item.vod_id === "string" || typeof item.vod_id === "number") &&
+              String(item.vod_id).trim()
+            );
+            if (!candidate) throw new Error("Search response contained no item with vod_id");
+            const requestedId = String(candidate.vod_id).trim();
+            const detail = await readJson({ ac: "detail", ids: requestedId });
+            const matched = detail.list.find((item) =>
+              item && String(item.vod_id ?? "").trim() === requestedId
+            );
+            if (!matched) throw new Error("Detail response did not return the exact requested vod_id");
+
+            const playText = typeof matched.vod_play_url === "string" ? matched.vod_play_url : "";
+            const urls = playText.split("$$").flatMap((group) => group.split("#"))
+              .map((episode) => {
+                const separator = episode.indexOf("$");
+                return separator < 0 ? "" : episode.slice(separator + 1).trim();
+              })
+              .filter((value) => {
+                try {
+                  const parsed = new URL(value);
+                  return parsed.protocol === "https:" || parsed.protocol === "http:";
+                } catch { return false; }
+              });
+            const hlsCount = urls.filter((value) => /\.m3u8(?:$|[?#])/i.test(value)).length;
+            if (urls.length === 0) throw new Error("Matched detail contained no HTTP(S) play URLs");
+
+            // Treat CMS playback URLs as untrusted. Resolve every address, reject
+            // non-public ranges, pin the request to a validated address, forbid
+            // redirects, and read only a small byte range.
+            const { lookup } = await import("node:dns/promises");
+            const net = await import("node:net");
+            const http = await import("node:http");
+            const https = await import("node:https");
+
+            function isPublicAddress(address) {
+              const family = net.isIP(address);
+              if (family === 4) {
+                const octets = address.split(".").map(Number);
+                const n = (((octets[0] * 256 + octets[1]) * 256 + octets[2]) * 256 + octets[3]) >>> 0;
+                const blocked = [
+                  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10],
+                  ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+                  ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.168.0.0", 16],
+                  ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24],
+                  ["224.0.0.0", 4], ["240.0.0.0", 4],
+                ];
+                return !blocked.some(([base, bits]) => {
+                  const b = base.split(".").map(Number);
+                  const baseN = (((b[0] * 256 + b[1]) * 256 + b[2]) * 256 + b[3]) >>> 0;
+                  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+                  return (n & mask) === (baseN & mask);
+                });
+              }
+              if (family === 6) {
+                const value = address.toLowerCase();
+                // Only global-unicast 2000::/3 is accepted. Explicitly reject
+                // mapped, documentation, transition and special-use prefixes.
+                return /^[23]/.test(value) &&
+                  !value.startsWith("2001:db8:") &&
+                  !value.startsWith("2001:10:") &&
+                  !value.startsWith("2002:") &&
+                  !value.startsWith("::ffff:");
+              }
+              return false;
+            }
+
+            async function probeMedia(rawUrl) {
+              const target = new URL(rawUrl);
+              if (!["http:", "https:"].includes(target.protocol) ||
+                  target.username || target.password ||
+                  (target.port && !["80", "443"].includes(target.port))) {
+                throw new Error("Media URL uses a disallowed protocol, credentials, or port");
+              }
+              const hostname = target.hostname.replace(/^\[|\]$/g, "");
+              const addresses = net.isIP(hostname)
+                ? [{ address: hostname, family: net.isIP(hostname) }]
+                : await lookup(hostname, { all: true, verbatim: true });
+              if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
+                throw new Error("Media host resolved to a non-public or unsupported address");
+              }
+              const pinned = addresses[0];
+              const transport = target.protocol === "https:" ? https : http;
+              return await new Promise((resolve, reject) => {
+                let settled = false;
+                const finish = (value, error) => {
+                  if (settled) return;
+                  settled = true;
+                  if (error) reject(error);
+                  else resolve(value);
+                };
+                const request = transport.request({
+                  protocol: target.protocol,
+                  hostname,
+                  port: target.port || (target.protocol === "https:" ? 443 : 80),
+                  method: "GET",
+                  path: target.pathname + target.search,
+                  headers: { Range: "bytes=0-1023", Accept: "*/*", "User-Agent": "LibreTV-Preview-Probe/1.0" },
+                  timeout: 8000,
+                  lookup: (_host, options, callback) => {
+                    // Node 20/24 may request all-address results when
+                    // autoSelectFamily is enabled. Match the callback shape
+                    // expected by net.connect instead of returning a scalar.
+                    const done = typeof options === "function" ? options : callback;
+                    const lookupOptions = typeof options === "object" && options ? options : {};
+                    if (!pinned || typeof pinned.address !== "string" ||
+                        ![4, 6].includes(pinned.family)) {
+                      return done(new Error("Validated media address is unavailable"));
+                    }
+                    if (lookupOptions.all) {
+                      return done(null, [{ address: pinned.address, family: pinned.family }]);
+                    }
+                    return done(null, pinned.address, pinned.family);
+                  },
+                }, (response) => {
+                  const status = response.statusCode ?? 0;
+                  const type = String(response.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+                  if ([301, 302, 303, 307, 308].includes(status)) {
+                    response.destroy();
+                    const error = new Error("Media endpoint attempted a redirect");
+                    error.statusCode = status;
+                    return finish(null, error);
+                  }
+                  if (![200, 206].includes(status)) {
+                    response.destroy();
+                    const error = new Error("Media endpoint returned HTTP " + status);
+                    error.statusCode = status;
+                    error.mediaHost = hostname;
+                    error.mediaHeaders = {
+                      contentType: type || null,
+                      server: String(response.headers["server"] || "").slice(0, 80) || null,
+                      via: String(response.headers["via"] || "").slice(0, 80) || null,
+                      cfRay: String(response.headers["cf-ray"] || "").slice(0, 80) || null,
+                      cache: String(response.headers["cf-cache-status"] || response.headers["x-cache"] || "").slice(0, 80) || null,
+                    };
+                    return finish(null, error);
+                  }
+                  const chunks = [];
+                  let size = 0;
+                  response.on("data", (chunk) => {
+                    size += chunk.length;
+                    if (size <= 65536) chunks.push(chunk);
+                    else {
+                      response.destroy();
+                      finish({ status, type, bytes: size, truncated: true, sample: Buffer.concat(chunks).toString("hex").slice(0, 32) });
+                    }
+                  });
+                  response.on("end", () => finish({
+                    status, type, bytes: size, truncated: false,
+                    sample: Buffer.concat(chunks).subarray(0, 16).toString("hex"),
+                  }));
+                  response.on("error", (error) => finish(null, error));
+                });
+                request.on("timeout", () => request.destroy(new Error("Media probe timed out")));
+                request.on("error", (error) => finish(null, error));
+                request.end();
+              });
+            }
+
+            let mediaProbe;
+            try {
+              mediaProbe = await probeMedia(urls[0]);
+            } catch (error) {
+              const status = Number.isInteger(error?.statusCode) ? error.statusCode : null;
+              console.warn("CMS media endpoint safety/reachability probe failed: " +
+                (status ? "HTTP " + status : "no HTTP response; " +
+                  (typeof error?.code === "string" ? error.code : "transport_or_safety_error")) +
+                ", host=" + (typeof error?.mediaHost === "string" ? error.mediaHost : "unknown") +
+                ", headers=" + JSON.stringify(error?.mediaHeaders ?? {}));
+              mediaProbe = { passed: false, status, host: error?.mediaHost ?? null, headers: error?.mediaHeaders ?? null };
+            }
+            const isHls = /mpegurl|vnd\.apple\.mpegurl/.test(mediaProbe.type ?? "") ||
+              /\.m3u8(?:$|[?#])/i.test(urls[0]);
+            const isMp4 = mediaProbe.type === "video/mp4" ||
+              (mediaProbe.sample ?? "").includes("66747970");
+            const mediaPassed = mediaProbe.passed !== false &&
+              (mediaProbe.status === 200 || mediaProbe.status === 206) &&
+              (isHls || isMp4 || (mediaProbe.type ?? "").startsWith("video/"));
+            console.log("CMS candidate probe: searchItems=" + search.list.length +
+              ", exactDetailMatch=true, playableHttpUrls=" + urls.length +
+              ", hlsUrls=" + hlsCount +
+              ", mediaHttpStatus=" + (mediaProbe.status ?? "unverified") +
+              ", mediaType=" + (mediaProbe.type || "unknown") +
+              ", mediaBytesRead=" + (mediaProbe.bytes ?? 0) +
+              ", mediaFormat=" + (isHls ? "hls" : isMp4 ? "mp4" : "other") +
+              ", mediaPassed=" + mediaPassed +
+              ", sourceEnabled=false");
+            if (!mediaPassed) {
+              console.warn("CMS media probe did not pass; candidate remains unverified and disabled. This does not block isolated Preview deployment or UI acceptance.");
+            } else {
+              console.log("CMS media probe passed; candidate remains disabled pending explicit source approval.");
+            }
+          } catch (error) {
+            console.warn("CMS candidate probe did not pass; source remains disabled and Preview acceptance continues: " +
+              (error instanceof Error ? error.message : "unknown error"));
+          }
+          NODE
+
+      
+      # KKPhim is probed and decoded by the dedicated pr84-kkphim-probe.yml workflow.
+      # Keep this deployment workflow focused on general Preview UI/player/download acceptance.
+
+      - name: Install Playwright WebKit for mobile-layout acceptance
+        id: install-webkit
+        if: always() && steps.deploy-preview.outcome == 'success'
+        timeout-minutes: 8
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Verify current PR84 Preview in mobile WebKit
+        id: verify-webkit
+        if: always() && steps.deploy-preview.outcome == 'success' && steps.install-webkit.outcome == 'success'
+        env:
+          PR84_PREVIEW_URL: https://libretv-pr84-preview.bggdbh.workers.dev
+        run: node scripts/pr84-preview-webkit-smoke.mjs
+
+      - name: Install Chrome for actual LibreTV player acceptance
+        id: install-chrome
+        if: always() && steps.deploy-preview.outcome == 'success'
+        timeout-minutes: 10
+        run: npx playwright install --with-deps chrome
+
+      - name: Verify real LibreTV PlayerShell playback and source switching
+        if: always() && steps.deploy-preview.outcome == 'success' && steps.install-chrome.outcome == 'success'
+        env:
+          PR84_PREVIEW_URL: https://libretv-pr84-preview.bggdbh.workers.dev
+          PR84_BROWSER_CHANNEL: chrome
+        run: node scripts/pr84-preview-player-smoke.mjs
+
+      - name: Install FFmpeg for real MP4 download fixture
+        id: install-ffmpeg
+        if: always() && steps.deploy-preview.outcome == 'success' && steps.install-chrome.outcome == 'success'
+        timeout-minutes: 5
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
+
+      - name: Verify PR84 download manager file output and failure feedback
+        if: always() && steps.deploy-preview.outcome == 'success' && steps.install-chrome.outcome == 'success' && steps.install-ffmpeg.outcome == 'success'
+        env:
+          PR84_PREVIEW_URL: https://libretv-pr84-preview.bggdbh.workers.dev
+        run: node scripts/pr84-download-manager-smoke.mjs
+
+      - name: Upload mobile WebKit and player screenshots
+        if: always() && steps.deploy-preview.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr84-preview-browser-acceptance
+          path: |
+            /tmp/pr84-preview-webkit.png
+            /tmp/pr84-resource-studio-webkit.png
+            /tmp/pr84-preview-watch-webkit.png
+            /tmp/pr84-preview-player.png
+            /tmp/pr84-preview-seedhub-detail-webkit.png
+          if-no-files-found: ignore
+
+      - name: Verify deployed PR84 homepage and status endpoint
+        if: always()
+        run: |
+          node --input-type=module <<'NODE'
+          const base = "https://libretv-pr84-preview.bggdbh.workers.dev";
+          const checks = [
+            { path: "/", expected: 200, contentType: "text/html" },
+            { path: "/detail", expected: 200, contentType: "text/html" },
+            { path: "/api/status", expected: 200, contentType: "application/json" },
+          ];
+          for (const check of checks) {
+            let response;
+            for (let attempt = 1; attempt <= 6; attempt += 1) {
+              response = await fetch(base + check.path, {
+                redirect: "follow",
+                headers: { "cache-control": "no-cache" },
+              });
+              if (response.status === check.expected) break;
+              const body = (await response.clone().text()).slice(0, 600);
+              if (attempt === 6) {
+                throw new Error(check.path + " returned HTTP " + response.status +
+                  " (expected " + check.expected + "); content-type=" +
+                  response.headers.get("content-type") + "; body=" + body);
+              }
+              await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+            }
+            const type = response.headers.get("content-type") ?? "";
+            if (!type.includes(check.contentType)) throw new Error(check.path + " unexpected content-type: " + type);
+            const body = await response.text();
+            if (check.path === "/" && !body.toLowerCase().includes("libretv")) throw new Error("Homepage did not contain LibreTV markup");
+            if (check.path === "/detail" && (!body.toLowerCase().includes("<html") || !body.includes("/_next/"))) {
+              throw new Error("/detail did not return a Next.js HTML document");
+            }
+            if (check.path === "/api/status") {
+              let status;
+              try { status = JSON.parse(body); } catch { throw new Error("/api/status did not return valid JSON"); }
+              const sourceCount = Array.isArray(status.defaultSources) ? status.defaultSources.length : 0;
+              const subscriptionCount = Array.isArray(status.defaultSubscriptions) ? status.defaultSubscriptions.length : 0;
+              const liveSourceCount = Array.isArray(status.defaultLiveSources) ? status.defaultLiveSources.length : 0;
+              console.log("Preview runtime source inventory: defaultSources=" + sourceCount +
+                ", defaultSubscriptions=" + subscriptionCount +
+                ", defaultLiveSources=" + liveSourceCount +
+                ", verified=" + Boolean(status.verified));
+            }
+            console.log("Verified " + check.path + ": HTTP " + response.status + " (" + type + ")");
+          }
+          NODE

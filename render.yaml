@@ -19,3 +19,5 @@ services:
         generateValue: true
       - key: SCRAPLING_DB_PATH
         value: /data/collector.sqlite3
+      - key: SEEDHUB_PURGE_LEGACY_CATALOG
+        value: "1"

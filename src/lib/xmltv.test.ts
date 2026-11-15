@@ -92,6 +92,23 @@ describe('parseXmltv', () => {
     expect(map.size).toBe(2);
   });
 
+  it('限制节目标题与简介长度', () => {
+    const longTitle = 'T'.repeat(700);
+    const longDesc = 'D'.repeat(5000);
+    const xml = `<tv><programme start="20240601120000 +0000" stop="20240601130000 +0000" channel="c1"><title>${longTitle}</title><desc>${longDesc}</desc></programme></tv>`;
+    const program = parseXmltv(xml, undefined, NOW).get('c1')?.[0];
+    expect(program?.title).toHaveLength(500);
+    expect(program?.desc).toHaveLength(4000);
+  });
+
+  it('限制每个频道保留的节目数量', () => {
+    const entries = Array.from({ length: 5002 }, (_, i) =>
+      `<programme start="20240601120000 +0000" stop="20240601130000 +0000" channel="c1"><title>节目${i}</title></programme>`
+    ).join('');
+    const programs = parseXmltv(`<tv>${entries}</tv>`, undefined, NOW).get('c1') ?? [];
+    expect(programs).toHaveLength(5000);
+  });
+
   it('空输入与畸形内容不抛错', () => {
     expect(parseXmltv('', undefined, NOW).size).toBe(0);
     expect(parseXmltv('<tv><programme channel="x" start="bad" stop="bad"><title>t</title></programme></tv>', undefined, NOW).size).toBe(0);

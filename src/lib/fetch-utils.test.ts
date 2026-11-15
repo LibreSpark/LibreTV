@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchUpstream } from './fetch-utils';
+import { fetchUpstream, fetchWithSafeRedirects } from './fetch-utils';
 
 /**
  * 安全跳转测试：mock 全局 fetch，验证 302 跳转到内网地址会被拒绝，
@@ -23,6 +23,22 @@ afterEach(() => {
 });
 
 describe('fetchUpstream 安全跳转', () => {
+  it('普通安全重定向 API 不接受 allowPrivate 特权参数', async () => {
+    const spy = mockFetch([]);
+    await expect(
+      fetchWithSafeRedirects('http://127.0.0.1:8080/private', {}, { allowPrivate: true } as never)
+    ).rejects.toThrow(/跳转目标被拒绝/);
+    expect(spy.mock.calls.length).toBe(0);
+  });
+
+  it('普通上游 API 忽略调用者注入的 allowPrivate 参数', async () => {
+    const spy = mockFetch([]);
+    await expect(
+      fetchUpstream('http://127.0.0.1:8080/private', { allowPrivate: true } as never)
+    ).rejects.toThrow(/跳转目标被拒绝/);
+    expect(spy.mock.calls.length).toBe(0);
+  });
+
   it('302 跳转到内网地址时拒绝，且不发起第二跳请求', async () => {
     const spy = mockFetch([
       () => new Response(null, { status: 302, headers: { location: 'http://127.0.0.1:8080/secret' } }),
@@ -39,6 +55,23 @@ describe('fetchUpstream 安全跳转', () => {
     const res = await fetchUpstream(PUBLIC_URL);
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('ok');
+  });
+
+  it('客户端中断请求时，将 abort 传递到正在进行的上游请求', async () => {
+    const controller = new AbortController();
+    let upstreamSignal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url: string | URL, init?: RequestInit) => {
+      upstreamSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        upstreamSignal?.addEventListener('abort', () => reject(upstreamSignal?.reason), { once: true });
+      });
+    }));
+
+    const pending = fetchWithSafeRedirects(PUBLIC_URL, { signal: controller.signal });
+    await vi.waitFor(() => expect(upstreamSignal).toBeDefined());
+    controller.abort(new DOMException('客户端已断开', 'AbortError'));
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('无跳转时直接返回响应', async () => {

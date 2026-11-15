@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractEpisodesFromPlayUrl,
+  extractEpisodeItemsFromPlayUrl,
   extractM3u8FromText,
   filterAdultResults,
   filterRelevantResults,
   isAdultContent,
+  isMovieType,
   isRelevant,
   normalizeTitle,
   parseDetail,
+  cmsDescriptionToText,
   parseDetailPageHtml,
   parseSearchList,
 } from './cms-parser';
@@ -43,6 +46,18 @@ describe('parseSearchList', () => {
     // 部分源站无结果时返回 list: null（或缺失），按空结果兼容
     expect(parseSearchList({ list: null }, source)).toEqual([]);
     expect(parseSearchList({}, source)).toEqual([]);
+  });
+});
+
+describe('extractEpisodeItemsFromPlayUrl', () => {
+  it('保留 CMS 提供的真实集数名称，并与播放器 URL 列表保持一致', () => {
+    const dollar = String.fromCharCode(36);
+    const play = '第01集' + dollar + 'https://cdn/a1.m3u8#特别篇' + dollar + 'https://cdn/a2.m3u8' + dollar.repeat(3) + '备用' + dollar + 'https://x/b.m3u8';
+    expect(extractEpisodeItemsFromPlayUrl(play)).toEqual([
+      { title: '第01集', url: 'https://cdn/a1.m3u8' },
+      { title: '特别篇', url: 'https://cdn/a2.m3u8' },
+    ]);
+    expect(extractEpisodesFromPlayUrl(play)).toEqual(extractEpisodeItemsFromPlayUrl(play).map((item) => item.url));
   });
 });
 
@@ -100,8 +115,67 @@ describe('parseDetail', () => {
     };
     const detail = parseDetail(data, source);
     expect(detail.episodes).toHaveLength(2);
+    expect(detail.episodeItems).toEqual([
+      { title: '第1集', url: 'https://cdn/1.m3u8' },
+      { title: '第2集', url: 'https://cdn/2.m3u8' },
+    ]);
     expect(detail.videoInfo.title).toBe('三体');
     expect(detail.videoInfo.sourceName).toBe('测试源');
+  });
+
+  it('仅将按 URL 精确匹配的单集 still_path / 截图字段作为剧照', () => {
+    const data = {
+      list: [{
+        vod_name: '测试剧',
+        vod_pic: 'https://img.example.com/title-poster.jpg',
+        vod_play_url: '第1集$https://media.example.com/ep1.m3u8#第2集$https://media.example.com/ep2.m3u8#第3集$https://media.example.com/ep3.m3u8',
+        vod_episode_list: [
+          {
+            url: 'https://media.example.com/ep1.m3u8',
+            still_path: 'https://img.example.com/ep1-still.jpg',
+            episode_name: '試播集',
+            image_captured_at: '2026-11-12T09:30:00Z',
+            description: '<p>第一集简介</p>',
+            duration: '45分钟',
+          },
+          {
+            url: 'https://media.example.com/ep2.m3u8',
+            still_path: '/episode-2-still.jpg',
+            description: '第二集简介',
+          },
+          {
+            url: 'https://media.example.com/wrong-episode.m3u8',
+            still_path: 'https://img.example.com/wrong-still.jpg',
+            description: '不属于第三集',
+          },
+        ],
+      }],
+    };
+    const detail = parseDetail(data, source);
+    expect(detail.episodeItems?.[0]).toMatchObject({
+      title: '第1集',
+      url: 'https://media.example.com/ep1.m3u8',
+      image: 'https://img.example.com/ep1-still.jpg',
+      imageSourceUrl: 'https://img.example.com/ep1-still.jpg',
+      imageSourceEpisodeUrl: 'https://media.example.com/ep1.m3u8',
+      episodeName: '試播集',
+      description: '第一集简介',
+      duration: '45分钟',
+      imageCapturedAt: '2026-11-12T09:30:00Z',
+    });
+    expect(detail.episodeItems?.[1]).toMatchObject({
+      title: '第2集',
+      url: 'https://media.example.com/ep2.m3u8',
+      image: 'https://image.tmdb.org/t/p/w500/episode-2-still.jpg',
+      imageSourceUrl: 'https://image.tmdb.org/t/p/w500/episode-2-still.jpg',
+      imageSourceEpisodeUrl: 'https://media.example.com/ep2.m3u8',
+      description: '第二集简介',
+    });
+    // A mismatched episode record and the title-level vod_pic must never become episode 3 artwork.
+    expect(detail.episodeItems?.[2]).toEqual({
+      title: '第3集',
+      url: 'https://media.example.com/ep3.m3u8',
+    });
   });
 
   it('play_url 为空时从简介兜底', () => {
@@ -112,6 +186,27 @@ describe('parseDetail', () => {
 
   it('空列表抛错', () => {
     expect(() => parseDetail({ list: [] }, source)).toThrow();
+  });
+});
+
+describe('电影类型识别与 CMS 简介清理', () => {
+  it.each(['动作片', '喜剧片', '科幻片', '爱情片', '恐怖片', '剧情片'])('把 %s 等 Apple CMS 电影分类识别为电影', (typeName) => {
+    expect(isMovieType(typeName, 1)).toBe(true);
+  });
+
+  it.each(['电视剧', '连续剧', '动漫', '番剧', '综艺'])('保留 %s 的分集展示', (typeName) => {
+    expect(isMovieType(typeName, 12)).toBe(false);
+  });
+
+  it('未知分类根据播放地址数量安全回退', () => {
+    expect(isMovieType('其他分类', 1)).toBe(true);
+    expect(isMovieType('其他分类', 8)).toBe(false);
+  });
+
+  it('移除简介中的 HTML、脚本和样式，并解码常见实体', () => {
+    expect(cmsDescriptionToText('<p>简介&nbsp;内容</p><script>alert(1)</script><b>科幻&amp;冒险</b>'))
+      .toBe('简介 内容\n科幻&冒险');
+    expect(cmsDescriptionToText('普通文本')).toBe('普通文本');
   });
 });
 

@@ -1,2 +1,52 @@
-'use client';import React,{useEffect,useState} from 'react';import {usePathname} from 'next/navigation';import {SourceManagerDrawer} from '@/components/source-manager';import {HistoryPanel} from '@/components/history-panel';import AIFloatingBall from '@/components/AIFloatingBall';import {BrandModule} from './header/BrandModule';import {HomeNavModule} from './header/HomeNavModule';import {MoviesNavModule} from './header/MoviesNavModule';import {TvNavModule} from './header/TvNavModule';import {OverseasNavModule} from './header/OverseasNavModule';import {AnimeNavModule} from './header/AnimeNavModule';import {VarietyNavModule} from './header/VarietyNavModule';import {LiveNavModule} from './header/LiveNavModule';import {SearchModule} from './header/SearchModule';import {HistoryModule} from './header/HistoryModule';import {SettingsModule} from './header/SettingsModule';import {AvatarModule} from './header/AvatarModule';import {MobileTabBar} from './header/MobileTabBar';
-export function V4HomepageHeader({overlay=false}:{overlay?:boolean}){const pathname=usePathname();const [settingsOpen,setSettingsOpen]=useState(false);const [settingsInstance,setSettingsInstance]=useState(0);const [historyOpen,setHistoryOpen]=useState(false);const [isScrolled,setIsScrolled]=useState(false);useEffect(()=>{if(!overlay){setIsScrolled(false);return;}const update = () => setIsScrolled(window.scrollY > 48);update();window.addEventListener('scroll',update,{passive:true});return()=>window.removeEventListener('scroll',update);},[overlay]);useEffect(()=>{const open=()=>{setSettingsInstance(v=>v+1);setSettingsOpen(true);};window.addEventListener('libretv:open-source-manager',open);return()=>window.removeEventListener('libretv:open-source-manager',open);},[]);useEffect(()=>{const open=()=>setHistoryOpen(true);window.addEventListener('libretv:open-history-panel',open);return()=>window.removeEventListener('libretv:open-history-panel',open);},[]);return <><header className={'v4-header'+(overlay?' is-overlay':'')+(overlay&&isScrolled?' is-scrolled':'')}><div className="v4-header-inner"><BrandModule/><nav className="v4-primary-nav" aria-label="主导航" onKeyDown={event=>{if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;const links=Array.from(event.currentTarget.querySelectorAll<HTMLAnchorElement>('a'));const current=links.indexOf(document.activeElement as HTMLAnchorElement);if(current<0||links.length<2)return;event.preventDefault();const delta=event.key==='ArrowRight'?1:-1;links[(current+delta+links.length)%links.length]?.focus();}}><HomeNavModule pathname={pathname}/><MoviesNavModule pathname={pathname}/><TvNavModule pathname={pathname}/><OverseasNavModule pathname={pathname}/><AnimeNavModule pathname={pathname}/><VarietyNavModule pathname={pathname}/><LiveNavModule pathname={pathname}/></nav><div className="v4-header-actions"><SearchModule/><HistoryModule onOpen={()=>setHistoryOpen(true)}/><SettingsModule onOpen={()=>setSettingsOpen(true)}/><AvatarModule pathname={pathname}/></div></div></header><MobileTabBar/><AIFloatingBall showFab inlineMode={false}/><SourceManagerDrawer key={settingsInstance} open={settingsOpen} onClose={()=>setSettingsOpen(false)}/><HistoryPanel open={historyOpen} onClose={()=>setHistoryOpen(false)}/></>;}
+'use client';
+
+import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { SourceManagerDrawer } from '@/components/source-manager';
+import { HistoryPanel } from '@/components/history-panel';
+import AIFloatingBall from '@/components/AIFloatingBall';
+import { SearchModule } from './header/SearchModule';
+import { AvatarModule } from './header/AvatarModule';
+
+export function V4HomepageHeader({ overlay = false }: { overlay?: boolean }) {
+  const pathname = usePathname();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInstance, setSettingsInstance] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  useEffect(() => {
+    const open = () => {
+      setSettingsInstance((value) => value + 1);
+      setSettingsOpen(true);
+    };
+    window.addEventListener('libretv:open-source-manager', open);
+    return () => window.removeEventListener('libretv:open-source-manager', open);
+  }, []);
+
+  useEffect(() => {
+    const open = () => setHistoryOpen(true);
+    window.addEventListener('libretv:open-history-panel', open);
+    return () => window.removeEventListener('libretv:open-history-panel', open);
+  }, []);
+
+  return (
+    <>
+      <header className={'v4-header' + (overlay ? ' is-overlay' : '')}>
+        <div className="v4-header-inner v4-header-inner--no-brand">
+          {!overlay && (
+            <div className="v4-header-actions">
+              <SearchModule />
+              <AvatarModule pathname={pathname} />
+            </div>
+          )}
+        </div>
+      </header>
+      {pathname !== '/detail' && <AIFloatingBall showFab inlineMode={false} />}
+      <SourceManagerDrawer
+        key={settingsInstance}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
+      <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
+    </>
+  );
+}

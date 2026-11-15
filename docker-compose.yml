@@ -82,6 +82,7 @@ services:
       # Keep every outbound collector operation disabled until the host firewall has been installed and verified.
       - SCRAPLING_EGRESS_FIREWALL_CONFIRMED=${SCRAPLING_EGRESS_FIREWALL_CONFIRMED:-0}
       - SCRAPLING_DB_PATH=${SCRAPLING_DB_PATH:-/data/collector.sqlite3}
+      - SEEDHUB_PURGE_LEGACY_CATALOG=${SEEDHUB_PURGE_LEGACY_CATALOG:-1}
       - PORT=8000
     expose:
       - "8000"
@@ -102,7 +103,8 @@ services:
     restart: unless-stopped
     command: ["python", "worker.py"]
     networks:
-      - collector_net
+      collector_net:
+        ipv4_address: ${SCRAPLING_WORKER_IP:-172.30.60.11}
     read_only: true
     tmpfs:
       - /tmp:size=256m,noexec,nosuid
@@ -118,6 +120,7 @@ services:
       - SCRAPLING_API_TOKEN=${SCRAPLING_API_TOKEN:-}
       - SCRAPLING_EGRESS_FIREWALL_CONFIRMED=${SCRAPLING_EGRESS_FIREWALL_CONFIRMED:-0}
       - SCRAPLING_DB_PATH=${SCRAPLING_DB_PATH:-/data/collector.sqlite3}
+      - SEEDHUB_PURGE_LEGACY_CATALOG=${SEEDHUB_PURGE_LEGACY_CATALOG:-1}
     volumes:
       - scrapling_data:/data
     depends_on:

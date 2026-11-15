@@ -1,0 +1,31 @@
+name: HLS External Stream Smoke
+on:
+  push:
+    branches:
+      - feature/hls-playback-regression-suite-2026-11-13
+      - feature/homepage-cinema-lobby-order-2026-11-11
+    paths:
+      - 'scripts/hls-external-smoke.mjs'
+      - '.github/workflows/hls-external-smoke.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/hls-external-smoke.mjs'
+      - '.github/workflows/hls-external-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  external-hls-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe public HLS streams
+        run: node scripts/hls-external-smoke.mjs

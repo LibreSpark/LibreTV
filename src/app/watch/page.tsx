@@ -1,11 +1,9 @@
 'use client';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import FridayOrb from '@/components/friday/FridayOrb';
 import AIFloatingBall from '@/components/AIFloatingBall';
 import { api } from '@/lib/client-api';
 // 播放器（artplayer + hls.js）按需加载：拆出独立 chunk，不占首屏 First Load JS
@@ -24,7 +22,7 @@ import { skipMarkKey, validateSegment, type SkipSegment } from '@/lib/skip-marks
 import type { PlayerSkipApi } from '@/components/player-shell';
 import { useToast } from '@/components/toast';
 import { enqueueDownload } from '@/components/download-manager';
-import { Icon } from '@/components/icon';
+import { suggestDownloadFilename } from '@/lib/download-saver';
 import { useAuth } from '@/components/auth';
 import { resolveSource, useAppStore } from '@/lib/store';
 import { qualityKey } from '@/lib/quality';
@@ -38,6 +36,7 @@ import {
 } from '@/lib/db';
 import { buildWatchUrl, cn, validateSourceUrl } from '@/lib/utils';
 import { SmartImage } from '@/components/smart-image';
+import type { VideoEpisode } from '@/lib/types';
 /**
  * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
  * 状态全部由 URL 驱动：/watch?source=xx&id=..&index=..&title=..
@@ -53,6 +52,15 @@ export default function WatchPage() {
     </Suspense>
   );
 }
+function formatWatchTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--';
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainder = total % 60;
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}` : `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
 function WatchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -66,40 +74,22 @@ function WatchContent() {
   const indexParam = parseInt(searchParams.get('index') || '0', 10) || 0;
   const [reversed, setReversed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'episodes' | 'sources' | 'details'>('episodes');
+  const [watchInfoTab, setWatchInfoTab] = useState<'overview' | 'insights' | 'more'>('overview');
+  const [watchClock, setWatchClock] = useState({ position: 0, duration: 0 });
+  const [watchRate, setWatchRate] = useState(1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPlayerPanel, setShowPlayerPanel] = useState(false);
   const [showAutoNext, setShowAutoNext] = useState(false);
-  const recentHistory = useLiveQuery(
-    () => db.history.orderBy('timestamp').reverse().limit(8).toArray(),
-    [sourceKey, vodId]
-  );
-  // 全量观看索引用于推荐去重；不把已看过的影片重复包装成新推荐。
-  const watchedHistory = useLiveQuery(() => db.history.toArray(), []);
-  const sortedContinueHistory = useMemo(() => (recentHistory ?? [])
-    .filter((item) => !(item.sourceKey === sourceKey && item.vodId === vodId))
-    .map((item) => {
-      const percent = item.duration > 0 ? Math.min(100, Math.max(0, Math.round(item.playbackPosition / item.duration * 100))) : 0;
-      const hasNextEpisode = item.totalEpisodes > 0 && item.episodeIndex < item.totalEpisodes - 1;
-      const unfinished = hasNextEpisode || (item.duration > 0 && item.playbackPosition / item.duration < 0.95);
-      return { item, percent, unfinished };
-    })
-    .sort((a, b) => Number(b.unfinished) - Number(a.unfinished) || b.item.timestamp - a.item.timestamp)
-    .slice(0, 6), [recentHistory, sourceKey, vodId]);
-
   const [switchOpen, setSwitchOpen] = useState(false);
   const [skipPanelOpen, setSkipPanelOpen] = useState(false);
-  // 播放器对外暴露的精确时间读取接口（「记录当前」用），随播放器卸载置空
   const playerApiRef = useRef<PlayerSkipApi | null>(null);
-  // 播放框：小屏「跳过标记」抽屉要按它的底边算剩余高度，避免压住画面
   const playerFrameRef = useRef<HTMLDivElement | null>(null);
-  const [sheetMaxHeight, setSheetMaxHeight] = useState<number | undefined>(undefined);
-  /**
-   * 数据源解析：
-   * 1. Friday CMS 如果 URL 携带 sourceUrl，优先使用本次搜索传来的地址。
-   * 2. 普通数据源仍然优先使用本地配置。
-   * 3. 本地配置不存在时，才使用 URL 携带的 fallback 地址。
-   *
-   * 注意：Friday CMS 不继承本地旧配置中的 detail 地址，
-   * 避免详情接口请求被导向旧站点。
-   */
+  const watchShellRef = useRef<HTMLDivElement | null>(null);
+  const controlsHideTimerRef = useRef<number | null>(null);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [sheetMaxHeight] = useState<number | undefined>(undefined);
+
+  // 优先使用本次播放 URL 传入的数据源地址，普通源仍以本机配置为准。
   const suppliedSourceUrl = (searchParams.get('sourceUrl') || '').trim();
   const localSource = resolveSource(store, sourceKey);
   const source = useMemo(() => {
@@ -112,19 +102,13 @@ function WatchContent() {
         detail: undefined,
       };
     }
-    if (localSource) {
-      return localSource;
-    }
+    if (localSource) return localSource;
     return resolveSource(store, sourceKey, {
       url: suppliedSourceUrl || undefined,
       detail: searchParams.get('detail') || undefined,
     });
   }, [store, sourceKey, suppliedSourceUrl, searchParams]);
-  // 来源地址安全校验：无效地址不发起详情请求。
-  const sourceUrlInvalid = Boolean(
-    source?.url && !validateSourceUrl(source.url)
-  );
-  // 详情查询：无 id（纯直连链接）时跳过
+  const sourceUrlInvalid = Boolean(source?.url && !validateSourceUrl(source.url));
   const detailQuery = useQuery({
     queryKey: ['detail', sourceKey, vodId, source?.url],
     queryFn: ({ signal }) => api.detail(vodId, source!, signal),
@@ -138,60 +122,133 @@ function WatchContent() {
   const mediaType = detailQuery.data?.videoInfo?.typeName ?? '';
   const isMovie = /电影|movie|film/i.test(mediaType);
   const hasEpisodeNavigation = episodes.length > 1;
+  const isReadableTitle = (value: string) => Boolean(value.trim()) && !/^[a-z0-9_-]+$/i.test(value.trim());
+  const detailTitle = detailQuery.data?.videoInfo?.title?.trim() || '';
+  const videoTitle = isReadableTitle(titleParam) ? titleParam.trim() : isReadableTitle(detailTitle) ? detailTitle : '未知视频';
+
   useEffect(() => {
     if (!hasEpisodeNavigation && sidebarTab === 'episodes') setSidebarTab('sources');
   }, [hasEpisodeNavigation, sidebarTab]);
-  const videoTitle =
-    titleParam || detailQuery.data?.videoInfo?.title || '未知视频';
-  // 真实相关内容：使用用户已启用的点播源按当前片名搜索，不生成虚构推荐。
-  const recommendationSources = useMemo(() => {
-    const seen = new Set<string>();
-    return [...store.envSources, ...store.customAPIs].filter((item) => {
-      if (!store.selectedKeys.includes(item.key) || seen.has(item.key)) return false;
-      seen.add(item.key);
-      return !item.isAdult || store.adFilter;
-    });
-  }, [store.envSources, store.customAPIs, store.selectedKeys, store.adFilter]);
-  const relatedQuery = useQuery({
-    queryKey: ['watch-related', videoTitle, recommendationSources.map((item) => item.key).join(',')],
-    queryFn: () => api.search(videoTitle, recommendationSources, store.adFilter),
-    enabled: verified && videoTitle !== '未知视频' && recommendationSources.length > 0,
-    staleTime: 10 * 60_000,
-    retry: 1,
-  });
-  const relatedItems = useMemo(() => {
-    const history = watchedHistory ?? [];
-    const watchedIds = new Set(history.map((item) => `${item.sourceKey}:${item.vodId}`));
-    const normalize = (value?: string) => (value ?? '').trim().toLocaleLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
-    const watchedTitles = new Set(history.map((item) => normalize(item.title)).filter(Boolean));
-    const currentInfo = detailQuery.data?.videoInfo;
-    const recentGenreCounts = new Map<string, number>();
-    history.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 8).forEach((entry, index) => {
-      const genre = normalize(entry.typeName);
-      if (genre) recentGenreCounts.set(genre, (recentGenreCounts.get(genre) ?? 0) + (8 - index));
-    });
-    const seen = new Set<string>();
-    const candidates = (relatedQuery.data?.list ?? [])
-      .filter((item) => !(item.sourceKey === sourceKey && item.vodId === vodId))
-      .filter((item) => !watchedIds.has(`${item.sourceKey}:${item.vodId}`))
-      .filter((item) => !watchedTitles.has(normalize(item.name)))
-      .filter((item) => {
-        const title = normalize(item.name);
-        if (!title || seen.has(title)) return false;
-        seen.add(title);
-        return true;
-      });
-    const score = (item: (typeof candidates)[number]) => {
-      const genre = normalize(item.typeName);
-      return (currentInfo?.typeName && genre && normalize(currentInfo.typeName) === genre ? 6 : 0) +
-        (genre ? (recentGenreCounts.get(genre) ?? 0) : 0) +
-        (currentInfo?.year && item.year && currentInfo.year === item.year ? 2 : 0) +
-        (currentInfo?.area && item.area && normalize(currentInfo.area) === normalize(item.area) ? 1 : 0);
+
+  // Playback controls remain visible while paused and auto-hide three seconds after playback starts.
+  // Any pointer/touch interaction reveals them; media events, not button clicks, own playback state.
+  useEffect(() => {
+    const shell = watchShellRef.current;
+    const frame = playerFrameRef.current;
+    if (!shell || !frame) return;
+    let video: HTMLVideoElement | null = null;
+    const recordControlsDebug = (event: string, detail = '') => {
+      try {
+        const entries = JSON.parse(shell.dataset.controlsHideDebug || '[]') as string[];
+        entries.push(`${Math.round(performance.now())}:${event}${detail ? ':' + detail : ''}`);
+        shell.dataset.controlsHideDebug = JSON.stringify(entries.slice(-24));
+      } catch {
+        shell.dataset.controlsHideDebug = event;
+      }
     };
-    return candidates.map((item, index) => ({ item, index, score: score(item) }))
-      .sort((a, b) => b.score - a.score || a.index - b.index)
-      .slice(0, 8).map(({ item }) => item);
-  }, [relatedQuery.data, sourceKey, vodId, watchedHistory, detailQuery.data?.videoInfo]);
+    const clearHideTimer = (reason = 'unspecified') => {
+      const timer = controlsHideTimerRef.current;
+      const hadTimer = timer !== null;
+      if (timer !== null) window.clearTimeout(timer);
+      recordControlsDebug('timer-clear', `${reason},hadTimer=${hadTimer}`);
+      controlsHideTimerRef.current = null;
+    };
+    const showControls = () => {
+      shell.classList.remove('cinema-controls-hidden');
+      setControlsVisible(true);
+    };
+    const hideControls = () => {
+      // Always inspect the currently mounted media element when the deadline fires.
+      const activeVideo = frame.querySelector('video');
+      recordControlsDebug('timer-fire', activeVideo
+        ? `paused=${activeVideo.paused},ended=${activeVideo.ended},time=${activeVideo.currentTime.toFixed(2)}`
+        : 'video-missing');
+      if (!activeVideo || activeVideo.paused || activeVideo.ended) {
+        controlsHideTimerRef.current = null;
+        return;
+      }
+      shell.classList.add('cinema-controls-hidden');
+      setControlsVisible(false);
+      controlsHideTimerRef.current = null;
+    };
+    const revealControls = () => {
+      clearHideTimer('reveal');
+      showControls();
+      if (video && !video.paused && !video.ended) {
+        recordControlsDebug('timer-schedule', `reveal,paused=${video.paused},ended=${video.ended},time=${video.currentTime.toFixed(2)},delay=3000`);
+        controlsHideTimerRef.current = window.setTimeout(hideControls, 3000);
+      }
+    };
+    const keepControlsVisible = () => {
+      clearHideTimer();
+      showControls();
+    };
+    const scheduleHide = () => {
+      clearHideTimer('reschedule');
+      if (!video || video.paused || video.ended) {
+        recordControlsDebug('timer-skip', !video ? 'video-missing' : `paused=${video.paused},ended=${video.ended}`);
+        showControls();
+        return;
+      }
+      recordControlsDebug('timer-schedule', `playback,paused=${video.paused},ended=${video.ended},time=${video.currentTime.toFixed(2)},delay=3000`);
+      controlsHideTimerRef.current = window.setTimeout(hideControls, 3000);
+    };
+    const onPlay = () => { setControlsVisible(true); scheduleHide(); };
+    const onPause = keepControlsVisible;
+    const onEnded = keepControlsVisible;
+    const detachVideo = () => {
+      if (!video) return;
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('playing', scheduleHide);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('ended', onEnded);
+      video = null;
+    };
+    const attachVideo = () => {
+      const next = frame.querySelector('video');
+      if (next === video) return;
+      detachVideo();
+      if (!next) return;
+      video = next;
+      video.addEventListener('play', onPlay);
+      video.addEventListener('playing', scheduleHide);
+      video.addEventListener('pause', onPause);
+      video.addEventListener('ended', onEnded);
+      if (!video.paused && !video.ended) scheduleHide();
+      else keepControlsVisible();
+    };
+    // Hover/mouse tracking can emit pointermove while the player is already visible.
+    // Do not keep restarting the hide deadline for incidental movement; once hidden,
+    // the first real pointer movement restores the controls.
+    const onPointerMove = () => {
+      if (shell.classList.contains('cinema-controls-hidden')) {
+        revealControls();
+      } else if (video && !video.paused && !video.ended) {
+        // Pointer movement is the last user activity signal on desktop. Restart
+        // the deadline so controls disappear three seconds after that activity.
+        scheduleHide();
+      }
+    };
+    shell.addEventListener('pointerdown', revealControls, true);
+    shell.addEventListener('pointermove', onPointerMove, { passive: true });
+    shell.addEventListener('touchstart', revealControls, { passive: true, capture: true });
+    shell.addEventListener('click', revealControls, true);
+    shell.addEventListener('keydown', revealControls, true);
+    const observer = new MutationObserver(attachVideo);
+    observer.observe(frame, { childList: true, subtree: true });
+    attachVideo();
+    return () => {
+      clearHideTimer();
+      observer.disconnect();
+      detachVideo();
+      shell.removeEventListener('pointerdown', revealControls, true);
+      shell.removeEventListener('pointermove', onPointerMove);
+      shell.removeEventListener('touchstart', revealControls, true);
+      shell.removeEventListener('click', revealControls, true);
+      shell.removeEventListener('keydown', revealControls, true);
+    };
+  }, [sourceKey, vodId, indexParam, directUrl, source, verified, detailQuery.data]);
+
   // 当前播放地址：优先取剧集列表中的当前集，其次直连 URL 参数
   const currentUrl = useMemo(() => {
     if (episodes.length > 0) {
@@ -202,7 +259,44 @@ function WatchContent() {
       return episodes[idx] || directUrl;
     }
     return directUrl;
-  }, [episodes, indexParam, directUrl]);
+  }, [episodes, indexParam, directUrl]);  // The cinema transport icon is driven by the real media element state,
+  // not by the button click. MutationObserver handles PlayerShell's async mount
+  // and any video element replacement during source recovery.
+  useEffect(() => {
+    const frame = playerFrameRef.current;
+    if (!frame) return;
+    let video: HTMLVideoElement | null = null;
+    const sync = () => setIsPlaying(Boolean(video && !video.paused && !video.ended));
+    const detach = () => {
+      if (!video) return;
+      video.removeEventListener('play', sync);
+      video.removeEventListener('playing', sync);
+      video.removeEventListener('pause', sync);
+      video.removeEventListener('ended', sync);
+      video = null;
+      setIsPlaying(false);
+    };
+    const attach = () => {
+      const next = frame.querySelector('video');
+      if (next === video) return;
+      detach();
+      if (!next) return;
+      video = next;
+      video.addEventListener('play', sync);
+      video.addEventListener('playing', sync);
+      video.addEventListener('pause', sync);
+      video.addEventListener('ended', sync);
+      sync();
+    };
+    const observer = new MutationObserver(attach);
+    observer.observe(frame, { childList: true, subtree: true });
+    attach();
+    return () => {
+      observer.disconnect();
+      detach();
+    };
+  }, [sourceKey, vodId, indexParam, directUrl]);
+
   const currentIndex = useMemo(() => {
     if (episodes.length > 0) {
       return Math.min(
@@ -435,22 +529,68 @@ function WatchContent() {
     );
   }
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="watch-topbar sticky top-0 z-40">
+    <div ref={watchShellRef} className={`min-h-screen flex flex-col netflix-watch-shell${controlsVisible ? '' : ' cinema-controls-hidden'}`}>
+      <header className="watch-topbar netflix-watch-overlay-topbar">
         <div className="watch-topbar-inner">
           <div className="watch-topbar-left">
-            <BackButton />
-            <HomeButton />
+            <button type="button" className="cinema-glass-control cinema-close-control" aria-label="关闭播放器" onClick={() => { if (window.history.length > 1) router.back(); else router.push('/'); }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" /></svg>
+            </button>
           </div>
           <div className="watch-topbar-right">
-            <div className="watch-topbar-title min-w-0 text-right">
-              <h1 className="text-sm font-semibold text-content truncate">{videoTitle}</h1>
-              <p className="text-xs text-faint truncate">
-                {source.name}
-                {hasEpisodeNavigation ? ` · 第 ${currentIndex + 1}/${episodes.length} 集` : isMovie ? ' · 电影' : ' · 单集内容'}
-              </p>
-            </div>
-            <FridayPlayerAssistantButton />
+            <button type="button" className="cinema-glass-control" aria-label="全屏播放" title="全屏播放" onClick={() => {
+              const video = playerFrameRef.current?.querySelector('video') as (HTMLVideoElement & {
+                webkitEnterFullscreen?: () => void;
+                webkitExitFullscreen?: () => void;
+                webkitDisplayingFullscreen?: boolean;
+              }) | null;
+              if (video?.webkitDisplayingFullscreen && video.webkitExitFullscreen) {
+                video.webkitExitFullscreen();
+                return;
+              }
+              if (document.fullscreenElement) {
+                void document.exitFullscreen().catch(() => toast('退出全屏失败，请重试', 'info'));
+                return;
+              }
+              if (typeof video?.webkitEnterFullscreen === 'function') {
+                try {
+                  video.webkitEnterFullscreen();
+                  return;
+                } catch {
+                  // Fall through to the standard element fullscreen API.
+                }
+              }
+              const frame = playerFrameRef.current;
+              if (frame?.requestFullscreen) {
+                void frame.requestFullscreen().catch(() => toast('当前浏览器无法进入全屏', 'info'));
+              } else {
+                toast('当前浏览器不支持全屏播放', 'info');
+              }
+            }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
+            </button>
+            <button type="button" className="cinema-glass-control" aria-label="投屏" title="投屏 / AirPlay" onClick={() => {
+              const video = playerFrameRef.current?.querySelector('video') as (HTMLVideoElement & {
+                webkitShowPlaybackTargetPicker?: () => void;
+                remote?: { prompt?: () => Promise<void> };
+              }) | null;
+              if (!video) {
+                toast('视频尚未准备好，暂时无法投屏', 'info');
+                return;
+              }
+              if (typeof video.webkitShowPlaybackTargetPicker === 'function') {
+                video.webkitShowPlaybackTargetPicker();
+                return;
+              }
+              if (typeof video.remote?.prompt === 'function') {
+                void video.remote.prompt().catch(() => toast('未能打开投屏设备选择器', 'info'));
+                return;
+              }
+              toast('当前浏览器不支持 AirPlay 或远程播放投屏', 'info');
+            }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v12H3zM8 20l4-4 4 4M8 9h8" /></svg>
+            </button>
+            <button type="button" className="cinema-glass-control cinema-utility-control" aria-expanded={showPlayerPanel} aria-controls="netflix-watch-utility-panel" aria-label="选集与换源" onClick={() => setShowPlayerPanel((value) => !value)}>•••</button>
           </div>
         </div>
       </header>
@@ -480,8 +620,14 @@ function WatchContent() {
                   nextUrl={currentIndex + 1 < episodes.length ? episodes[currentIndex + 1] : undefined}
                   nextEpisodeKey={currentIndex + 1 < episodes.length ? `${sourceKey}:${vodId}:${currentIndex + 1}` : undefined}
                   getRestorePosition={getRestorePosition}
-                  onTimeUpdate={handleProgress}
-                  onPause={handleProgress}
+                  onTimeUpdate={(position, duration) => {
+                    setWatchClock({ position, duration });
+                    handleProgress(position, duration);
+                  }}
+                  onPause={(position, duration) => {
+                    setWatchClock({ position, duration });
+                    handleProgress(position, duration);
+                  }}
                   onEnded={handleEnded}
                   onPlaybackConfirmed={(evidence) => {
                     let host = '';
@@ -532,6 +678,29 @@ function WatchContent() {
                 </div>
               )}
             </div>
+            <div className="cinema-center-controls" aria-label="播放控制">
+              <button type="button" className="cinema-glass-control cinema-skip-control" aria-label="后退 10 秒" onClick={() => {
+                const video = playerFrameRef.current?.querySelector('video');
+                if (video) video.currentTime = Math.max(0, video.currentTime - 10);
+              }}>
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 8L8 16l10 8M10 17a17 17 0 1 0 8-8" /><text x="24" y="29">10</text></svg>
+              </button>
+              <button type="button" className="cinema-glass-control cinema-play-control" aria-label={isPlaying ? '暂停' : '播放'} aria-pressed={isPlaying} onClick={() => {
+                const video = playerFrameRef.current?.querySelector('video');
+                if (!video) return;
+                if (video.paused || video.ended) void video.play().catch(() => undefined); else video.pause();
+              }}>
+                {isPlaying
+                  ? <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M16 11v26M32 11v26" /></svg>
+                  : <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 11l20 13-20 13z" /></svg>}
+              </button>
+              <button type="button" className="cinema-glass-control cinema-skip-control" aria-label="前进 10 秒" onClick={() => {
+                const video = playerFrameRef.current?.querySelector('video');
+                if (video) video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+              }}>
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M30 8l10 8-10 8M38 17a17 17 0 1 1-8-8" /><text x="24" y="29">10</text></svg>
+              </button>
+            </div>
 
             <div className="netflix-title-row">
               <div className="min-w-0">
@@ -543,73 +712,100 @@ function WatchContent() {
 
             </div>
 
-            <div className="netflix-below-player">
-              <div className="netflix-section-heading">
-                <div>
-                  <h2>继续观看</h2>
-                  <p>根据本机观看记录，接着上次的进度继续</p>
+            <section className="watch-cinema-info" aria-label="影片信息">
+              <div className="watch-cinema-playback">
+                <div className="watch-cinema-time">
+                  <span>{formatWatchTime(watchClock.position)}</span>
+                  <span>{watchClock.duration > 0 ? `-${formatWatchTime(Math.max(0, watchClock.duration - watchClock.position))}` : '--:--'}</span>
                 </div>
-                <Link href="/me" className="text-sm text-muted hover:text-content">全部观看历史 →</Link>
+                <input
+                  className="watch-cinema-progress"
+                  type="range"
+                  min={0}
+                  max={Math.max(1, watchClock.duration)}
+                  step={1}
+                  value={Math.min(watchClock.position, watchClock.duration || watchClock.position)}
+                  aria-label="播放进度"
+                  onChange={(event) => playerApiRef.current?.seek(Number(event.target.value))}
+                  disabled={!watchClock.duration}
+                />
+                <button
+                  type="button"
+                  className="watch-cinema-rate"
+                  aria-label={`播放速度 ${watchRate} 倍`}
+                  title="切换播放速度"
+                  onClick={() => {
+                    const rates = [1, 1.25, 1.5, 2, 0.75];
+                    const current = playerApiRef.current?.getPlaybackRate() ?? watchRate;
+                    const next = rates[(rates.indexOf(current) + 1 + rates.length) % rates.length];
+                    playerApiRef.current?.setPlaybackRate(next);
+                    setWatchRate(next);
+                  }}
+                >{watchRate}×</button>
               </div>
-              <div className="netflix-history-rail">
-                {sortedContinueHistory.map(({ item, percent, unfinished }) => {
-                  const href = buildWatchUrl({ sourceKey: item.sourceKey, vodId: item.vodId, index: item.episodeIndex, title: item.title, sourceUrl: item.sourceUrl });
-                  return (
-                    <Link key={`${item.sourceKey}:${item.vodId}`} href={href} className="netflix-history-card">
-                      <div className="netflix-history-art">
-                        {item.pic ? <SmartImage url={item.pic} mode="direct" alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-chip" />}
-                        <span className="netflix-history-play"><span aria-hidden="true">▶</span></span>
-                      </div>
-                      <div className="netflix-history-meta">
-                        <strong>{item.title}</strong>
-                        <span>{item.totalEpisodes > 0 ? `第 ${item.episodeIndex + 1} / ${item.totalEpisodes} 集` : '继续观看'}{!unfinished ? ' · 已看完' : ''}</span>
-                        <div className="netflix-history-progress"><i style={{ width: `${percent}%` }} /></div>
-                      </div>
-                    </Link>
-                  );
-                })}
-                {(!recentHistory || sortedContinueHistory.length === 0) && (
-                  <p className="text-sm text-faint py-5">还没有其他观看记录，之后观看的影片会显示在这里。</p>
+              <div className="watch-cinema-meta">
+                <div className="min-w-0">
+                  {detailQuery.data?.videoInfo?.originalTitle?.trim() &&
+                    !/^[a-z0-9_-]+$/i.test(detailQuery.data.videoInfo.originalTitle.trim()) && (
+                    <p className="text-xs text-muted truncate">{detailQuery.data.videoInfo.originalTitle.trim()}</p>
+                  )}
+                  <h2 className="text-base sm:text-lg font-semibold text-content truncate">{videoTitle}</h2>
+                  <p className="text-xs text-faint mt-1">
+                    {[detailQuery.data?.videoInfo?.year, detailQuery.data?.videoInfo?.area, detailQuery.data?.videoInfo?.typeName]
+                      .filter(Boolean).join(' · ') || source.name}
+                    {hasEpisodeNavigation ? ` · 第 ${currentIndex + 1} / ${episodes.length} 集` : ''}
+                  </p>
+                </div>
+                <span className="watch-cinema-source">{source.name}</span>
+              </div>
+              <nav className="watch-cinema-tabs" aria-label="影片内容">
+                <button type="button" className={watchInfoTab === 'overview' ? 'active' : ''} aria-pressed={watchInfoTab === 'overview'} onClick={() => setWatchInfoTab('overview')}>简介</button>
+                <button type="button" className={watchInfoTab === 'insights' ? 'active' : ''} aria-pressed={watchInfoTab === 'insights'} onClick={() => setWatchInfoTab('insights')}>洞察</button>
+                <button type="button" className={watchInfoTab === 'more' ? 'active' : ''} aria-pressed={watchInfoTab === 'more'} onClick={() => setWatchInfoTab('more')}>继续阅读</button>
+              </nav>
+              <div className="watch-cinema-copy" role="tabpanel">
+                {watchInfoTab === 'overview' && (
+                  <p>{detailQuery.data?.videoInfo?.desc?.trim() || '资源站暂未提供影片简介。'}</p>
+                )}
+                {watchInfoTab === 'insights' && (
+                  <dl>
+                    {detailQuery.data?.videoInfo?.director && <div><dt>导演</dt><dd>{detailQuery.data.videoInfo.director}</dd></div>}
+                    {detailQuery.data?.videoInfo?.actor && <div><dt>主演</dt><dd>{detailQuery.data.videoInfo.actor}</dd></div>}
+                    {detailQuery.data?.videoInfo?.remarks && <div><dt>备注</dt><dd>{detailQuery.data.videoInfo.remarks}</dd></div>}
+                    {!detailQuery.data?.videoInfo?.director && !detailQuery.data?.videoInfo?.actor && !detailQuery.data?.videoInfo?.remarks && <p>暂无更多影片资料。</p>}
+                  </dl>
+                )}
+                {watchInfoTab === 'more' && (
+                  <p>{detailQuery.data?.videoInfo?.desc?.trim() || '暂无更多内容。'}{detailQuery.data?.videoInfo?.originalTitle?.trim() && !/^[a-z0-9_-]+$/i.test(detailQuery.data.videoInfo.originalTitle.trim()) ? ` 原名：${detailQuery.data.videoInfo.originalTitle.trim()}` : ''}</p>
                 )}
               </div>
-            </div>
-
-            <section className="netflix-related-section" aria-labelledby="netflix-related-heading">
-              <div className="netflix-section-heading">
-                <div>
-                  <h2 id="netflix-related-heading">相关影片</h2>
-                  <p>根据当前影片，从已启用的片源检索真实结果</p>
-                </div>
-              </div>
-              {relatedQuery.isLoading || !watchedHistory ? (
-                <p className="text-sm text-faint py-4">正在查找相关影片…</p>
-              ) : relatedItems.length > 0 ? (
-                <div className="netflix-related-rail">
-                  {relatedItems.map((item) => (
-                    <Link
-                      key={`${item.sourceKey}:${item.vodId}`}
-                      href={buildWatchUrl({ sourceKey: item.sourceKey, vodId: item.vodId, index: 0, title: item.name, sourceUrl: item.sourceUrl })}
-                      className="netflix-related-card"
-                    >
-                      <div className="netflix-related-art">
-                        {item.pic ? <SmartImage url={item.pic} mode="direct" alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-chip" />}
-                      </div>
-                      <strong>{item.name}</strong>
-                      <span>{[item.year, item.typeName, item.remarks].filter(Boolean).join(' · ') || item.sourceName}</span>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-faint py-4">
-                  {recommendationSources.length === 0 ? '请先启用至少一个点播资源，才能检索相关影片。' : relatedQuery.isError ? '相关影片暂时无法获取。' : '当前片源没有返回其他相关影片。'}
-                </p>
-              )}
             </section>
 
             <div className="netflix-watch-tools">
               {hasEpisodeNavigation && <><button className="btn-ghost btn-sm" disabled={currentIndex <= 0} onClick={() => goEpisode(currentIndex - 1)}>上一集</button>
               <button className="btn-ghost btn-sm" disabled={currentIndex >= episodes.length - 1} onClick={() => goEpisode(currentIndex + 1)}>下一集</button></>}
-              <button className="btn-ghost btn-sm" onClick={() => { if (currentUrl) enqueueDownload({ url: currentUrl, title: `${videoTitle}${hasEpisodeNavigation ? ` 第${currentIndex + 1}集` : ''}`, format: 'MP4' }); }}>下载本集</button>
+              <button className="btn-ghost btn-sm" onClick={() => {
+                if (!currentUrl) return;
+                const downloadTitle = `${videoTitle}${hasEpisodeNavigation ? ` 第${currentIndex + 1}集` : ''}`;
+                if (/\.m3u8(?:$|[?#])/i.test(currentUrl)) {
+                  // HLS is parsed and transmuxed by the existing task engine; MP4
+                  // here means the output container, never a renamed playlist.
+                  enqueueDownload({ url: currentUrl, title: downloadTitle, format: 'MP4' });
+                  return;
+                }
+                // A non-HLS URL is a direct media/file URL, not an M3U8 playlist.
+                // Do not enqueue it into the playlist parser. Cross-origin download
+                // attributes are advisory only, so open the actual URL as a fallback.
+                const anchor = document.createElement('a');
+                anchor.href = currentUrl;
+                anchor.download = suggestDownloadFilename(downloadTitle, currentUrl);
+                anchor.target = '_blank';
+                anchor.rel = 'noopener noreferrer';
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                toast('已打开直链。若 Safari 未保存文件，请在打开的视频页面使用分享菜单保存；跨域站点不保证网页可强制下载。', 'info');
+              }}>下载本集</button>
               <button className={cn('btn-ghost btn-sm', skipPanelOpen && 'bg-chip text-content')} aria-expanded={skipPanelOpen} aria-haspopup="dialog" onClick={() => setSkipPanelOpen((v) => !v)}>
                 跳过标记{markedCount > 0 ? ` (${markedCount})` : ''}
               </button>
@@ -633,7 +829,7 @@ function WatchContent() {
             />
           </section>
 
-          <aside className="netflix-watch-sidebar">
+          <aside id="netflix-watch-utility-panel" className={cn('netflix-watch-sidebar netflix-watch-utility-panel', showPlayerPanel && 'is-open')} aria-hidden={!showPlayerPanel}>
             <div className="netflix-sidebar-tabs" role="tablist" aria-label="播放内容">
               {hasEpisodeNavigation && <button role="tab" aria-selected={sidebarTab === 'episodes'} className={sidebarTab === 'episodes' ? 'active' : ''} onClick={() => setSidebarTab('episodes')}>选集 <span>{episodes.length}</span></button>}
               <button role="tab" aria-selected={sidebarTab === 'sources'} className={sidebarTab === 'sources' ? 'active' : ''} onClick={() => setSidebarTab('sources')}>播放源</button>
@@ -651,7 +847,7 @@ function WatchContent() {
                 ) : (
                   <div className="netflix-episode-list">
                     {orderedEpisodes.map((realIndex) => (
-                      <EpisodeRow key={realIndex} index={realIndex} active={realIndex === currentIndex} onClick={() => goEpisode(realIndex)} />
+                      <EpisodeRow key={realIndex} index={realIndex} active={realIndex === currentIndex} episode={detailQuery.data?.episodeItems?.[realIndex]} onClick={() => goEpisode(realIndex)} />
                     ))}
                   </div>
                 )}
@@ -690,29 +886,6 @@ function WatchContent() {
                 <button className="btn-ghost btn-sm" onClick={cancelAutoNext}>取消</button>
               </div>
             )}
-            {currentIndex + 1 < episodes.length && (
-              <div className="netflix-next-preview">
-                <div className="netflix-section-kicker">接下来播放</div>
-                <button className="netflix-next-card" onClick={() => goEpisode(currentIndex + 1)}>
-                  <div className="netflix-next-thumb">
-                    {detailQuery.data?.videoInfo?.cover ? <SmartImage url={detailQuery.data.videoInfo.cover} mode="direct" alt="" className="w-full h-full object-cover" /> : <span>EP {currentIndex + 2}</span>}
-                    <span className="netflix-next-play"><span aria-hidden="true">▶</span></span>
-                  </div>
-                  <span className="min-w-0 flex-1 text-left"><strong>第 {currentIndex + 2} 集</strong><small>{videoTitle}</small></span>
-                  <span aria-hidden="true">›</span>
-                </button>
-                <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white/80">
-                  <span>播放结束后自动播放下一集</span>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[#3978ef]"
-                    checked={store.autoplayNext}
-                    onChange={(event) => store.updateSettings({ autoplayNext: event.target.checked })}
-                    aria-label="自动播放下一集"
-                  />
-                </label>
-              </div>
-            )}
             <div className="netflix-sidebar-footer">
               <span>快捷键：空格播放/暂停 · ←/→ 快退/快进 · F 全屏</span>
               <span>Alt + ←/→ 切换集数</span>
@@ -720,7 +893,7 @@ function WatchContent() {
           </aside>
         </div>
       </main>
-      <AIFloatingBall showFab={false} inlineMode />
+      <AIFloatingBall inlineMode showFab={false} />
       {switchOpen && (
         <SwitchSourceModal
           currentTitle={videoTitle}
@@ -733,66 +906,54 @@ function WatchContent() {
     </div>
   );
 }
-/** 播放页专用圆球入口：放在页面工具栏，不覆盖播放器控制区。 */
-function FridayPlayerAssistantButton() {
-  const [voiceState, setVoiceState] = useState<'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING'>('IDLE');
-  const [audioLevel, setAudioLevel] = useState(0);
+type EpisodeRowProps = {
+  index: number;
+  active: boolean;
+  episode?: VideoEpisode;
+  onClick: () => void;
+};
 
-  useEffect(() => {
-    const onState = (event: Event) => {
-      const state = (event as CustomEvent<{ state?: string }>).detail?.state;
-      if (state === 'IDLE' || state === 'LISTENING' || state === 'THINKING' || state === 'SPEAKING') {
-        setVoiceState(state);
-      }
-    };
-    const onAudio = (event: Event) => {
-      const level = (event as CustomEvent<{ level?: number }>).detail?.level;
-      setAudioLevel(typeof level === 'number' && Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0);
-    };
-    window.addEventListener('friday-home-voice-state', onState);
-    window.addEventListener('friday-audio-level', onAudio);
-    return () => {
-      window.removeEventListener('friday-home-voice-state', onState);
-      window.removeEventListener('friday-audio-level', onAudio);
-    };
-  }, []);
-
-  const label = voiceState === 'LISTENING' ? 'Friday 正在聆听'
-    : voiceState === 'THINKING' ? 'Friday 正在思考'
-    : voiceState === 'SPEAKING' ? 'Friday 正在回答'
-    : '打开 Friday 语音助手';
+function EpisodeRow({ index, active, episode, onClick }: EpisodeRowProps) {
+  const title = episode?.episodeName?.trim() || episode?.title?.trim() || `第 ${index + 1} 集`;
+  const subtitle = [episode?.description?.trim(), episode?.duration?.trim()].filter(Boolean).join(' · ');
 
   return (
     <button
       type="button"
-      className="h-10 w-10 shrink-0 rounded-full border border-line bg-surface/80 p-1 shadow-sm transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      aria-label={label}
-      title={label}
-      aria-pressed={voiceState === 'LISTENING'}
-      onClick={() => window.dispatchEvent(new CustomEvent('friday-home-orb-toggle'))}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors',
+        active ? 'bg-white/10 ring-1 ring-white/20' : 'hover:bg-white/[0.06]'
+      )}
+      onClick={onClick}
+      aria-current={active ? 'true' : undefined}
+      aria-label={`播放${title}`}
     >
-      <FridayOrb state={voiceState} audioLevel={audioLevel * 100} showHud={false} interactive={false} quality={0} ariaLabel="Friday 全息语音助手" />
+      <span className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-white/10">
+        {episode?.image ? (
+          <SmartImage url={episode.image} mode="direct" alt={title} className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/55">
+            {String(index + 1).padStart(2, '0')}
+          </span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-content">{title}</span>
+        {subtitle && <span className="mt-1 block truncate text-xs text-faint">{subtitle}</span>}
+      </span>
+      <span aria-hidden="true" className={cn('shrink-0 text-sm', active ? 'text-white' : 'text-white/45')}>
+        {active ? '正在播放' : '▶'}
+      </span>
     </button>
   );
 }
 
-/** 集数按钮：激活时自动滚动进可视区（长剧列表） */
-function EpisodeRow({ index, active, onClick }: { index: number; active: boolean; onClick: () => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (active) ref.current?.scrollIntoView({ block: 'nearest' }); }, [active]);
-  return (
-    <button ref={ref} className={cn('netflix-episode-row', active && 'active')} onClick={onClick} aria-current={active ? 'true' : undefined}>
-      <span className="netflix-episode-number">{index + 1}</span>
-      <span className="min-w-0 flex-1 text-left"><strong>第 {index + 1} 集</strong><small>{active ? '正在播放' : '点击播放'}</small></span>
-      {active ? <span className="text-accent" aria-hidden="true">●</span> : <span className="opacity-60" aria-hidden="true">▶</span>}
-    </button>
-  );
-}
+
 function BackButton() {
   const router = useRouter();
   return (
     <button
-      className="p-2 -ml-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
+      className="watch-topbar-back"
       onClick={() => {
         if (window.history.length > 1) {
           router.back();
@@ -816,18 +977,5 @@ function BackButton() {
         />
       </svg>
     </button>
-  );
-}
-/** 首页按钮：直达首页，避免从外链进入时逐级 back */
-function HomeButton() {
-  return (
-    <Link
-      href="/"
-      className="p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
-      aria-label="回首页"
-      title="回首页"
-    >
-      <Icon name="home" className="w-5 h-5" />
-    </Link>
   );
 }

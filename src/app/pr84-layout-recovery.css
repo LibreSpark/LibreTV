@@ -1,0 +1,487 @@
+/* PR #84 layout recovery: one final, scoped layout contract.
+   The homepage keeps natural document scrolling; its dock is portaled to body
+   so transformed/filtered visual wrappers cannot become its fixed-position containing block. */
+
+html:has(body .v4-home) {
+  min-height: 100% !important;
+  overflow-x: clip !important;
+}
+
+body:has(.v4-home) {
+  min-height: 100% !important;
+  overflow-x: clip !important;
+  /* Keep transform/filter from creating a fixed-position containing block.
+     Do not override body position/overflow: drawers use inline scroll locking. */
+  transform: none !important;
+  filter: none !important;
+  perspective: none !important;
+  contain: none !important;
+}
+
+body:has(.v4-home) .v4-home {
+  position: relative !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  min-height: 100svh !important;
+  margin: 0 !important;
+  padding: 0 0 calc(104px + env(safe-area-inset-bottom, 0px)) !important;
+  overflow: visible !important;
+  transform: none !important;
+  filter: none !important;
+  contain: none !important;
+}
+
+body:has(.v4-home) .v4-home > .v4-header {
+  position: absolute !important;
+  display: block !important;
+  visibility: visible !important;
+  inset: max(8px, env(safe-area-inset-top, 0px)) 0 auto !important;
+  z-index: 300 !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+body:has(.v4-home) .v4-home > .v4-header .v4-header-inner {
+  display: flex !important;
+  flex-flow: row nowrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: min(calc(100% - 32px), 1720px) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+}
+
+body:has(.v4-home) .v4-home-main,
+body:has(.v4-home) .v4-home-main--cinema {
+  position: relative !important;
+  display: block !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 0 24px !important;
+  overflow: visible !important;
+  transform: none !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive {
+  position: relative !important;
+  inset: auto !important;
+  display: block !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: clamp(560px, 70svh, 780px) !important;
+  min-height: 520px !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #05070b !important;
+  transform: none !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  z-index: 0 !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image > *,
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image img {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  object-fit: cover !important;
+  object-position: center 32% !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-veil {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy {
+  position: absolute !important;
+  inset: auto 0 72px !important;
+  z-index: 2 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 clamp(24px, 6vw, 88px) !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy .v4-hero-actions,
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy .v4-hero-primary {
+  pointer-events: auto !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-indicators {
+  position: absolute !important;
+  inset: auto 0 20px !important;
+  z-index: 3 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: max-content !important;
+  margin: 0 auto !important;
+  transform: none !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-content-section:first-of-type {
+  margin-top: 24px !important;
+}
+
+body:has(.v4-home) .v4-home-main--cinema > .v4-content-section {
+  overflow: visible !important;
+}
+
+@media (max-width: 700px) {
+  body:has(.v4-home) .v4-home {
+    min-height: 100vh !important;
+    min-height: 100svh !important;
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+
+  /* Hero height is owned by pr84-apple-tv-dock.css, loaded last.
+     This recovery layer owns copy, indicators and content spacing only. */
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy {
+    inset: auto 0 76px !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 0 20px !important;
+    text-align: center !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy h1 {
+    max-width: 100% !important;
+    font-size: clamp(28px, 8vw, 42px) !important;
+    line-height: 1.12 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-indicators {
+    bottom: 20px !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-content-section:first-of-type {
+    margin-top: 18px !important;
+  }
+
+  body:has(.v4-home) .v4-home .v4-content-section {
+    width: calc(100% - 32px) !important;
+    margin-right: auto !important;
+    margin-left: auto !important;
+  }
+}
+
+@media (min-width: 701px) {
+}
+
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 900px) {
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive {
+    height: 520px !important;
+    min-height: 520px !important;
+  }
+}
+
+
+/* PR #84: approved iPhone dock treatment — one dark capsule, four original tabs. */
+@media (max-width: 700px) {
+}
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+
+/* PR #84 Search — Apple TV-inspired dark discovery surface. */
+html:has(.v4-search-page),
+body:has(.v4-search-page) {
+  min-height: 100% !important;
+  background: #000 !important;
+  color-scheme: dark !important;
+}
+body:has(.v4-search-page) {
+  background: #000 !important;
+  color: #f5f5f7 !important;
+}
+.v4-search-page {
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: clip;
+  background: #000 !important;
+  color: #f5f5f7;
+  padding-bottom: var(--tabbar-scroll-clearance);
+}
+.v4-search-page > .v4-header { display: none !important; }
+.v4-search-page .v4-search-main {
+  width: min(100% - 48px, 1240px);
+  margin: 0 auto;
+  padding: max(54px, calc(env(safe-area-inset-top, 0px) + 34px)) 0 44px;
+}
+.v4-search-page .v4-search-heading { margin: 0 0 22px; }
+.v4-search-page .v4-search-heading h1 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(38px, 6vw, 56px);
+  line-height: 1.06;
+  font-weight: 760;
+  letter-spacing: -1.8px;
+}
+.v4-search-page .v4-search-box {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 18px;
+  background: #1c1c1e;
+  box-shadow: 0 12px 38px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.035);
+}
+.v4-search-page .v4-search-box form {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 0 19px;
+  color: #a1a1a6;
+}
+.v4-search-page .v4-search-box form > svg { width: 23px; height: 23px; flex: 0 0 auto; }
+.v4-search-page .v4-search-box input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  background: transparent !important;
+  font-size: 18px !important;
+  box-shadow: none !important;
+}
+.v4-search-page .v4-search-box input::placeholder { color: #85858b !important; -webkit-text-fill-color: #85858b; }
+.v4-search-page .v4-search-box form button {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #b8b8be;
+  background: transparent;
+}
+.v4-search-page .v4-search-box form button svg { width: 21px; height: 21px; }
+.v4-search-page .v4-search-box form .v4-search-mic { color: #f5f5f7; background: rgba(255,255,255,.075); }
+.v4-search-page .v4-search-box form .v4-search-mic.is-listening { color: #fff; background: #d93645; }
+.v4-search-page .v4-search-box form .v4-search-clear { color: #8e8e93; }
+.v4-search-page .v4-search-box [role="listbox"],
+.v4-search-page .v4-search-box [id$="-history"] {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+.v4-search-page .v4-search-recent { margin: 24px 0 0; }
+.v4-search-page .v4-search-recent h2,
+.v4-search-page .v4-search-section-heading h2 {
+  margin: 0;
+  color: #f5f5f7;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.35px;
+}
+.v4-search-page .v4-search-recent > div { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+.v4-search-page .v4-search-recent button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 999px;
+  color: #c7c7cc;
+  background: #171719;
+  font-size: 13px;
+}
+.v4-search-page .v4-search-recent button svg { width: 14px; height: 14px; color: #85858b; }
+.v4-search-page .v4-search-explore { margin-top: 34px; }
+.v4-search-page .v4-search-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.v4-search-page .v4-search-section-heading > span {
+  color: #77777e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.v4-search-page .v4-search-category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.v4-search-page .v4-search-category-card {
+  position: relative;
+  min-width: 0;
+  min-height: 190px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: hidden;
+  padding: 17px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 17px;
+  color: #fff;
+  text-align: left;
+  background-color: #242428;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 10px 28px rgba(0,0,0,.25);
+  isolation: isolate;
+  transition: transform .18s ease, border-color .18s ease;
+}
+.v4-search-page .v4-search-category-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(0deg, rgba(0,0,0,.30), transparent 55%);
+}
+.v4-search-page .v4-search-category-card:active { transform: scale(.985); }
+.v4-search-page .v4-search-category-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.v4-search-page .v4-search-category-copy strong { color: #fff; font-size: 20px; line-height: 1.15; font-weight: 750; text-shadow: 0 2px 12px rgba(0,0,0,.5); }
+.v4-search-page .v4-search-category-copy small { color: rgba(255,255,255,.78); font-size: 11px; line-height: 1.35; text-shadow: 0 1px 8px rgba(0,0,0,.65); }
+.v4-search-page .v4-search-category-arrow { align-self: flex-end; color: rgba(255,255,255,.86); font-size: 20px; line-height: 1; }
+@media (max-width: 700px) {
+  .v4-search-page .v4-search-main {
+    width: calc(100% - 36px);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 44px);
+  }
+  .v4-search-page .v4-search-heading { margin-bottom: 20px; }
+  .v4-search-page .v4-search-heading h1 { font-size: 42px; }
+  .v4-search-page .v4-search-box { border-radius: 16px; }
+  .v4-search-page .v4-search-box form { min-height: 60px; gap: 11px; padding: 0 13px; }
+  .v4-search-page .v4-search-box input { height: 60px; font-size: 16px !important; }
+  .v4-search-page .v4-search-category-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 11px; }
+  .v4-search-page .v4-search-category-card { min-height: clamp(136px, 42vw, 190px); padding: 13px; border-radius: 15px; }
+  .v4-search-page .v4-search-category-copy strong { font-size: 18px; }
+  .v4-search-page .v4-search-explore { margin-top: 28px; }
+}
+@media (min-width: 701px) {
+  .v4-search-page { padding-bottom: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v4-search-page .v4-search-category-card { transition: none; }
+}
+
+
+/* PR #84 Search refinement — portrait poster grid, restrained Apple TV hierarchy. */
+.v4-search-page { padding-bottom: var(--tabbar-scroll-clearance) !important; }
+.v4-search-page .v4-search-main { padding-bottom: var(--tabbar-scroll-clearance) !important; }
+.v4-search-page .v4-search-heading { margin-bottom: 16px !important; }
+.v4-search-page .v4-search-box { border: 0 !important; outline: 0 !important; background: #1c1c1e !important; box-shadow: none !important; border-radius: 18px !important; }
+.v4-search-page .v4-search-box form { min-height: 72px !important; padding: 0 20px !important; gap: 16px !important; }
+.v4-search-page .v4-search-box input { height: 72px !important; }
+.v4-search-page .v4-search-explore { margin-top: 22px !important; }
+.v4-search-page .v4-search-section-heading { justify-content: flex-start !important; margin-bottom: 14px !important; }
+.v4-search-page .v4-search-section-heading > span { display: none !important; }
+.v4-search-page .v4-search-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 12px !important; }
+.v4-search-page .v4-search-category-card {
+  aspect-ratio: 2 / 3 !important; min-height: 0 !important; height: auto !important;
+  padding: 0 !important; display: flex !important; align-items: flex-end !important;
+  justify-content: flex-start !important; overflow: hidden !important; border: 0 !important;
+  border-radius: 13px !important; background-color: #242428 !important;
+  background-image: linear-gradient(180deg, transparent 48%, rgba(0,0,0,.58) 100%) !important;
+  box-shadow: none !important;
+}
+.v4-search-page .v4-search-category-image {
+  position: absolute !important; inset: 0 !important; z-index: -2 !important;
+  display: block !important; width: 100% !important; height: 100% !important;
+  object-fit: cover !important; object-position: center !important;
+}
+.v4-search-page .v4-search-category-card::before { z-index: -1 !important; background: linear-gradient(180deg, transparent 42%, rgba(0,0,0,.62) 100%) !important; }
+.v4-search-page .v4-search-category-copy { display: block !important; width: 100% !important; padding: 0 12px 13px !important; }
+.v4-search-page .v4-search-category-copy strong {
+  display: block !important; color: #fff !important; font-size: clamp(17px, 2vw, 23px) !important;
+  line-height: 1.15 !important; font-weight: 760 !important; letter-spacing: -.35px !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 2px 10px rgba(0,0,0,.7) !important;
+}
+.v4-search-page .v4-search-category-copy small, .v4-search-page .v4-search-category-arrow { display: none !important; }
+@media (max-width: 700px) {
+  .v4-search-page { padding-bottom: var(--tabbar-scroll-clearance) !important; }
+  .v4-search-page .v4-search-main {
+    width: calc(100% - 36px) !important;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 44px) !important;
+    padding-bottom: var(--tabbar-scroll-clearance) !important;
+  }
+  .v4-search-page .v4-search-heading { margin-bottom: 15px !important; }
+  .v4-search-page .v4-search-heading h1 { font-size: 42px !important; }
+  .v4-search-page .v4-search-box { border-radius: 17px !important; }
+  .v4-search-page .v4-search-box form { min-height: 68px !important; padding: 0 15px !important; gap: 12px !important; }
+  .v4-search-page .v4-search-box input { height: 68px !important; }
+  .v4-search-page .v4-search-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 9px !important; }
+  .v4-search-page .v4-search-category-card { aspect-ratio: 2 / 3 !important; border-radius: 11px !important; }
+  .v4-search-page .v4-search-category-copy { padding: 0 9px 10px !important; }
+  .v4-search-page .v4-search-category-copy strong { font-size: 16px !important; }
+  .v4-search-page .v4-search-explore { margin-top: 19px !important; }
+  .v4-search-page .v4-search-section-heading { margin-bottom: 11px !important; }
+}
+@media (min-width: 701px) {
+  .v4-search-page { padding-bottom: 52px !important; }
+  .v4-search-page .v4-search-main { padding-bottom: 28px !important; }
+}
+
+/* Ensure poster image sits above the card background and below its title overlay. */
+.v4-search-page .v4-search-category-image { z-index: 0 !important; }
+.v4-search-page .v4-search-category-card::before { z-index: 1 !important; }
+.v4-search-page .v4-search-category-copy { position: relative !important; z-index: 2 !important; }
+
+/* Keep the scroll tail just larger than the floating dock; avoid excess blank space. */
+.v4-search-page { padding-bottom: var(--tabbar-scroll-clearance) !important; }
+.v4-search-page .v4-search-main { padding-bottom: 32px !important; }
+@media (max-width: 700px) {
+  .v4-search-page { padding-bottom: var(--tabbar-scroll-clearance) !important; }
+  .v4-search-page .v4-search-main { padding-bottom: 28px !important; }
+}

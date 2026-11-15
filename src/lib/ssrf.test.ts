@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPrivateIP, isValidProxyUrl } from './ssrf';
+import { checkLiveUrlAllowed, isPrivateIP, isValidProxyUrl } from './ssrf';
 
 describe('isPrivateIP', () => {
   it.each([
@@ -15,6 +15,9 @@ describe('isPrivateIP', () => {
     ['100.128.0.1', false],
     ['0.1.2.3', true],
     ['192.0.2.10', true],
+    ['192.31.196.1', true],
+    ['192.52.193.1', true],
+    ['192.175.48.1', true],
     ['198.18.0.1', true],
     ['198.19.255.254', true],
     ['198.51.100.2', true],
@@ -33,6 +36,9 @@ describe('isPrivateIP', () => {
     ['[fe90::1]', true],
     ['[ff02::1]', true],
     ['[2001:db8::1]', true],
+    ['[2001:20::1]', true], // 2001::/23 特殊用途
+    ['[2002:c000:0201::1]', true], // 6to4
+    ['[3fff::1]', true], // 文档示例
     ['[fc00::1]', true],
     // IPv4-mapped IPv6：十六进制形式与点分形式
     ['[::ffff:c0a8:164]', true], // ::ffff:192.168.1.100
@@ -44,7 +50,8 @@ describe('isPrivateIP', () => {
     ['[::ffff:808:808]', false], // ::ffff:8.8.8.8 公网
     ['::ffff:8.8.8.8', false],
     ['[::ffff:c0a8:164', true], // 单边括号（异常输入）仍要拦
-    ['[2606:4700::1111]', false], // 公网 IPv6 不应被误杀
+    ['[2606:4700::1111]', false],
+    ['[3001:4860::1]', false], // 公网 IPv6 不应被误杀
   ])('%s → %s', (ip, expected) => {
     expect(isPrivateIP(ip)).toBe(expected);
   });
@@ -75,9 +82,30 @@ describe('isValidProxyUrl', () => {
     expect(isValidProxyUrl('http://[2606:4700::1111]/x')).toBe(true);
   });
 
+  it('拒绝 URL 内嵌用户名或密码', () => {
+    expect(isValidProxyUrl('https://user:pass@cdn.example.com/video.m3u8')).toBe(false);
+    expect(isValidProxyUrl('https://user@cdn.example.com/video.m3u8')).toBe(false);
+  });
+
   it('拦截非 http 协议', () => {
     expect(isValidProxyUrl('file:///etc/passwd')).toBe(false);
     expect(isValidProxyUrl('ftp://x.com/a')).toBe(false);
     expect(isValidProxyUrl('not a url')).toBe(false);
+  });
+});
+
+
+describe('checkLiveUrlAllowed', () => {
+  it('即使启用内网 IPTV，也拒绝嵌入用户名或密码的 URL', async () => {
+    const previous = process.env.LIVE_ALLOW_PRIVATE;
+    process.env.LIVE_ALLOW_PRIVATE = '1';
+    try {
+      await expect(checkLiveUrlAllowed('http://user:pass@192.168.1.10:8080/live.m3u8')).resolves.toMatchObject({ ok: false });
+      await expect(checkLiveUrlAllowed('http://user@router.local/live.m3u8')).resolves.toMatchObject({ ok: false });
+      await expect(checkLiveUrlAllowed('http://192.168.1.10:8080/live.m3u8')).resolves.toEqual({ ok: true });
+    } finally {
+      if (previous === undefined) delete process.env.LIVE_ALLOW_PRIVATE;
+      else process.env.LIVE_ALLOW_PRIVATE = previous;
+    }
   });
 });

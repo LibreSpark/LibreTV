@@ -29,6 +29,25 @@ describe('rewriteM3u8', () => {
     expect(out).toContain('#EXT-X-ENDLIST');
   });
 
+  it('改写 MEDIA、I-FRAME-STREAM-INF、SESSION-KEY 等标签中的 URI 属性', () => {
+    const input = [
+      '#EXTM3U',
+      '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="中文",URI="audio/index.m3u8"',
+      '#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=86000,URI="../iframe/low.m3u8"',
+      '#EXT-X-SESSION-KEY:METHOD=AES-128,URI="keys/session.key"',
+      '#EXT-X-KEY:METHOD=AES-128,URI="/keys/media.key"',
+    ].join('\n');
+    const out = rewriteM3u8(input, BASE);
+    for (const target of [
+      'https://cdn.example.com/live/audio/index.m3u8',
+      'https://cdn.example.com/iframe/low.m3u8',
+      'https://cdn.example.com/live/keys/session.key',
+      'https://cdn.example.com/keys/media.key',
+    ]) {
+      expect(out).toContain('URI="' + '/api/proxy?url=' + encodeURIComponent(target) + '"');
+    }
+  });
+
   it('直播前缀改写为 /api/live/stream?url= 形式', () => {
     const out = rewriteM3u8('https://cdn.example.com/live/seg1.ts', BASE, 0, '/api/live/stream?url=');
     expect(out).toBe('/api/live/stream?url=' + encodeURIComponent('https://cdn.example.com/live/seg1.ts'));
@@ -53,6 +72,8 @@ describe('isProxiedUri', () => {
   it('新旧两种代理形式均识别', () => {
     expect(isProxiedUri('/api/proxy/' + encodeURIComponent('https://x.com/a.ts'))).toBe(true);
     expect(isProxiedUri('/api/proxy?url=' + encodeURIComponent('https://x.com/a.ts'))).toBe(true);
+    expect(isProxiedUri('/api/proxyevil?url=' + encodeURIComponent('https://x.com/a.ts'))).toBe(false);
+    expect(isProxiedUri('/api/live/streaming?url=' + encodeURIComponent('https://x.com/a.ts'))).toBe(false);
     expect(isProxiedUri('/api/live/stream?url=' + encodeURIComponent('https://x.com/live.m3u8'))).toBe(true);
     expect(isProxiedUri('https://cdn.example.com/seg1.ts')).toBe(false);
     expect(isProxiedUri('/relative/seg1.ts')).toBe(false);
@@ -269,6 +290,31 @@ describe('stripAdGroups · 长片间超短中插（phimgood 结构）', () => {
 });
 
 describe('parseM3u8Playlist · 片头广告剔除', () => {
+  it('拒绝 SAMPLE-AES 等未实现的加密方式，避免输出损坏文件', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response([
+      '#EXTM3U',
+      '#EXT-X-KEY:METHOD=SAMPLE-AES,URI="key.bin"',
+      '#EXTINF:4,',
+      'seg.ts',
+      '#EXT-X-ENDLIST',
+    ].join('\n'), { status: 200 })));
+    await expect(parseM3u8Playlist('https://cdn.example.com/a.m3u8'))
+      .rejects.toThrow('暂不支持 HLS 加密方式：SAMPLE-AES');
+  });
+
+  it('解析 fMP4 EXT-X-MAP 初始化段并保留媒体分片顺序', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response([
+      '#EXTM3U',
+      '#EXT-X-MAP:URI="init.mp4"',
+      '#EXTINF:4,',
+      'seg.m4s',
+      '#EXT-X-ENDLIST',
+    ].join('\n'), { status: 200 })));
+    const parsed = await parseM3u8Playlist('https://cdn.example.com/a.m3u8');
+    expect(parsed.initSegment).toBe('https://cdn.example.com/init.mp4');
+    expect(parsed.segments.map((segment) => segment.url)).toEqual(['https://cdn.example.com/seg.m4s']);
+  });
+
   it('默认剔除广告段：分片与 totalDuration 均不含广告', async () => {
     const lines = ['#EXTM3U', '#EXT-X-DISCONTINUITY'];
     for (let i = 0; i < 3; i++) lines.push('#EXTINF:5,', `ad${i}.ts`);

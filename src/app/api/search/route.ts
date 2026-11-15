@@ -4,7 +4,7 @@ import {
   mergeSearchResults,
 } from '@/lib/search';
 import type { RegistrySearchResource, SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
-import { guardRequest } from '@/lib/api-guard';
+import { guardPrivateFeatureRequest, guardRequest } from '@/lib/api-guard';
 import { collectorRequest } from '@/lib/resource-collector-client';
 
 export const runtime = 'nodejs';
@@ -241,18 +241,56 @@ function setCachedOutcomes(key: string, outcomes: SourceSearchOutcome[]): void {
   });
 }
 
-async function searchVerifiedRegistry(keyword: string): Promise<RegistrySearchResource[]> {
+async function searchVerifiedRegistry(keyword: string, request?: Request): Promise<RegistrySearchResource[]> {
   try {
     const response = await collectorRequest(
       `/v1/registry/search?q=${encodeURIComponent(keyword)}`,
       {},
       1_500,
+      request,
     );
     if (!response.ok) return [];
     const payload = await response.json() as { resources?: unknown };
     return Array.isArray(payload.resources) ? payload.resources as RegistrySearchResource[] : [];
   } catch {
     // Registry is supplemental: a collector outage must never fail normal CMS search.
+    return [];
+  }
+}
+
+async function searchSeedHubCatalog(keyword: string, request?: Request): Promise<import('@/lib/types').SeedHubSearchItem[]> {
+  try {
+    const response = await collectorRequest(
+      `/v1/seedhub/search?q=${encodeURIComponent(keyword)}&limit=20`,
+      {},
+      1_500,
+      request,
+    );
+    if (!response.ok) return [];
+    const payload = await response.json() as { items?: unknown };
+    if (!Array.isArray(payload.items)) return [];
+    return payload.items.filter((raw): raw is import('@/lib/types').SeedHubSearchItem => {
+      if (!raw || typeof raw !== 'object') return false;
+      const item = raw as Record<string, unknown>;
+      if (typeof item.source_url !== 'string' || typeof item.title !== 'string' ||
+          !['movies', 'series', 'anime'].includes(String(item.category))) return false;
+      try {
+        const source = new URL(item.source_url);
+        const sourcePath = source.pathname.split('/').filter(Boolean);
+        if (source.protocol !== 'https:' || source.hostname !== 'www.seedhub.cc' ||
+            sourcePath.length !== 2 || !['movies', 'series', 'anime'].includes(sourcePath[0]) ||
+            !/^\d+$/.test(sourcePath[1])) return false;
+        if (item.poster_url == null) return true;
+        if (typeof item.poster_url !== 'string') return false;
+        const poster = new URL(item.poster_url);
+        return poster.protocol === 'https:' &&
+          ['www.seedhub.cc', 'img.seedhub.cc', 'sh1.pcie.pppoe.top'].includes(poster.hostname);
+      } catch {
+        return false;
+      }
+    }) as import('@/lib/types').SeedHubSearchItem[];
+  } catch {
+    // SeedHub catalogue is supplemental and never blocks the regular CMS search.
     return [];
   }
 }
@@ -301,7 +339,8 @@ function ndjsonResponse(
 
       void (async () => {
         try {
-          const registryPromise = searchVerifiedRegistry(keyword);
+          const registryPromise = searchVerifiedRegistry(keyword, req);
+          const seedhubPromise = searchSeedHubCatalog(keyword, req);
           const outcomes = cached ?? await searchSources(keyword, sources, {
             filterAdult,
             signal: abortController.signal,
@@ -313,9 +352,9 @@ function ndjsonResponse(
           }
 
           if (!abortController.signal.aborted) {
-            const [registryResources] = await Promise.all([registryPromise]);
+            const [registryResources, seedhubItems] = await Promise.all([registryPromise, seedhubPromise]);
             const result = toSearchResponse(outcomes);
-            send({ type: 'done', ...result, ...(registryResources.length ? { registryResources } : {}) });
+            send({ type: 'done', ...result, ...(registryResources.length ? { registryResources } : {}), ...(seedhubItems.length ? { seedhubItems } : {}) });
           }
         } catch {
           if (!abortController.signal.aborted) {
@@ -356,6 +395,10 @@ function ndjsonResponse(
 export async function POST(req: Request) {
   const guarded = guardRequest(req);
   if (guarded) return guarded;
+  if (req.headers.has('x-scrapling-api-base') || req.headers.has('x-scrapling-api-token')) {
+    const collectorGuard = guardPrivateFeatureRequest(req);
+    if (collectorGuard) return collectorGuard;
+  }
 
   try {
     if (req.signal.aborted) {
@@ -413,7 +456,8 @@ export async function POST(req: Request) {
       return ndjsonResponse(req, keyword, sources, filterAdult, cacheKey, cached);
     }
 
-    const registryPromise = searchVerifiedRegistry(keyword);
+    const registryPromise = searchVerifiedRegistry(keyword, req);
+    const seedhubPromise = searchSeedHubCatalog(keyword, req);
     const outcomes = cached ?? await searchSources(keyword, sources, {
       filterAdult,
       signal: req.signal,
@@ -421,9 +465,9 @@ export async function POST(req: Request) {
 
     if (req.signal.aborted) return jsonError('请求已取消', 400);
     if (!cached) setCachedOutcomes(cacheKey, outcomes);
-    const [registryResources] = await Promise.all([registryPromise]);
+    const [registryResources, seedhubItems] = await Promise.all([registryPromise, seedhubPromise]);
 
-    return NextResponse.json({ ...toSearchResponse(outcomes), ...(registryResources.length ? { registryResources } : {}) }, {
+    return NextResponse.json({ ...toSearchResponse(outcomes), ...(registryResources.length ? { registryResources } : {}), ...(seedhubItems.length ? { seedhubItems } : {}) }, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch {

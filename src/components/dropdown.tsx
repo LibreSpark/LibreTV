@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Icon } from './icon';
+import { LiquidGlassSurface } from '@/components/ui/liquid-glass';
 
 export interface DropdownOption {
   value: string;
@@ -153,12 +154,17 @@ export function Dropdown({
         />
       </button>
       {open && menuStyle && typeof document !== 'undefined' && createPortal(
+        <LiquidGlassSurface
+          as="div"
+          variant="panel"
+          className="fixed z-[100100] overflow-y-auto overscroll-contain rounded-xl border border-line shadow-2xl animate-fade-in"
+          style={{ top: menuStyle.top, left: menuStyle.left, minWidth: menuStyle.minWidth, maxWidth: menuStyle.maxWidth, maxHeight: menuStyle.maxHeight }}
+        >
         <ul
           ref={menuRef}
           role="listbox"
           aria-label={ariaLabel}
-          className="fixed z-[100100] overflow-y-auto overscroll-contain py-1 rounded-xl border border-line bg-surface-raised shadow-2xl animate-fade-in"
-          style={{ top: menuStyle.top, left: menuStyle.left, minWidth: menuStyle.minWidth, maxWidth: menuStyle.maxWidth, maxHeight: menuStyle.maxHeight }}
+          className="py-1"
         >
           {options.map((o, i) => {
             const isSelected = o.value === value;
@@ -186,7 +192,8 @@ export function Dropdown({
               </li>
             );
           })}
-        </ul>,
+        </ul>
+        </LiquidGlassSurface>,
         document.body
       )}
     </div>

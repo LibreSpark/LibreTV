@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { decryptSegment, PauseResumeController, runDownloadJob, type DownloadJobOptions, type DownloadProgress } from './m3u8-downloader';
+import { decryptSegment, PauseResumeController, runDirectDownloadJob, runDownloadJob, type DownloadJobOptions, type DownloadProgress } from './m3u8-downloader';
 import { parseM3u8Playlist } from './m3u8-parse';
 
 const KEY = crypto.getRandomValues(new Uint8Array(16));
@@ -12,6 +12,7 @@ async function encryptForIv(plaintext: BufferSource, iv: Uint8Array): Promise<Ar
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -140,6 +141,120 @@ function jobOptions(overrides: Partial<DownloadJobOptions> = {}): DownloadJobOpt
     ...overrides,
   };
 }
+
+
+describe('runDirectDownloadJob · progressive media', () => {
+  it('按真实响应流分块写入并报告字节进度', async () => {
+    const chunks: number[] = [];
+    const progress: DownloadProgress[] = [];
+    const close = vi.fn(async () => {});
+    const target = {
+      kind: 'memory' as const,
+      write: vi.fn(async (data: Uint8Array) => { chunks.push(data.byteLength); }),
+      close,
+      abort: vi.fn(async () => {}),
+    };
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+        controller.enqueue(new Uint8Array([4, 5]));
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'video/mp4', 'content-length': '5' },
+    })));
+    await runDirectDownloadJob(jobOptions({
+      url: 'https://cdn.example.com/episode.mp4',
+      format: 'MP4',
+      target,
+      onProgress: (entry) => progress.push(entry),
+    }));
+    expect(chunks).toEqual([3, 2]);
+    expect(close).toHaveBeenCalledOnce();
+    expect(progress.at(-1)).toMatchObject({ current: 5, total: 5, status: 'done', percentage: 100 });
+  });
+
+  it('持续有数据的大文件下载超过 60 秒不会被固定总时限中断', async () => {
+    vi.useFakeTimers();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(value) { controller = value; },
+    });
+    const written: number[] = [];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, {
+      headers: { 'content-type': 'video/mp4', 'content-length': '2' },
+    })));
+    const job = runDirectDownloadJob(jobOptions({
+      url: 'https://cdn.example.com/long-feature.mp4',
+      format: 'MP4',
+      target: {
+        kind: 'memory',
+        write: async (chunk) => { written.push(chunk.byteLength); },
+        close: async () => {},
+        abort: async () => {},
+      },
+    }));
+
+    await vi.advanceTimersByTimeAsync(59_000);
+    controller.enqueue(new Uint8Array([1]));
+    await vi.advanceTimersByTimeAsync(59_000);
+    controller.enqueue(new Uint8Array([2]));
+    controller.close();
+    await job;
+
+    expect(written).toEqual([1, 1]);
+  });
+
+  it('Content-Length 缺失时仍报告已接收字节，不伪造百分比', async () => {
+    const progress: DownloadProgress[] = [];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
+      headers: { 'content-type': 'video/mp4' },
+    })));
+    await runDirectDownloadJob(jobOptions({
+      url: 'https://cdn.example.com/episode.mp4',
+      format: 'MP4',
+      onProgress: (entry) => progress.push(entry),
+    }));
+    expect(progress.some((entry) => entry.current === 3 && entry.total === 0 && entry.status === 'downloading')).toBe(true);
+    expect(progress.at(-1)).toMatchObject({ current: 3, total: 3, status: 'done', percentage: 100 });
+  });
+
+  it.each([403, 404])('HTTP %s 记录为下载失败', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status })));
+    await expect(runDirectDownloadJob(jobOptions({
+      url: 'https://cdn.example.com/episode.mp4',
+      format: 'MP4',
+    }))).rejects.toThrow(`视频源返回 HTTP ${status}`);
+  });
+
+  it('拒绝 HTML 错误页，不把它保存成视频', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>blocked</html>', {
+      headers: { 'content-type': 'text/html' },
+    })));
+    await expect(runDirectDownloadJob(jobOptions({
+      url: 'https://cdn.example.com/episode.mp4',
+      format: 'MP4',
+    }))).rejects.toThrow('来源返回的不是视频文件');
+  });
+
+  it('响应流网络中断时失败并清理 reader', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.error(new TypeError('network interrupted'));
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, {
+      headers: { 'content-type': 'video/mp4' },
+    })));
+    await expect(runDirectDownloadJob(jobOptions({
+      url: 'https://cdn.example.com/episode.mp4',
+      format: 'MP4',
+    }))).rejects.toThrow('network interrupted');
+  });
+});
 
 describe('runDownloadJob · 源站缺片与存储错误', () => {
   it('分片 404 视为确定性缺失：不重试、立即失败并提示换源', async () => {
@@ -279,5 +394,64 @@ describe('runDownloadJob · 源站缺片与存储错误', () => {
     await expect(runDownloadJob(jobOptions({ url: 'http://cdn.example.com/index.m3u8' }))).rejects.toThrow(
       /混合内容被拦截/
     );
+  });
+});
+
+
+describe('runDownloadJob · fMP4 初始化段与 AES Key 校验', () => {
+  it('按 init.mp4 → m4s 分片顺序输出原生 fragmented MP4', async () => {
+    stubCaches();
+    const init = new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70]);
+    const fragment = new Uint8Array([0, 0, 0, 8, 0x6d, 0x6f, 0x6f, 0x66]);
+    const playlist = ['#EXTM3U', '#EXT-X-MAP:URI="init.mp4"', '#EXTINF:4,', 'seg-1.m4s', '#EXT-X-ENDLIST'].join('\n');
+    const written: number[][] = [];
+    const progress: DownloadProgress[] = [];
+    let closed = false;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('index.m3u8')) return new Response(playlist);
+      if (url.endsWith('init.mp4')) return new Response(init);
+      if (url.endsWith('seg-1.m4s')) return new Response(fragment);
+      return new Response('', { status: 404 });
+    }));
+
+    await runDownloadJob(jobOptions({
+      format: 'MP4',
+      target: {
+        kind: 'memory',
+        write: async (data) => { written.push(Array.from(data)); },
+        close: async () => { closed = true; },
+        abort: async () => {},
+      },
+      onProgress: (entry) => progress.push(entry),
+    }));
+
+    expect(written).toEqual([Array.from(init), Array.from(fragment)]);
+    expect(closed).toBe(true);
+    expect(progress.map((entry) => entry.status)).toEqual(expect.arrayContaining(['validating', 'downloading', 'merging', 'done']));
+  });
+
+  it('AES-128 Key 必须恰好为 16 字节', async () => {
+    stubCaches();
+    const playlist = ['#EXTM3U', '#EXT-X-KEY:METHOD=AES-128,URI="key.bin"', '#EXTINF:4,', 'seg.ts'].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('index.m3u8')) return new Response(playlist);
+      if (url.endsWith('key.bin')) return new Response(new Uint8Array(15));
+      return new Response(new Uint8Array([0x47]));
+    }));
+    await expect(runDownloadJob(jobOptions())).rejects.toThrow('AES-128 密钥长度异常');
+  });
+
+  it('AES-128 Key 请求超时返回明确失败原因', async () => {
+    stubCaches();
+    const playlist = ['#EXTM3U', '#EXT-X-KEY:METHOD=AES-128,URI="key.bin"', '#EXTINF:4,', 'seg.ts'].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('index.m3u8')) return new Response(playlist);
+      if (url.endsWith('key.bin')) throw new DOMException('The operation timed out', 'TimeoutError');
+      return new Response(new Uint8Array([0x47]));
+    }));
+    await expect(runDownloadJob(jobOptions())).rejects.toThrow('解密密钥请求超时');
   });
 });

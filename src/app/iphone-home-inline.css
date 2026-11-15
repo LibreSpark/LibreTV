@@ -88,3 +88,2163 @@
 .home-inline-player {
   padding-bottom: max(12px, env(safe-area-inset-bottom));
 }
+
+/* Homepage-only cinema lobby header overrides. This file loads after the shared
+   channel header so the homepage keeps its compact overlay without changing
+   navigation on routed catalogue screens. */
+body .v4-home .v4-header,
+body .v4-home .v4-header.is-overlay,
+body .v4-home .v4-header.is-overlay.is-scrolled {
+  position: absolute !important;
+  inset: max(8px,env(safe-area-inset-top)) 0 auto !important;
+  z-index: 300 !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  pointer-events: none !important;
+}
+body .v4-home .v4-header.is-scrolled { position: fixed !important; }
+body .v4-home .v4-header-inner {
+  display: flex !important;
+  flex-flow: row nowrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: calc(100% - 24px) !important;
+  max-width: 1720px !important;
+  min-height: 0 !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  gap: 6px !important;
+  pointer-events: none !important;
+}
+body .v4-home .v4-primary-nav { display: none !important; }
+body .v4-home .v4-header .v4-brand,
+body .v4-home .v4-header .v4-header-actions > .v4-search,
+body .v4-home .v4-header .v4-header-actions > .v4-avatar {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  border: 1px solid rgba(255,255,255,.28) !important;
+  border-radius: 999px !important;
+  color: #fff !important;
+  background: rgba(12,17,27,.48) !important;
+  box-shadow: 0 3px 14px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.12) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(155%) !important;
+  backdrop-filter: blur(18px) saturate(155%) !important;
+  pointer-events: auto !important;
+}
+body .v4-home .v4-header .v4-brand {
+  flex: 0 0 auto !important;
+  gap: 5px !important;
+  width: auto !important;
+  padding: 0 9px 0 7px !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+}
+body .v4-home .v4-header .v4-brand-mark { width: 16px !important; height: 16px !important; flex-basis: 16px !important; }
+body .v4-home .v4-header .v4-header-actions {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  margin: 0 0 0 auto !important;
+  pointer-events: none !important;
+}
+body .v4-home .v4-header .v4-header-actions > .v4-search,
+body .v4-home .v4-header .v4-header-actions > .v4-avatar {
+  display: inline-flex !important;
+  flex: 0 0 32px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  border-radius: 50% !important;
+  pointer-events: auto !important;
+}
+body .v4-home .v4-header .v4-header-actions > .v4-search > svg { width: 15px !important; height: 15px !important; }
+body .v4-home .v4-header .v4-header-actions > .v4-search input,
+body .v4-home .v4-header .v4-header-actions > .v4-search .v4-search-field,
+body .v4-home .v4-header .v4-header-actions > .v4-search .v4-search-label,
+body .v4-home .v4-header .v4-header-actions > .v4-avatar span { display: none !important; }
+body .v4-home .v4-header .v4-header-actions > .v4-avatar .v4-avatar-icon {
+  display: block !important;
+  width: 17px !important;
+  height: 17px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.7 !important;
+}
+body .v4-home .v4-home-main,
+body .v4-home .v4-home-main--cinema {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 0 calc(96px + env(safe-area-inset-bottom)) !important;
+}
+body .v4-home .v4-home-main--cinema > .v4-hero {
+  height: clamp(380px,62svh,560px) !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+body .v4-home .v4-hero-image img { object-position: center 22% !important; }
+@media (min-width: 701px) {
+  body .v4-home .v4-header,
+  body .v4-home .v4-header.is-overlay,
+  body .v4-home .v4-header.is-overlay.is-scrolled {
+    inset: max(10px,env(safe-area-inset-top)) 0 auto !important;
+  }
+  body .v4-home .v4-header-inner { width: min(calc(100% - 48px),1720px) !important; }
+  body .v4-home .v4-header .v4-brand { height: 36px !important; min-height: 36px !important; padding: 0 13px 0 10px !important; font-size: 14px !important; }
+  body .v4-home .v4-header .v4-brand-mark { width: 19px !important; height: 19px !important; flex-basis: 19px !important; }
+  body .v4-home .v4-header .v4-header-actions > .v4-search,
+  body .v4-home .v4-header .v4-header-actions > .v4-avatar { flex-basis: 36px !important; width: 36px !important; min-width: 36px !important; max-width: 36px !important; height: 36px !important; min-height: 36px !important; }
+  body .v4-home .v4-header .v4-header-actions > .v4-search > svg { width: 17px !important; height: 17px !important; }
+  body .v4-home .v4-header .v4-header-actions > .v4-avatar .v4-avatar-icon { width: 19px !important; height: 19px !important; }
+  body .v4-home .v4-home-main--cinema > .v4-hero { height: clamp(440px,66svh,720px) !important; }
+}
+
+
+/* Cinema lobby redesign: immersive full-bleed hero, horizontal featured rail,
+   compact continue-watching cards, frosted header controls and floating dock. */
+body .v4-home .v4-home-main--cinema {
+  padding-top: 0 !important;
+}
+body .v4-home .v4-hero-immersive {
+  position: relative !important;
+  width: 100% !important;
+  height: clamp(640px,94svh,900px) !important;
+  min-height: 0 !important;
+  max-height: 900px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #080d16 !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-image {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  background-size: cover !important;
+  background-position: center 35% !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  object-fit: cover !important;
+  object-position: center 35% !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-veil {
+  z-index: 1 !important;
+  background: linear-gradient(180deg,rgba(0,0,0,.08) 0%,transparent 20%,rgba(0,0,0,.06) 42%,rgba(0,0,0,.82) 72%,#000 94%,#000 100%) !important;
+}
+body .v4-home .v4-hero-hit-area {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  cursor: pointer !important;
+}
+body .v4-home .v4-hero-immersive-copy {
+  z-index: 2 !important;
+  top: auto !important;
+  bottom: clamp(112px,15vh,180px) !important;
+  left: clamp(24px,8vw,120px) !important;
+  right: 24px !important;
+  max-width: 720px !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+body .v4-home .v4-hero-immersive-copy .v4-hero-eyebrow {
+  display: block !important;
+  margin: 0 0 16px !important;
+  color: rgba(255,255,255,.76) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: .22em !important;
+}
+body .v4-home .v4-hero-immersive-copy h1 {
+  margin: 0 0 14px !important;
+  color: #fff !important;
+  font-size: clamp(42px,6.4vw,82px) !important;
+  line-height: 1.04 !important;
+  letter-spacing: -.045em !important;
+  text-shadow: 0 4px 28px rgba(0,0,0,.28) !important;
+}
+body .v4-home .v4-hero-immersive-copy p {
+  margin: 0 !important;
+  color: rgba(255,255,255,.86) !important;
+  font-size: clamp(14px,1.5vw,19px) !important;
+  line-height: 1.65 !important;
+}
+body .v4-home .v4-hero-featured-title {
+  display: block !important;
+  margin-top: 24px !important;
+  color: rgba(255,255,255,.68) !important;
+  font-size: 13px !important;
+  letter-spacing: .04em !important;
+}
+body .v4-home .v4-hero-dots {
+  position: absolute !important;
+  z-index: 4 !important;
+  left: 50% !important;
+  bottom: max(28px,env(safe-area-inset-bottom)) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  transform: translateX(-50%) !important;
+  pointer-events: auto !important;
+}
+body .v4-home .v4-hero-dots button {
+  width: 6px !important;
+  height: 6px !important;
+  min-width: 6px !important;
+  border-radius: 50% !important;
+  background: rgba(255,255,255,.48) !important;
+  transition: width .2s ease,background .2s ease !important;
+}
+body .v4-home .v4-hero-dots button.is-active {
+  width: 20px !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+}
+body .v4-home .v4-header .v4-brand,
+body .v4-home .v4-header .v4-header-actions > .v4-search,
+body .v4-home .v4-header .v4-header-actions > .v4-avatar {
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.24) !important;
+  background: rgba(255,255,255,.13) !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.2) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(170%) !important;
+  backdrop-filter: blur(24px) saturate(170%) !important;
+}
+body .v4-home .v4-today-section,
+body .v4-home .v4-continue-section,
+body .v4-home .v4-recommendation-section {
+  width: min(calc(100% - 48px),1480px) !important;
+  margin: 38px auto 0 !important;
+}
+body .v4-home .v4-section-heading {
+  margin-bottom: 16px !important;
+}
+body .v4-home .v4-section-heading h2 {
+  color: var(--c-content,#202630) !important;
+  font-size: clamp(19px,2vw,24px) !important;
+  font-weight: 760 !important;
+}
+body .v4-home .v4-rail-hint {
+  color: var(--c-muted,#8792a0) !important;
+  font-size: 11px !important;
+}
+body .v4-home .v4-today-rail {
+  display: flex !important;
+  gap: 16px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 2px 2px 16px !important;
+  scroll-snap-type: x mandatory !important;
+  overscroll-behavior-inline: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin !important;
+}
+body .v4-home .v4-today-card {
+  display: flex !important;
+  flex: 0 0 clamp(132px,15vw,184px) !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  text-align: left !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  color: var(--c-content,#202630) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  scroll-snap-align: start !important;
+}
+body .v4-home .v4-today-card-poster {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  aspect-ratio: 2 / 3 !important;
+  overflow: hidden !important;
+  border-radius: 14px !important;
+  background: rgba(120,130,145,.12) !important;
+  box-shadow: 0 8px 24px rgba(20,30,45,.10) !important;
+}
+body .v4-home .v4-today-card-poster img {
+  transition: transform .28s ease !important;
+}
+body .v4-home .v4-today-card:hover .v4-today-card-poster img {
+  transform: scale(1.045) !important;
+}
+body .v4-home .v4-today-card > strong {
+  display: block !important;
+  width: 100% !important;
+  margin-top: 10px !important;
+  overflow: hidden !important;
+  color: var(--c-content,#202630) !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+body .v4-home .v4-today-card-rating {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin-top: 5px !important;
+  color: var(--c-muted,#84909e) !important;
+  font-size: 11px !important;
+}
+body .v4-home .v4-today-card-rating > span {
+  color: #e2a83d !important;
+  font-size: 13px !important;
+}
+body .v4-home .v4-today-rail-status {
+  min-height: 120px !important;
+  display: flex !important;
+  align-items: center !important;
+  color: var(--c-muted,#8792a0) !important;
+  font-size: 13px !important;
+}
+body .v4-home .v4-history-card {
+  flex: 0 0 clamp(250px,28vw,360px) !important;
+  min-width: 0 !important;
+  border: 1px solid rgba(120,135,155,.13) !important;
+  border-radius: 15px !important;
+  background: rgba(var(--glass-panel-rgb,255,255,255),.72) !important;
+  box-shadow: 0 7px 22px rgba(20,30,45,.055) !important;
+}
+body .v4-home .v4-history-play {
+  opacity: 1 !important;
+  width: 40px !important;
+  height: 40px !important;
+}
+body .v4-home .v4-progress-meta {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+}
+body .v4-home .v4-progress-meta .v4-progress-track {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+body .v4-home .v4-progress-percent {
+  flex: 0 0 auto !important;
+  color: var(--c-muted,#7b8795) !important;
+  font-size: 10px !important;
+  font-variant-numeric: tabular-nums !important;
+}
+@media (max-width: 700px) {
+  /* Mobile Hero height is owned by pr84-apple-tv-dock.css. */
+  body .v4-home .v4-hero-immersive-copy {
+    left: 24px !important;
+    right: 24px !important;
+    bottom: max(112px,calc(env(safe-area-inset-bottom) + 100px)) !important;
+  }
+  body .v4-home .v4-hero-immersive-copy h1 {
+    font-size: clamp(38px,10vw,54px) !important;
+  }
+  body .v4-home .v4-hero-immersive-copy p {
+    max-width: 320px !important;
+    font-size: 13px !important;
+  }
+  body .v4-home .v4-hero-featured-title { margin-top: 18px !important; font-size: 11px !important; }
+  body .v4-home .v4-hero-dots { bottom: max(28px,env(safe-area-inset-bottom)) !important; }
+  body .v4-home .v4-today-section,
+  body .v4-home .v4-continue-section,
+  body .v4-home .v4-recommendation-section {
+    width: calc(100% - 32px) !important;
+    margin-top: 28px !important;
+  }
+  body .v4-home .v4-today-card { flex-basis: 126px !important; }
+  body .v4-home .v4-history-row { gap: 12px !important; }
+  body .v4-home .v4-history-card { flex-basis: min(82vw,320px) !important; }
+  body .v4-home { padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important; }
+}
+@media (min-width: 701px) and (max-width: 1440px) and (orientation: landscape) {
+  body .v4-home .v4-hero-immersive { height: clamp(380px,55svh,620px) !important; min-height: 380px !important; max-height: 620px !important; }
+  body .v4-home .v4-hero-immersive-copy { bottom: 112px !important; }
+  body .v4-home .v4-today-section,
+  body .v4-home .v4-continue-section,
+  body .v4-home .v4-recommendation-section { width: calc(100% - 64px) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .v4-home .v4-today-card-poster img { transition: none !important; }
+}
+
+
+/* Real poster sources can have mixed dimensions: crop into fixed card frames,
+   never stretch source pixels to the card's aspect ratio. */
+body .v4-home .v4-today-card-poster {
+  aspect-ratio: 2 / 3 !important;
+}
+body .v4-home .v4-today-card-poster > img {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+}
+body .v4-home .v4-history-image {
+  aspect-ratio: 16 / 9 !important;
+  overflow: hidden !important;
+}
+body .v4-home .v4-history-image > img {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+}
+
+
+/* Final Apple TV visual overrides: keep legacy selectors from winning the cascade. */
+body .v4-home .v4-hero-immersive {
+  height: clamp(640px,94svh,900px) !important;
+  min-height: 0 !important;
+  max-height: 900px !important;
+  background: #000 !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-image {
+  inset: 0 0 auto !important;
+  height: 62% !important;
+  background: #000 !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 28% !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-veil {
+  background: linear-gradient(180deg,rgba(0,0,0,.08) 0%,transparent 20%,rgba(0,0,0,.06) 42%,rgba(0,0,0,.82) 72%,#000 94%,#000 100%) !important;
+}
+body .v4-home .v4-hero-immersive-copy {
+  left: 18px !important;
+  right: 18px !important;
+  bottom: 78px !important;
+  max-width: 760px !important;
+  margin-inline: auto !important;
+  pointer-events: auto !important;
+  text-align: center !important;
+  align-items: center !important;
+}
+body .v4-home .v4-hero-immersive-copy .v4-hero-primary {
+  color: #080808 !important;
+  background: #fff !important;
+}
+@media (max-width: 700px) {
+  /* Legacy mobile Hero sizing removed; see pr84-apple-tv-dock.css. */
+  body .v4-home .v4-hero-immersive .v4-hero-image { height: 58% !important; }
+}
+
+
+/* Apple TV refinement pass — black continuity, softer hero fade, restrained controls. */
+body:has(.v4-home),
+html:has(.v4-home) {
+  background: #000 !important;
+  color: #f5f5f7 !important;
+}
+body:has(.v4-home) #__next,
+body:has(.v4-home) main,
+body:has(.v4-home) .v4-home,
+body:has(.v4-home) .v4-home-main,
+body:has(.v4-home) .v4-content-section,
+body:has(.v4-home) .v4-today-section,
+body:has(.v4-home) .v4-continue-section,
+body:has(.v4-home) .v4-recommendation-section {
+  background: #000 !important;
+  color: #f5f5f7 !important;
+}
+body:has(.v4-home) .v4-home .v4-section-heading h2,
+body:has(.v4-home) .v4-home .v4-today-card > strong,
+body:has(.v4-home) .v4-home .v4-history-copy strong,
+body:has(.v4-home) .v4-home .v4-recommendation-section .card,
+body:has(.v4-home) .v4-home .v4-recommendation-section .card * {
+  color: #f5f5f7 !important;
+}
+body:has(.v4-home) .v4-home .v4-section-heading h2 span,
+body:has(.v4-home) .v4-home .v4-rail-hint,
+body:has(.v4-home) .v4-home .v4-history-count,
+body:has(.v4-home) .v4-home .v4-today-card-rating,
+body:has(.v4-home) .v4-home .v4-history-copy > span {
+  color: #a1a1a6 !important;
+}
+
+/* The final 40% of the artwork dissolves directly into pure black. */
+body:has(.v4-home) .v4-home .v4-hero-immersive .v4-hero-veil {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0,0,0,0) 0%,
+      rgba(0,0,0,0) 34%,
+      rgba(0,0,0,.12) 41%,
+      rgba(0,0,0,.34) 48%,
+      rgba(0,0,0,.68) 55%,
+      #000 62%,
+      #000 100%
+    ) !important;
+}
+
+/* Tighter type scale and quieter glass tags. */
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy h1 {
+  margin: 0 0 14px !important;
+  font-size: clamp(32px, 7.6vw, 46px) !important;
+  line-height: 1.08 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy p {
+  margin: 0 0 18px !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-tags {
+  gap: 7px !important;
+  margin: 0 0 16px !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-tags span {
+  min-height: 24px !important;
+  padding: 4px 10px !important;
+  border-color: rgba(255,255,255,.12) !important;
+  border-radius: 999px !important;
+  background: rgba(255,255,255,.15) !important;
+  color: rgba(255,255,255,.9) !important;
+  font-size: 12px !important;
+}
+
+/* Compact centered playback control; the adjacent + stays quiet and non-glowing. */
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions {
+  gap: 10px !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions .v4-hero-primary {
+  flex: 0 1 260px !important;
+  width: min(260px, calc(100vw - 112px)) !important;
+  max-width: 260px !important;
+  min-width: 0 !important;
+  height: 46px !important;
+  min-height: 46px !important;
+  max-height: 46px !important;
+  padding: 0 20px !important;
+  border-radius: 999px !important;
+  color: #000 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  font-size: 15px !important;
+  font-weight: 650 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-plus {
+  flex: 0 0 48px !important;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  border-radius: 50% !important;
+  color: #fff !important;
+  background: rgba(255,255,255,.12) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  font-size: 24px !important;
+  font-weight: 300 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-featured-title {
+  display: block !important;
+  margin: 10px 0 0 !important;
+  color: #a1a1a6 !important;
+  text-align: center !important;
+  font-size: 11px !important;
+}
+
+/* Pagination: dim inactive dots, retain the white active dash. */
+body:has(.v4-home) .v4-home .v4-hero-dots button {
+  background: rgba(255,255,255,.3) !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-dots button.is-active {
+  background: #fff !important;
+}
+
+/* Feed cards sit directly on black; poster corners and captions stay readable. */
+body:has(.v4-home) .v4-home .v4-today-card,
+body:has(.v4-home) .v4-home .v4-history-card,
+body:has(.v4-home) .v4-home .v4-recommendation-section .card {
+  border-radius: 16px !important;
+  color: #f5f5f7 !important;
+  background: #000 !important;
+  box-shadow: none !important;
+}
+body:has(.v4-home) .v4-home .v4-today-card-poster,
+body:has(.v4-home) .v4-home .v4-recommendation-section .card img {
+  border-radius: 16px !important;
+}
+body:has(.v4-home) .v4-home .v4-today-card > strong,
+body:has(.v4-home) .v4-home .v4-history-copy strong,
+body:has(.v4-home) .v4-home .v4-recommendation-section .card h3,
+body:has(.v4-home) .v4-home .v4-recommendation-section .card p {
+  color: #f5f5f7 !important;
+}
+
+@media (max-width: 700px) {
+  body:has(.v4-home) .v4-home .v4-hero-immersive-copy h1 {
+    font-size: clamp(30px, 8vw, 42px) !important;
+  }
+  body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions .v4-hero-primary {
+    width: min(260px, calc(100vw - 112px)) !important;
+    height: 46px !important;
+    min-height: 46px !important;
+  }
+  body:has(.v4-home) .v4-home .v4-hero-plus {
+    width: 48px !important;
+    height: 48px !important;
+    flex-basis: 48px !important;
+  }
+}
+
+
+/* Apple TV polish pass 2 — centered hero controls and edge-to-edge iOS dock. */
+body:has(.v4-home),
+html:has(.v4-home) {
+  background: #000 !important;
+  color-scheme: dark !important;
+}
+body:has(.v4-home) .v4-home,
+body:has(.v4-home) .v4-home-main,
+body:has(.v4-home) .v4-hero-immersive {
+  background: #000 !important;
+}
+
+/* Keep the CTA and plus as one centered control group. */
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: fit-content !important;
+  max-width: calc(100% - 24px) !important;
+  margin-inline: auto !important;
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  transform: none !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions .v4-hero-primary {
+  flex: 0 1 260px !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-plus {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+}
+
+/* Subtle, editorial type hierarchy in the hero. */
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy .v4-hero-eyebrow {
+  letter-spacing: .28em !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy h1 {
+  font-weight: 600 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy .v4-hero-subtitle {
+  margin-top: 0 !important;
+  margin-bottom: 18px !important;
+  color: rgba(255,255,255,.7) !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-tags {
+  gap: 8px !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-tags span {
+  padding: 4px 10px !important;
+}
+body:has(.v4-home) .v4-home .v4-rail-hint {
+  color: #666 !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+}
+
+/* The hero artwork/background must extend behind the iOS status-bar safe area. */
+@media (max-width: 700px) {
+  html:has(.v4-home),
+  body:has(.v4-home),
+  body:has(.v4-home) #__next,
+  body:has(.v4-home) .v4-home {
+    min-height: 100dvh !important;
+    background-color: #000 !important;
+  }
+  body:has(.v4-home) .v4-home .v4-hero-immersive {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+  body:has(.v4-home) .v4-home .v4-hero-immersive .v4-hero-image {
+    top: 0 !important;
+  }
+}
+
+
+/* Keep the iOS safe-area canvas black on the homepage, even in light theme. */
+html:has(.v4-home) {
+  --page-chrome: #000 !important;
+  --safe-area-surface: #000 !important;
+  background: #000 !important;
+}
+body:has(.v4-home) {
+  background: #000 !important;
+  background-image: none !important;
+}
+
+/* Apple TV final quiet pass — poster-first hierarchy and compact controls. */
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy .v4-hero-eyebrow {
+  color: rgba(255,255,255,.48) !important;
+  letter-spacing: .34em !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy h1 {
+  margin: 0 0 10px !important;
+  font-size: clamp(28px, 7vw, 40px) !important;
+  font-weight: 500 !important;
+  letter-spacing: 2px !important;
+  line-height: 1.14 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy .v4-hero-subtitle {
+  margin: 0 0 14px !important;
+  color: rgba(255,255,255,.7) !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-tags span {
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions {
+  display: flex !important;
+  flex-flow: row nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  width: fit-content !important;
+  max-width: calc(100% - 24px) !important;
+  margin: 0 auto !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions .v4-hero-primary {
+  flex: 0 0 190px !important;
+  width: 190px !important;
+  min-width: 180px !important;
+  max-width: 200px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  padding: 0 14px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-plus {
+  flex: 0 0 42px !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+}
+
+/* Remove the redundant floating Friday orb from the cinema landing surface.
+   The Friday runtime and panel remain mounted; only the distracting FAB is hidden. */
+body:has(.v4-home) .friday-root .friday-fab {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Let the final recommendation captions scroll completely above the fixed dock. */
+body:has(.v4-home) .v4-home {
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+}
+body:has(.v4-home) .v4-home-main,
+body:has(.v4-home) .v4-home-main--cinema {
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+}
+
+/* Preserve a black canvas behind the iOS status-bar and home-indicator regions. */
+html:has(.v4-home),
+body:has(.v4-home),
+body:has(.v4-home) #__next {
+  min-height: 100dvh !important;
+  background-color: #000 !important;
+  color-scheme: dark !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy h1 {
+  font-size: 24px !important;
+  font-weight: 500 !important;
+  letter-spacing: 2px !important;
+  line-height: 1.25 !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-immersive-copy .v4-hero-subtitle {
+  color: rgba(255,255,255,.6) !important;
+  font-size: 13px !important;
+}
+body:has(.v4-home) .v4-home .v4-section-heading h2 {
+  font-size: 18px !important;
+  font-weight: 500 !important;
+  letter-spacing: .01em !important;
+}
+body:has(.v4-home) .v4-home .v4-section-heading .v4-rail-hint {
+  display: none !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-tags span {
+  min-height: 23px !important;
+  padding: 4px 10px !important;
+  border: 1px solid rgba(255,255,255,.2) !important;
+  border-radius: 999px !important;
+  background: rgba(255,255,255,.08) !important;
+  color: rgba(255,255,255,.86) !important;
+  font-size: 11px !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+  backdrop-filter: blur(14px) saturate(140%) !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions {
+  gap: 8px !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-actions.v4-apple-actions .v4-hero-primary {
+  flex: 0 0 200px !important;
+  width: 200px !important;
+  min-width: 180px !important;
+  max-width: 200px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  border-radius: 999px !important;
+  padding: 0 12px !important;
+  font-size: 14px !important;
+}
+body:has(.v4-home) .v4-home .v4-hero-plus {
+  flex: 0 0 40px !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  font-size: 21px !important;
+  font-weight: 300 !important;
+  border-width: 1px !important;
+}
+body:has(.v4-home) .v4-home .v4-today-rail {
+  width: calc(100% + 40px) !important;
+  margin-left: -20px !important;
+  padding: 2px 20px 14px !important;
+  box-sizing: border-box !important;
+  scroll-padding-inline: 20px !important;
+}
+
+/* The homepage is edge-to-edge under iOS chrome; keep the root canvas black. */
+html:has(.v4-home),
+body:has(.v4-home),
+body:has(.v4-home) #__next {
+  margin: 0 !important;
+  padding-top: 0 !important;
+  background: #000 !important;
+  background-color: #000 !important;
+  color-scheme: dark !important;
+}
+
+
+/* PR84 — floating Liquid Glass dock.
+   CSS-first on purpose: liquid-glass-react notes Safari only partially supports
+   its displacement/refraction layer, so preserve a native backdrop-filter fallback. */
+@media (max-width: 700px) {
+
+  /* Keep content scrollable behind the floating dock without a second blank
+     128px footer after the home content. */
+  body:has(.v4-home) .v4-home {
+    padding-bottom: 0 !important;
+  }
+  body:has(.v4-home) .v4-home .v4-home-main,
+  body:has(.v4-home) .v4-home .v4-home-main--cinema {
+    padding-bottom: 88px !important;
+  }
+}
+
+/* The root safe-area paint remains black; the floating dock sits above it. */
+html:has(.v4-home) {
+  --safe-area-surface: #000 !important;
+}
+
+
+/* PR84 follow-up — compact floating dock, visible poster captions, no duplicate footer space. */
+@media (max-width: 700px) {
+  html:has(.v4-home),
+  body:has(.v4-home),
+  body:has(.v4-home) #__next {
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #000 !important;
+  }
+
+  body:has(.v4-home) .v4-home {
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    height: auto !important;
+    padding: 0 0 env(safe-area-inset-bottom, 0px) !important;
+  }
+
+  /* One scroll reserve only: enough to clear the floating dock and its safe-area offset. */
+  body:has(.v4-home) .v4-home {
+    padding-bottom: 0 !important;
+  }
+  body:has(.v4-home) .v4-home .v4-home-main,
+  body:has(.v4-home) .v4-home .v4-home-main--cinema {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+  }
+}
+
+
+/* PR84 — apply the shared Liquid Glass optical surface to the mobile dock. */
+@media (max-width: 700px) {
+}
+
+
+/* PR84 iPhone refinement — darker transparent glass, safe-area alignment,
+   edge inset for poster rails, and a four-destination bottom dock. */
+@media (max-width: 700px) {
+
+  body:has(.v4-home) .v4-home .v4-home-main,
+  body:has(.v4-home) .v4-home .v4-home-main--cinema {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+  }
+
+  /* Keep the first poster visibly inset from the physical screen edge. */
+  body:has(.v4-home) .v4-home .v4-today-rail,
+  body:has(.v4-home) .v4-home .v4-history-row {
+    width: 100% !important;
+    margin-left: 0 !important;
+    padding: 2px 0 18px !important;
+    scroll-padding-inline: 20px !important;
+    box-sizing: border-box !important;
+  }
+
+  body:has(.v4-home) .v4-home .v4-hero-immersive-copy h1 {
+    font-size: 22px !important;
+    font-weight: 450 !important;
+    letter-spacing: 1.5px !important;
+  }
+
+  /* Extend the hero artwork into the iOS top safe-area instead of painting a
+     separate light strip above the cinematic image. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive {
+    margin-top: calc(-1 * env(safe-area-inset-top, 0px)) !important;
+  }
+}
+
+
+/* rdev/liquid-glass-react integration.
+   The upstream SVG displacement is progressive enhancement; iOS Safari keeps
+   the native 30px backdrop-filter path when displacement is unsupported. */
+@media (max-width: 700px) {
+}
+
+
+/* PR84 hotfix: keep the dock as a direct viewport-fixed element.
+   Do not wrap it in the third-party LiquidGlass engine: its transformed
+   wrapper can establish a containing block and detach position:fixed. */
+@media (max-width: 700px) {
+
+  body:has(.v4-home) .v4-home .v4-home-main,
+  body:has(.v4-home) .v4-home .v4-home-main--cinema {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+  }
+
+  /* Remove the phantom header panel; keep only its compact controls floating
+     over the top of the artwork. */
+  body:has(.v4-home) .v4-home > .v4-header {
+    position: absolute !important;
+    inset: 0 0 auto 0 !important;
+    z-index: 1100 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    pointer-events: none !important;
+  }
+
+  body:has(.v4-home) .v4-home > .v4-header .v4-header-inner {
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Restore the compact cinema composition and expose the start of the poster rail. */
+  body:has(.v4-home) .v4-home .v4-home-main--cinema > .v4-hero-immersive {
+    margin-top: calc(-1 * env(safe-area-inset-top, 0px)) !important;
+  }
+
+  body:has(.v4-home) .v4-home .v4-hero-immersive-copy {
+    bottom: max(88px, calc(env(safe-area-inset-bottom, 0px) + 76px)) !important;
+  }
+}
+
+@media (min-width: 701px) {
+}
+
+/* PR84 visual polish: the homepage is immersive from first paint, not after scroll. */
+@media (max-width: 700px) {
+  :root:not(.dark) body:has(.v4-home) .v4-home > .v4-header,
+  :root:not(.dark) body:has(.v4-home) .v4-home > .v4-header.is-overlay,
+  :root:not(.dark) body:has(.v4-home) .v4-home > .v4-header.is-overlay.is-scrolled,
+  body:has(.v4-home) .v4-home > .v4-header,
+  body:has(.v4-home) .v4-home > .v4-header.is-overlay,
+  body:has(.v4-home) .v4-home > .v4-header.is-overlay.is-scrolled {
+    position: absolute !important;
+    inset: 0 0 auto 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  :root:not(.dark) body:has(.v4-home) .v4-home > .v4-header .v4-header-inner,
+  body:has(.v4-home) .v4-home > .v4-header .v4-header-inner {
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Keep the iOS top safe-area and browser chrome on the same black canvas. */
+  html:has(.v4-home),
+  body:has(.v4-home),
+  body:has(.v4-home) .v4-home {
+    background: #000 !important;
+    background-color: #000 !important;
+  }
+
+  /* The first poster must start 20px in from the viewport edge. */
+  body:has(.v4-home) .v4-home .v4-today-rail {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+    scroll-padding-left: 20px !important;
+    scroll-padding-right: 20px !important;
+  }
+}
+
+
+/* PR84 — true edge-to-edge first paint: the poster owns the top safe-area. */
+@media (max-width: 700px) {
+  body:has(.v4-home) .v4-home .v4-header,
+  body:has(.v4-home) .v4-home .v4-header.is-overlay,
+  body:has(.v4-home) .v4-home .v4-header.is-overlay.is-scrolled,
+  body:has(.v4-home) .v4-home .v4-header.is-scrolled {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    z-index: 50 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Keep controls below the physical status indicators while the header box
+     itself starts at y=0 and consumes no layout space. */
+  body:has(.v4-home) .v4-home .v4-header-inner {
+    box-sizing: border-box !important;
+    width: calc(100% - 24px) !important;
+    min-height: 0 !important;
+    margin: 0 auto !important;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 0 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* The hero is removed from normal flow and anchored to the viewport's top
+     edge; the main's matching top padding reserves exactly its visual height
+     for the following recommendation content. */
+  body:has(.v4-home) .v4-home .v4-home-main--cinema {
+    position: relative !important;
+    padding-top: clamp(380px, 60svh, 520px) !important;
+  }
+
+  body:has(.v4-home) .v4-home .v4-home-main--cinema > .v4-hero-immersive {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    width: 100% !important;
+    margin: 0 !important;
+    z-index: 10 !important;
+    overflow: hidden !important;
+  }
+
+  body:has(.v4-home) .v4-home .v4-hero-immersive .v4-hero-image {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 0 !important;
+  }
+
+  body:has(.v4-home) .v4-home .v4-hero-immersive .v4-hero-image img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+}
+
+
+/* PR84 acceptance hotfix: black iOS safe-area, separated hero copy, clean poster cards. */
+@media (max-width: 700px) {
+  html:has(body .v4-home),
+  body:has(.v4-home),
+  body:has(.v4-home) .v4-home {
+    background: #000 !important;
+    background-color: #000 !important;
+  }
+
+  body:has(.v4-home) .v4-home > .v4-header,
+  body:has(.v4-home) .v4-home > .v4-header.is-overlay,
+  body:has(.v4-home) .v4-home > .v4-header.is-overlay.is-scrolled {
+    top: 0 !important;
+    inset: 0 0 auto 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+
+  body:has(.v4-home) .v4-home > .v4-header .v4-header-inner {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+  }
+
+  /* Hero copy begins below the floating brand/search controls, never behind them. */
+  body:has(.v4-home) .v4-home .v4-hero-immersive-copy {
+    top: calc(env(safe-area-inset-top, 0px) + 104px) !important;
+    bottom: auto !important;
+    left: 24px !important;
+    right: 24px !important;
+    padding-top: 0 !important;
+    transform: none !important;
+  }
+
+  /* The recommendation rail is poster + title only: no stars or numeric ratings. */
+  body:has(.v4-home) .v4-home .v4-today-card-rating {
+    display: none !important;
+  }
+}
+
+@media (min-width: 701px) {
+  body:has(.v4-home) .v4-home .v4-today-card-rating {
+    display: none !important;
+  }
+}
+
+/* PR84 iOS Safari top-edge correction:
+   The global light-theme html background was still visible in the top safe area.
+   Keep the document canvas black and let the cinema hero paint behind the status area. */
+@media screen and (max-width: 700px) {
+  html:has(.v4-home),
+  html:has(body .v4-home) {
+    min-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #000 !important;
+    background-color: #000 !important;
+    color-scheme: dark !important;
+  }
+
+  body:has(.v4-home) {
+    min-height: 100vh !important;
+    min-height: calc(100svh) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #000 !important;
+    background-color: #000 !important;
+  }
+
+  body:has(.v4-home) .v4-home {
+    position: relative !important;
+    min-height: 100vh !important;
+    min-height: calc(100svh) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: clip !important;
+    background: #000 !important;
+    background-color: #000 !important;
+  }
+
+  /* The main shell begins below the iOS top inset. Pull the absolute hero
+     back to the physical viewport edge and extend its artwork by the same inset. */
+  body:has(.v4-home) .v4-home-main {
+    margin-top: 0 !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema {
+    position: relative !important;
+    margin-top: 0 !important;
+    padding-top: clamp(380px, 60svh, 520px) !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive {
+    top: calc(-1 * env(safe-area-inset-top, 0px)) !important;
+    margin-top: 0 !important;
+    background-color: #000 !important;
+  }
+}
+
+
+/* Mobile poster crop is owned by pr84-apple-tv-dock.css. */
+
+
+/* PR84 blocking layout correction: keep the hero in normal document flow. */
+@media screen and (max-width: 700px) {
+  /* Header floats over the hero; it must not reserve or push layout space. */
+  body:has(.v4-home) .v4-home > .v4-header {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    inset: 0 0 auto 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    z-index: 100 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    pointer-events: none !important;
+  }
+
+  body:has(.v4-home) .v4-home > .v4-header .v4-header-inner {
+    box-sizing: border-box !important;
+    width: calc(100% - 32px) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 auto !important;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 0 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* Critical: no absolute hero, no negative top, no artificial main padding. */
+  body:has(.v4-home) .v4-home-main--cinema {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 0 calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    overflow: visible !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive {
+    position: relative !important;
+    inset: auto !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    isolation: isolate !important;
+    background: #000 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* The image is a child layer of the bounded hero, never viewport-anchored. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    z-index: 0 !important;
+    background: #000 !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image img {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-veil {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
+    background: linear-gradient(
+      180deg,
+      rgba(0,0,0,.08) 0%,
+      rgba(0,0,0,.02) 30%,
+      rgba(0,0,0,.18) 48%,
+      rgba(0,0,0,.58) 70%,
+      rgba(0,0,0,.9) 88%,
+      #000 100%
+    ) !important;
+  }
+
+  /* Keep all copy inside the lower safe portion of the actual poster. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy {
+    position: absolute !important;
+    top: auto !important;
+    right: 20px !important;
+    bottom: 76px !important;
+    left: 20px !important;
+    z-index: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
+    text-align: center !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-indicators {
+    position: absolute !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 18px !important;
+    left: 0 !important;
+    z-index: 4 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: max-content !important;
+    margin: 0 auto !important;
+    padding: 6px 10px !important;
+    transform: none !important;
+  }
+
+  /* The next content follows the hero naturally; no detached blank spacer. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-content-section:first-of-type {
+    margin-top: 24px !important;
+  }
+}
+
+
+/* PR84 visual balance pass: lower the artwork focal point and center the copy. */
+@media screen and (max-width: 700px) {
+  /* Mobile poster crop is owned by pr84-apple-tv-dock.css. */
+
+  /* Hero height is centralized in pr84-apple-tv-dock.css. */
+
+  /* Keep the editorial copy as one centered stack, biased toward the lower half. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy {
+    top: 0 !important;
+    right: 22px !important;
+    bottom: 58px !important;
+    left: 22px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding-top: 112px !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy .v4-hero-actions {
+    margin-top: 8px !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy .v4-hero-featured-title {
+    margin-top: 2px !important;
+  }
+
+  /* Keep the dots attached to the actual poster bottom, not the page black area. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-indicators {
+    bottom: 18px !important;
+  }
+
+  /* Extend the veil through the lower artwork so it fades smoothly into page black. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-veil {
+    background: linear-gradient(
+      180deg,
+      rgba(0,0,0,.02) 0%,
+      rgba(0,0,0,.02) 38%,
+      rgba(0,0,0,.22) 58%,
+      rgba(0,0,0,.68) 80%,
+      #000 100%
+    ) !important;
+  }
+}
+
+
+/* PR84 final mobile composition: lower the focal crop and anchor controls to hero bounds. */
+@media screen and (max-width: 700px) {
+  /* Mobile poster crop is owned by pr84-apple-tv-dock.css. */
+
+  /* One bounded hero owns its image, veil, copy and pagination. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive {
+    position: relative !important;
+    inset: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    isolation: isolate !important;
+    background: #000 !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-image {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 0 !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-veil {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
+    background: linear-gradient(
+      180deg,
+      rgba(0,0,0,.02) 0%,
+      rgba(0,0,0,.02) 42%,
+      rgba(0,0,0,.18) 58%,
+      rgba(0,0,0,.55) 74%,
+      rgba(0,0,0,.86) 90%,
+      #000 100%
+    ) !important;
+  }
+
+  /* Flex-end anchors the content stack low, while reserving room for pagination. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy {
+    position: absolute !important;
+    top: 0 !important;
+    right: 22px !important;
+    bottom: 78px !important;
+    left: 22px !important;
+    z-index: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 10px !important;
+    box-sizing: border-box !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 0 0 !important;
+    transform: none !important;
+    text-align: center !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-immersive-copy .v4-hero-actions {
+    margin-top: 10px !important;
+  }
+
+  /* Pagination is tied to the hero's bottom edge, not the following black section. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-indicators {
+    position: absolute !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 20px !important;
+    left: 0 !important;
+    z-index: 4 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: max-content !important;
+    margin: 0 auto !important;
+    padding: 6px 10px !important;
+    transform: none !important;
+  }
+
+  /* Remove the artificial black spacer so recommendations follow the hero fade. */
+  body:has(.v4-home) .v4-home-main--cinema {
+    padding-bottom: 0 !important;
+  }
+
+  body:has(.v4-home) .v4-home-main--cinema > .v4-content-section:first-of-type {
+    margin-top: 0 !important;
+  }
+}
+
+
+/* PR84 visual cleanup: deconflict poster typography and close the lower dead zone. */
+@media screen and (max-width: 700px) {
+  /* The artwork already contains typography: remove the competing eyebrow. */
+  body:has(.v4-home) .v4-home .v4-hero-immersive-copy .v4-hero-eyebrow {
+    display: none !important;
+  }
+
+  /* Darken embedded poster lettering while preserving the foreground title. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-veil {
+    background:
+      linear-gradient(rgba(0,0,0,.38), rgba(0,0,0,.38)),
+      linear-gradient(
+        180deg,
+        rgba(0,0,0,.04) 0%,
+        rgba(0,0,0,.08) 40%,
+        rgba(0,0,0,.30) 60%,
+        rgba(0,0,0,.72) 82%,
+        #000 100%
+      ) !important;
+  }
+
+  /* Mobile crop is owned by pr84-apple-tv-dock.css. */
+
+  /* Keep pagination physically attached to the bottom edge of this hero. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-hero-immersive > .v4-hero-indicators {
+    position: absolute !important;
+    top: auto !important;
+    bottom: 20px !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    margin: 0 !important;
+  }
+
+  /* Remove the margin-created black strip between the hero and first rail. */
+  body:has(.v4-home) .v4-home-main--cinema > .v4-content-section {
+    margin-top: 0 !important;
+  }
+
+  /* Fixed glass tab bar overlays the page: reserve scrollable room beneath content. */
+  body:has(.v4-home) .v4-home {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+  }
+}
+
+
+/* PR84 Apple TV hierarchy correction: artwork first, metadata and actions low. */
+body .v4-home .v4-hero-immersive {
+  isolation: isolate !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-image,
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  object-fit: cover !important;
+  object-position: center 28% !important;
+}
+body .v4-home .v4-hero-immersive > .v4-hero-veil {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  background: linear-gradient(
+    180deg,
+    rgba(0,0,0,.02) 0%,
+    rgba(0,0,0,0) 34%,
+    rgba(0,0,0,.10) 52%,
+    rgba(0,0,0,.48) 70%,
+    rgba(0,0,0,.88) 88%,
+    #000 100%
+  ) !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-immersive-copy {
+  position: absolute !important;
+  inset: auto 0 58px !important;
+  z-index: 2 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-end !important;
+  gap: 9px !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 clamp(22px,6vw,88px) !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+body .v4-home .v4-hero-immersive-copy h1 {
+  max-width: min(820px,100%) !important;
+  margin: 0 !important;
+  color: #fff !important;
+  font-size: clamp(28px,4.2vw,48px) !important;
+  font-weight: 720 !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.025em !important;
+  text-wrap: balance !important;
+  text-shadow: 0 2px 16px rgba(0,0,0,.62), 0 1px 3px rgba(0,0,0,.72) !important;
+}
+body .v4-home .v4-hero-immersive-copy > p {
+  max-width: 540px !important;
+  margin: 0 !important;
+  color: rgba(255,255,255,.84) !important;
+  font-size: clamp(12px,1.2vw,15px) !important;
+  line-height: 1.5 !important;
+  text-shadow: 0 1px 10px rgba(0,0,0,.72) !important;
+}
+body .v4-home .v4-hero-immersive-copy .v4-hero-tags {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+  margin: 1px 0 2px !important;
+}
+body .v4-home .v4-hero-immersive-copy .v4-hero-tags span {
+  color: rgba(255,255,255,.86) !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+  text-shadow: 0 1px 8px rgba(0,0,0,.75) !important;
+}
+body .v4-home .v4-hero-immersive-copy .v4-hero-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  margin: 2px 0 0 !important;
+  pointer-events: auto !important;
+}
+body .v4-home .v4-hero-immersive-copy .v4-hero-primary {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  min-height: 38px !important;
+  padding: 0 17px !important;
+  border: 1px solid rgba(255,255,255,.38) !important;
+  border-radius: 999px !important;
+  color: #fff !important;
+  background: rgba(255,255,255,.16) !important;
+  box-shadow: 0 4px 18px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.18) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(145%) !important;
+  backdrop-filter: blur(18px) saturate(145%) !important;
+  font-size: 12px !important;
+  font-weight: 620 !important;
+  letter-spacing: .01em !important;
+  text-shadow: 0 1px 5px rgba(0,0,0,.35) !important;
+  pointer-events: auto !important;
+}
+body .v4-home .v4-hero-immersive-copy .v4-hero-plus {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  border: 1px solid rgba(255,255,255,.32) !important;
+  border-radius: 50% !important;
+  color: #fff !important;
+  background: rgba(255,255,255,.12) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  backdrop-filter: blur(16px) !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-dots {
+  position: absolute !important;
+  z-index: 5 !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: 18px !important;
+  left: 50% !important;
+  margin: 0 !important;
+  transform: translateX(-50%) !important;
+}
+@media screen and (max-width: 700px) {
+  /* Hero height is centralized in pr84-apple-tv-dock.css. */
+  body .v4-home .v4-hero-immersive .v4-hero-immersive-copy {
+    inset: auto 0 54px !important;
+    gap: 7px !important;
+    padding: 0 22px !important;
+  }
+  body .v4-home .v4-hero-immersive-copy h1 {
+    max-width: 100% !important;
+    font-size: clamp(27px,7.6vw,36px) !important;
+    line-height: 1.12 !important;
+  }
+  body .v4-home .v4-hero-immersive-copy > p {
+    max-width: 320px !important;
+    font-size: 12px !important;
+  }
+  body .v4-home .v4-hero-immersive-copy .v4-hero-tags { gap: 6px !important; }
+  body .v4-home .v4-hero-immersive-copy .v4-hero-primary {
+    min-height: 36px !important;
+    padding: 0 15px !important;
+    font-size: 12px !important;
+  }
+  body .v4-home .v4-hero-immersive .v4-hero-dots { bottom: 16px !important; }
+}
+
+
+/* PR84 final visual pass: keep the poster bright and anchor compact copy at the foot. */
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  filter: brightness(1.1) contrast(1.1) saturate(1.06) !important;
+}
+body .v4-home .v4-hero-immersive > .v4-hero-veil {
+  background: linear-gradient(
+    to bottom,
+    transparent 30%,
+    rgba(0,0,0,.10) 54%,
+    rgba(0,0,0,.48) 72%,
+    #000 90%
+  ) !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-immersive-copy {
+  inset: 0 !important;
+  justify-content: flex-end !important;
+  padding-bottom: 112px !important;
+}
+@media screen and (max-width: 700px) {
+  body .v4-home .v4-hero-immersive .v4-hero-image img {
+    filter: brightness(1.1) contrast(1.1) saturate(1.08) !important;
+  }
+  body .v4-home .v4-hero-immersive > .v4-hero-veil {
+    background: linear-gradient(
+      to bottom,
+      transparent 30%,
+      rgba(0,0,0,.06) 52%,
+      rgba(0,0,0,.42) 72%,
+      #000 90%
+    ) !important;
+  }
+  body .v4-home .v4-hero-immersive .v4-hero-immersive-copy {
+    inset: 0 !important;
+    justify-content: flex-end !important;
+    gap: 7px !important;
+    padding: 0 22px 112px !important;
+  }
+  /* Keep the human focal area unobstructed; the title and CTA carry the hierarchy. */
+  body .v4-home .v4-hero-immersive-copy > p {
+    display: none !important;
+  }
+  body .v4-home .v4-hero-immersive-copy h1 {
+    font-size: clamp(25px,6.8vw,32px) !important;
+    line-height: 1.08 !important;
+  }
+  body .v4-home .v4-hero-immersive .v4-hero-dots {
+    bottom: 18px !important;
+  }
+  /* Reserve room below the fixed floating tab bar in the actual page scroller. */
+  body .v4-home,
+  body .v4-home main,
+  body .v4-home-main--cinema {
+    padding-bottom: max(100px, calc(100px + env(safe-area-inset-bottom, 0px))) !important;
+    scroll-padding-bottom: 120px !important;
+  }
+}
+
+
+/* PR84 brightness refinement: make the poster visibly brighter than foreground copy. */
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  filter: brightness(1.24) contrast(1.12) saturate(1.14) !important;
+}
+@media screen and (max-width: 700px) {
+  body .v4-home .v4-hero-immersive .v4-hero-image img {
+    filter: brightness(1.27) contrast(1.13) saturate(1.16) !important;
+  }
+  body .v4-home .v4-hero-immersive > .v4-hero-veil {
+    background: linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0%,
+      rgba(0,0,0,0) 44%,
+      rgba(0,0,0,.10) 60%,
+      rgba(0,0,0,.38) 76%,
+      #000 92%
+    ) !important;
+  }
+}
+
+
+/* PR84 poster-first display pipeline: SDR enhancement + HDR-capable display path.
+   HDR output is available only when the source image itself contains HDR data. */
+body .v4-home .v4-hero-immersive .v4-hero-image {
+  overflow: hidden !important;
+  background: #000 !important;
+}
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  filter: brightness(1.22) contrast(1.12) saturate(1.14) !important;
+  -webkit-filter: brightness(1.22) contrast(1.12) saturate(1.14) !important;
+  opacity: 1 !important;
+}
+body .v4-home .v4-hero-immersive > .v4-hero-veil {
+  background: linear-gradient(
+    180deg,
+    rgba(0,0,0,0) 0%,
+    rgba(0,0,0,0) 42%,
+    rgba(0,0,0,.08) 58%,
+    rgba(0,0,0,.34) 74%,
+    rgba(0,0,0,.72) 86%,
+    #000 96%,
+    #000 100%
+  ) !important;
+}
+/* Let browsers with HDR displays use the full range of HDR-capable source images. */
+@media (dynamic-range: high) {
+  body .v4-home .v4-hero-immersive .v4-hero-image img {
+    dynamic-range-limit: no-limit;
+    filter: brightness(1.12) contrast(1.12) saturate(1.12) !important;
+    -webkit-filter: brightness(1.12) contrast(1.12) saturate(1.12) !important;
+  }
+}
+@media (color-gamut: p3) {
+  body .v4-home .v4-hero-immersive .v4-hero-image img {
+    color-gamut: p3;
+  }
+}
+@media screen and (max-width: 700px) {
+  body .v4-home .v4-hero-immersive .v4-hero-image img {
+    filter: brightness(1.25) contrast(1.13) saturate(1.16) !important;
+    -webkit-filter: brightness(1.25) contrast(1.13) saturate(1.16) !important;
+  }
+  @media (dynamic-range: high) {
+    body .v4-home .v4-hero-immersive .v4-hero-image img {
+      dynamic-range-limit: no-limit;
+      filter: brightness(1.14) contrast(1.12) saturate(1.14) !important;
+      -webkit-filter: brightness(1.14) contrast(1.12) saturate(1.14) !important;
+    }
+  }
+  body .v4-home .v4-hero-immersive-copy {
+    bottom: 0 !important;
+    padding: 0 22px 112px !important;
+    justify-content: flex-end !important;
+    gap: 7px !important;
+  }
+  body .v4-home .v4-hero-immersive-copy > p { display: none !important; }
+  body .v4-home .v4-hero-immersive .v4-hero-dots { bottom: 18px !important; }
+  body .v4-home .v4-home-main,
+  body .v4-home .v4-home-main--cinema {
+    padding-bottom: max(112px,calc(112px + env(safe-area-inset-bottom,0px))) !important;
+    scroll-padding-bottom: 128px !important;
+  }
+}
+
+
+/* HDR-safe poster output: never apply CSS filters to image pixels.
+   Native browser decoding preserves embedded Ultra HDR / gain-map metadata. */
+body .v4-home .v4-hero-immersive .v4-hero-image img {
+  filter: none !important;
+  -webkit-filter: none !important;
+  opacity: 1 !important;
+  image-rendering: auto !important;
+}
+@media (dynamic-range: high) {
+  body .v4-home .v4-hero-immersive .v4-hero-image img {
+    dynamic-range-limit: no-limit;
+  }
+}
+@media (color-gamut: p3) {
+  body .v4-home .v4-hero-immersive .v4-hero-image img {
+    color: inherit;
+  }
+}
+
+/* Apple-style settings language shared by settings index, profile shortcuts and second-level panels. */
+.settings-apple-icon{display:inline-flex;width:42px;height:42px;flex:0 0 42px;align-items:center;justify-content:center;border:0;border-radius:12px;background:transparent;color:var(--settings-icon-color,#9ca3af)}
+.settings-apple-icon svg{width:21px;height:21px;fill:none!important;stroke:currentColor!important;stroke-width:1.65!important;stroke-linecap:round;stroke-linejoin:round}
+.v4-settings-card--apple{display:flex!important;min-height:68px!important;align-items:center!important;gap:12px!important;padding:10px 14px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.v4-settings-card--apple+.v4-settings-card--apple{border-top:1px solid rgba(255,255,255,.075)!important}
+.v4-settings-card--apple>div{min-width:0;flex:1}
+.v4-settings-card--apple strong{color:#f5f5f7!important;font-size:14px!important;font-weight:550!important}
+.v4-settings-card--apple p{color:#92929a!important;font-size:12px!important;line-height:1.45!important}
+.v4-settings-card--apple>b{color:#686870!important;font-size:20px!important;font-weight:400!important}
+.v4-settings-card--apple:focus-visible,.ipad-settings-content button:focus-visible,.ipad-settings-content a:focus-visible{outline:2px solid #0a84ff!important;outline-offset:-2px!important}
+.ipad-settings-content{color:#f5f5f7}
+.ipad-settings-content .bg-card,.ipad-settings-content .rounded-2xl.border{border-color:rgba(255,255,255,.09)!important;background:#1c1c1e!important}
+.ipad-settings-content .divide-y>*+*{border-color:rgba(255,255,255,.075)!important}
+.ipad-settings-content .settings-apple-icon{width:40px;height:40px;flex-basis:40px}
+.settings-apple-detail .border-line{border-color:rgba(255,255,255,.12)!important}
+.settings-apple-detail .text-content{color:#f5f5f7!important}
+.settings-apple-detail .text-muted,.settings-apple-detail .text-faint{color:#92929a!important}
+.settings-apple-detail .bg-card{background:#1c1c1e!important}
+.settings-apple-detail .bg-chip{background:#252527!important}
+.settings-apple-detail .text-accent{color:#0a84ff!important}
+.settings-apple-about{padding:22px;border:1px solid rgba(255,255,255,.09);border-radius:16px;background:#1c1c1e}
+.settings-apple-about h3{color:#f5f5f7;font-size:20px;font-weight:600}
+.settings-apple-about p{margin-top:8px;color:#b2b2b8;font-size:14px;line-height:1.65}
+.settings-apple-about .settings-apple-about-note{color:#85858d;font-size:12px}
+@media(max-width:700px){.ipad-settings-content{padding-bottom:max(20px,env(safe-area-inset-bottom))!important}.settings-apple-detail{gap:16px!important}}
+@media(prefers-reduced-motion:reduce){.v4-settings-card--apple,.ipad-settings-content *{transition-duration:.01ms!important}}
+
+/* Dark Apple-native shell for the shared settings drawer and profile page. */
+.ipad-settings-drawer{background:#000!important;border-left-color:rgba(255,255,255,.1)!important;color:#f5f5f7!important}
+.ipad-settings-drawer>div:first-child{border-bottom-color:rgba(255,255,255,.1)!important;background:#000!important}
+.ipad-settings-drawer>div:first-child h2{color:#f5f5f7!important}
+.ipad-settings-drawer .settings-apple-detail .rounded-2xl{border-radius:15px!important}
+.v4-spatial-screen[data-screen="settings"],.v4-spatial-screen[data-screen="me"]{background:#000!important;color:#f5f5f7!important}
+.v4-spatial-screen[data-screen="me"] .v4-me-library-actions,.v4-spatial-screen[data-screen="me"] .v4-me-settings-entry{overflow:hidden;border:1px solid rgba(255,255,255,.08)!important;border-radius:15px!important;background:#1c1c1e!important}
+.v4-spatial-screen[data-screen="me"] .v4-me-library-actions .v4-settings-card--apple+.v4-settings-card--apple{border-top-color:rgba(255,255,255,.075)!important}
+
+/* Higher-specificity overrides for the legacy iPhone light-theme settings rules. */
+.v4-spatial-screen[data-screen="settings"] .v4-settings-grid .v4-settings-card--apple,
+.v4-spatial-screen[data-screen="me"] .v4-me-library-actions .v4-settings-card--apple,
+.v4-spatial-screen[data-screen="me"] .v4-me-settings-entry .v4-settings-card--apple{
+  min-height:68px!important;padding:10px 14px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:#f5f5f7!important
+}
+.v4-spatial-screen[data-screen="settings"] .v4-settings-grid .v4-settings-card--apple strong,
+.v4-spatial-screen[data-screen="me"] .v4-settings-card--apple strong{color:#f5f5f7!important;font-size:14px!important;font-weight:550!important}
+.v4-spatial-screen[data-screen="settings"] .v4-settings-grid .v4-settings-card--apple p,
+.v4-spatial-screen[data-screen="me"] .v4-settings-card--apple p{color:#92929a!important;font-size:12px!important}
+.v4-spatial-screen[data-screen="settings"] .v4-settings-grid .v4-settings-card--apple>b,
+.v4-spatial-screen[data-screen="me"] .v4-settings-card--apple>b{color:#686870!important}
+.v4-spatial-screen[data-screen="settings"] .v4-settings-grid .v4-settings-card--apple .settings-apple-icon,
+.v4-spatial-screen[data-screen="me"] .v4-settings-card--apple .settings-apple-icon{background:transparent!important}
+.v4-spatial-screen[data-screen="settings"] .v4-settings-grid .v4-settings-card--apple+.v4-settings-card--apple,
+.v4-spatial-screen[data-screen="me"] .v4-me-library-actions .v4-settings-card--apple+.v4-settings-card--apple{border-top:1px solid rgba(255,255,255,.075)!important}
+
+.settings-apple-icon svg *{stroke-width:1.65!important;fill:none!important}
+.settings-apple-page-title{display:flex;align-items:center;gap:10px}
+.settings-apple-page-title .settings-apple-icon{width:38px;height:38px;flex-basis:38px}
+.settings-apple-page-title h2{margin:0}
+
+
+/* Settings emergency rebuild: native dark surface, inline settings, safe scrolling. */
+html:has(.v4-spatial-screen[data-screen="settings"]),
+body:has(.v4-spatial-screen[data-screen="settings"]) {
+  min-height:100%;
+  background:#000!important;
+  color:#f5f5f7!important;
+}
+.v4-spatial-screen[data-screen="settings"] {
+  min-height:100svh!important;
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px)!important;
+  overflow:visible!important;
+  background:#000!important;
+  color:#f5f5f7!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-main {
+  min-height:calc(100svh - 64px);
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px)!important;
+  background:#000!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-heading {
+  margin-bottom:18px!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-heading h1 {
+  margin:0!important;
+  color:#fff!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-heading p {
+  display:none!important;
+}
+.settings-embedded-root {
+  width:100%;
+  min-width:0;
+  padding:0 0 calc(132px + env(safe-area-inset-bottom,0px));
+  color:#f5f5f7!important;
+  background:#000!important;
+}
+.settings-embedded-root .ipad-settings-content {
+  width:100%!important;
+  max-width:100%!important;
+  margin:0!important;
+  padding:0 0 24px!important;
+  color:#f5f5f7!important;
+}
+.settings-embedded-root .ipad-settings-content>.space-y-1:first-child {
+  display:none!important;
+}
+.settings-embedded-root .ipad-settings-content section>h3 {
+  padding:0 4px!important;
+  color:#a1a1a8!important;
+  font-size:12px!important;
+  font-weight:600!important;
+  letter-spacing:.035em!important;
+}
+.settings-embedded-root .ipad-settings-content .rounded-2xl.border,
+.settings-embedded-root .ipad-settings-content .settings-apple-about,
+.settings-embedded-root .ipad-settings-content .bg-card {
+  border:1px solid rgba(255,255,255,.09)!important;
+  border-radius:16px!important;
+  background:#1c1c1e!important;
+  color:#f5f5f7!important;
+  box-shadow:none!important;
+}
+.settings-embedded-root .ipad-settings-content .text-content,
+.settings-embedded-root .ipad-settings-content h2,
+.settings-embedded-root .ipad-settings-content h3,
+.settings-embedded-root .ipad-settings-content strong {
+  color:#fff!important;
+}
+.settings-embedded-root .ipad-settings-content .text-muted,
+.settings-embedded-root .ipad-settings-content .text-faint,
+.settings-embedded-root .ipad-settings-content p {
+  color:#8e8e93!important;
+}
+.settings-embedded-root .ipad-settings-content .divide-y>*+* {
+  border-color:rgba(255,255,255,.08)!important;
+}
+.settings-embedded-root .ipad-settings-content button,
+.settings-embedded-root .ipad-settings-content a {
+  color:#f5f5f7;
+}
+.settings-embedded-root .ipad-settings-content input,
+.settings-embedded-root .ipad-settings-content select,
+.settings-embedded-root .ipad-settings-content textarea {
+  color:#f5f5f7!important;
+  border-color:rgba(255,255,255,.14)!important;
+  background:#2c2c2e!important;
+}
+.settings-embedded-root .settings-apple-detail {
+  padding-bottom:32px!important;
+}
+.settings-embedded-root .settings-apple-detail .border-b {
+  border-color:rgba(255,255,255,.12)!important;
+}
+.settings-embedded-root .settings-apple-detail .text-accent {
+  color:#0a84ff!important;
+}
+.settings-embedded-root .settings-apple-detail .rounded-2xl {
+  background:#1c1c1e!important;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-page-title {
+  min-height:42px;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-page-title h2 {
+  color:#fff!important;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-page-title+.text-sm {
+  color:#8e8e93!important;
+}
+.settings-embedded-root .settings-apple-detail .border-line {
+  border-color:rgba(255,255,255,.12)!important;
+}
+
+/* Friday remains a floating control and never participates in navigation layout. */
+body .friday-root .friday-fab {
+  position:fixed!important;
+  z-index:590!important;
+  right:16px!important;
+  left:auto!important;
+  top:auto!important;
+  bottom:calc(88px + env(safe-area-inset-bottom,0px))!important;
+  margin:0!important;
+  flex:none!important;
+  transform:none!important;
+}
+@media(max-width:700px) {
+  .v4-spatial-screen[data-screen="settings"] .v4-spatial-main {
+    padding-left:18px!important;
+    padding-right:18px!important;
+  }
+  .settings-embedded-root {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px)!important;
+  }
+}
+
+/* PR84 settings polish: remove global chrome, prevent light interaction flashes,
+   keep Friday out of the settings canvas, and tighten the scroll tail. */
+.v4-spatial-screen[data-screen="settings"]>.v4-header,
+body:has(.v4-spatial-screen[data-screen="settings"]) .v4-header {
+  display:none!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-main {
+  padding-top:calc(env(safe-area-inset-top,0px) + 12px)!important;
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px)!important;
+}
+.v4-spatial-screen[data-screen="settings"] {
+  padding-top:0!important;
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px)!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-heading {
+  margin-top:0!important;
+  padding-top:0!important;
+  margin-bottom:14px!important;
+}
+.v4-spatial-screen[data-screen="settings"] .v4-spatial-heading h1 {
+  color:#fff!important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content {
+  padding-bottom:24px!important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content button,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content a,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content [role="button"],
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content .cursor-pointer {
+  color:#f5f5f7!important;
+  -webkit-tap-highlight-color:rgba(255,255,255,.08)!important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content button:active,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content button:focus,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content button:focus-visible,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content a:active,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content a:focus,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content a:focus-visible,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content [role="button"]:active,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content [role="button"]:focus,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content [role="button"]:focus-visible,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content .cursor-pointer:active,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content .cursor-pointer:focus {
+  background-color:#1c1c1e!important;
+  color:#fff!important;
+  box-shadow:none!important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content .v4-settings-card--apple:active,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content .v4-settings-card--apple:focus,
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root .ipad-settings-content .v4-settings-card--apple:focus-visible {
+  background:#1c1c1e!important;
+}
+body:has(.v4-spatial-screen[data-screen="settings"]) .friday-root .friday-fab {
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+@media(max-width:700px) {
+  .v4-spatial-screen[data-screen="settings"] .v4-spatial-main {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px)!important;
+  }
+  .v4-spatial-screen[data-screen="settings"] .settings-embedded-root {
+    padding-bottom:20px!important;
+  }
+}

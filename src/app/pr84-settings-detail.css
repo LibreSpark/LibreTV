@@ -1,0 +1,430 @@
+/* PR #84 — unified settings detail-page design system.
+   Scoped to the embedded Settings route so player and other application controls
+   retain their existing behavior and appearance. */
+.v4-spatial-screen[data-screen="settings"] > .v4-spatial-main > .v4-spatial-heading {
+  display: none !important;
+}
+.v4-spatial-screen[data-screen="settings"] > .v4-spatial-main {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 16px calc(132px + env(safe-area-inset-bottom, 0px)) !important;
+}
+.v4-spatial-screen[data-screen="settings"] .settings-embedded-root {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 0 132px !important;
+  color-scheme: dark !important;
+  color: #f5f5f7 !important;
+  background: #000 !important;
+}
+.settings-embedded-root,
+.settings-embedded-root * { box-sizing: border-box; }
+.settings-embedded-root {
+  --settings-bg: #000;
+  --settings-panel: #1c1c1e;
+  --settings-panel-raised: #2c2c2e;
+  --settings-border: rgba(255,255,255,.12);
+  --settings-text: #f5f5f7;
+  --settings-muted: #a1a1a6;
+  --settings-accent: #0a84ff;
+  --settings-switch: #34c759;
+  color: var(--settings-text) !important;
+  color-scheme: dark !important;
+}
+.settings-embedded-root .settings-nav-bar {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-height: 44px !important;
+  height: 44px !important;
+  margin: 0 auto 20px !important;
+  padding: 0 8px !important;
+  border-bottom: 1px solid rgba(255,255,255,.08) !important;
+  background: #000 !important;
+}
+.settings-embedded-root .settings-nav-title,
+.settings-embedded-root .settings-nav-center {
+  color: #fff !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  font-weight: 650 !important;
+  letter-spacing: -.2px !important;
+}
+.settings-embedded-root .settings-nav-back,
+.settings-embedded-root .collector-subnav-back {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 4px !important;
+  width: auto !important;
+  min-width: 76px !important;
+  max-width: 48% !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  color: #0a84ff !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+.settings-embedded-root .settings-nav-back > span:first-child,
+.settings-embedded-root .collector-subnav-back > span:first-child {
+  font-size: 27px !important;
+  font-weight: 300 !important;
+  line-height: .8 !important;
+}
+.settings-embedded-root .settings-nav-back:active,
+.settings-embedded-root .collector-subnav-back:active {
+  background: rgba(255,255,255,.08) !important;
+}
+.settings-embedded-root .ipad-settings-content {
+  width: 100% !important;
+  max-width: 680px !important;
+  margin-inline: auto !important;
+  padding: 0 0 24px !important;
+  color: var(--settings-text) !important;
+}
+.settings-embedded-root .settings-apple-detail-heading {
+  margin: 0 0 20px !important;
+  padding: 2px 2px 16px !important;
+  border-color: var(--settings-border) !important;
+}
+.settings-embedded-root .settings-apple-detail-heading h2 {
+  margin: 0 !important;
+  color: #fff !important;
+  font-size: clamp(25px, 6vw, 30px) !important;
+  line-height: 1.18 !important;
+  font-weight: 720 !important;
+  letter-spacing: -.65px !important;
+}
+.settings-embedded-root .settings-apple-detail-heading p {
+  margin: 7px 0 0 !important;
+  color: var(--settings-muted) !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
+.settings-embedded-root .collector-subnav-back {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  margin: 0 0 10px -8px !important;
+}
+.settings-embedded-root .collector-subpage-heading {
+  margin: 0 0 16px !important;
+  padding: 0 2px 14px !important;
+  border-color: var(--settings-border) !important;
+}
+.settings-embedded-root .collector-subpage-heading h3 {
+  margin: 0 !important;
+  color: #fff !important;
+  font-size: 21px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+}
+.settings-embedded-root .collector-subpage-heading p {
+  margin-top: 6px !important;
+  color: var(--settings-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+/* All settings buttons start from an explicit dark baseline, not browser chrome. */
+.settings-embedded-root button {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  font-family: inherit !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+.settings-embedded-root button:not(.btn-primary):not(.btn-ghost):not(.settings-nav-back):not(.collector-subnav-back):not([role="switch"]) {
+  color: var(--settings-text);
+  border-color: transparent;
+  background-color: transparent;
+}
+.settings-embedded-root button:focus-visible {
+  outline: 2px solid rgba(10,132,255,.75) !important;
+  outline-offset: 2px !important;
+}
+.settings-embedded-root button:active:not([role="switch"]) {
+  background-color: #2c2c2e !important;
+}
+.settings-embedded-root .btn-primary,
+.settings-embedded-root button.btn-primary {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  min-height: 40px !important;
+  padding: 0 15px !important;
+  border: 1px solid rgba(10,132,255,.5) !important;
+  border-radius: 11px !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  background: #0a84ff !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+.settings-embedded-root .btn-primary:disabled { opacity: .48 !important; }
+.settings-embedded-root .btn-ghost,
+.settings-embedded-root button.btn-ghost {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-height: 38px !important;
+  padding: 0 12px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 10px !important;
+  color: #f5f5f7 !important;
+  -webkit-text-fill-color: #f5f5f7 !important;
+  background: #2c2c2e !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+.settings-embedded-root .btn-ghost:hover,
+.settings-embedded-root .btn-ghost:active { background: #3a3a3c !important; }
+.settings-embedded-root .settings-apple-detail .rounded-2xl,
+.settings-embedded-root .settings-apple-detail .rounded-xl,
+.settings-embedded-root .settings-apple-detail .rounded-lg {
+  border-color: var(--settings-border) !important;
+}
+.settings-embedded-root .settings-apple-detail .bg-card,
+.settings-embedded-root .settings-apple-detail .bg-chip,
+.settings-embedded-root .settings-apple-detail [class*="bg-card"],
+.settings-embedded-root .settings-apple-detail [class*="bg-chip"] {
+  background-color: var(--settings-panel) !important;
+}
+/* Form controls: same height, dark fill, readable text, no native white chrome. */
+.settings-embedded-root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.settings-embedded-root textarea,
+.settings-embedded-root select,
+.settings-embedded-root .input {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  padding: 10px 12px !important;
+  border: 1px solid rgba(255,255,255,.14) !important;
+  border-radius: 11px !important;
+  outline: none !important;
+  color: #f5f5f7 !important;
+  -webkit-text-fill-color: #f5f5f7 !important;
+  background: #1c1c1e !important;
+  box-shadow: none !important;
+  font: inherit !important;
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+}
+.settings-embedded-root input::placeholder,
+.settings-embedded-root textarea::placeholder {
+  color: #8e8e93 !important;
+  -webkit-text-fill-color: #8e8e93 !important;
+  opacity: 1 !important;
+}
+.settings-embedded-root input:focus,
+.settings-embedded-root textarea:focus,
+.settings-embedded-root select:focus,
+.settings-embedded-root .input:focus {
+  border-color: rgba(10,132,255,.72) !important;
+  box-shadow: 0 0 0 3px rgba(10,132,255,.14) !important;
+}
+.settings-embedded-root input:disabled { opacity: .58 !important; }
+.settings-embedded-root input[type="checkbox"],
+.settings-embedded-root input[type="radio"] {
+  appearance: auto !important;
+  -webkit-appearance: auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  padding: 0 !important;
+  accent-color: #34c759 !important;
+  flex: 0 0 18px !important;
+}
+.settings-embedded-root input[type="range"] { accent-color: #34c759 !important; }
+.settings-embedded-root .settings-toggle-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  min-height: 56px !important;
+  padding: 9px 0 !important;
+}
+.settings-embedded-root .settings-toggle-copy {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  padding-right: 4px !important;
+}
+.settings-embedded-root .settings-toggle-copy > div:first-child {
+  color: #f5f5f7 !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+.settings-embedded-root .settings-toggle-copy > div:nth-child(2) {
+  max-width: 46ch !important;
+  margin-top: 3px !important;
+  color: #a1a1a6 !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  overflow-wrap: anywhere !important;
+}
+.settings-embedded-root button[role="switch"] {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  flex: 0 0 44px !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 2px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: #48484a !important;
+  box-shadow: none !important;
+  transition: background-color .18s ease !important;
+}
+.settings-embedded-root button[role="switch"][aria-checked="true"] {
+  justify-content: flex-end !important;
+  background: #34c759 !important;
+}
+.settings-embedded-root button[role="switch"] > span {
+  position: static !important;
+  display: block !important;
+  flex: 0 0 22px !important;
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.28) !important;
+  transform: none !important;
+}
+.settings-embedded-root .settings-apple-detail .space-y-3 > *,
+.settings-embedded-root .settings-apple-detail .space-y-4 > * { min-width: 0; }
+.settings-embedded-root .settings-apple-detail .flex.flex-wrap { row-gap: 10px !important; }
+.settings-embedded-root .settings-apple-detail .flex.items-center.justify-between { gap: 14px !important; }
+.settings-embedded-root .settings-apple-detail .space-y-2 > label {
+  display: block !important;
+  min-width: 0 !important;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-icon { flex: 0 0 auto !important; }
+.settings-embedded-root .settings-apple-detail .text-content,
+.settings-embedded-root .settings-apple-detail h3,
+.settings-embedded-root .settings-apple-detail h4 { color: #f5f5f7 !important; }
+.settings-embedded-root .settings-apple-detail .text-muted,
+.settings-embedded-root .settings-apple-detail .text-faint { color: #a1a1a6 !important; }
+.settings-embedded-root .settings-apple-detail a {
+  color: #64aaff !important;
+  overflow-wrap: anywhere;
+}
+.settings-embedded-root .settings-apple-detail .rounded-2xl.border,
+.settings-embedded-root .settings-apple-detail .rounded-xl.border,
+.settings-embedded-root .settings-apple-detail .rounded-lg.border { background-color: #1c1c1e !important; }
+.settings-embedded-root .settings-apple-detail .rounded-2xl.border .bg-chip,
+.settings-embedded-root .settings-apple-detail .rounded-xl.border .bg-chip { background-color: #2c2c2e !important; }
+.settings-embedded-root .settings-apple-detail .settings-apple-page-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-page-title .settings-apple-icon {
+  width: 40px !important;
+  height: 40px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 12px !important;
+  background: #1c1c1e !important;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-page-title h2 {
+  color: #fff !important;
+  font-size: 27px !important;
+  font-weight: 720 !important;
+  letter-spacing: -.6px !important;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-about {
+  padding: 18px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 16px !important;
+  background: #1c1c1e !important;
+}
+.settings-embedded-root .settings-apple-detail .settings-apple-about h3 {
+  color: #fff !important;
+  font-size: 18px !important;
+}
+@media (max-width: 700px) {
+  .v4-spatial-screen[data-screen="settings"] > .v4-spatial-main { padding-inline: 16px !important; }
+  .settings-embedded-root .settings-nav-bar { margin-bottom: 18px !important; }
+  .settings-embedded-root .settings-apple-detail-heading h2 { font-size: 27px !important; }
+  .settings-embedded-root .settings-toggle-row { gap: 14px !important; }
+  .settings-embedded-root .settings-toggle-copy > div:nth-child(2) { max-width: 30ch !important; }
+  .settings-embedded-root .settings-apple-detail .flex.items-center.justify-between { align-items: flex-start !important; }
+  .settings-embedded-root .settings-apple-detail .flex.items-center.justify-between > :last-child { flex: 0 0 auto !important; }
+  .settings-embedded-root .settings-apple-detail .flex.flex-wrap > .btn-primary,
+  .settings-embedded-root .settings-apple-detail .flex.flex-wrap > .btn-ghost {
+    flex: 1 1 auto !important;
+    min-width: 112px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-embedded-root button,
+  .settings-embedded-root button[role="switch"] { transition: none !important; }
+}
+
+/* Final control sizing pass: chips and unclassified actions must still read as
+   deliberate dark controls; token input remains fluid beside its reveal button. */
+.settings-embedded-root button:not(.btn-primary):not(.btn-ghost):not(.settings-nav-back):not(.collector-subnav-back):not([role="switch"]) {
+  border: 1px solid rgba(255,255,255,.08) !important;
+  background-color: #1c1c1e !important;
+}
+.settings-embedded-root .ipad-settings-content section > div > button {
+  min-height: 64px !important;
+  border-color: rgba(255,255,255,.08) !important;
+  border-radius: 0 !important;
+  background: #2c2c2e !important;
+  color: #f5f5f7 !important;
+}
+.settings-embedded-root .ipad-settings-content section > div > button:active {
+  background: #3a3a3c !important;
+}
+.settings-embedded-root .chip {
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 999px !important;
+  color: #d1d1d6 !important;
+  background: #2c2c2e !important;
+}
+.settings-embedded-root .chip[aria-pressed="true"] {
+  color: #64aaff !important;
+  border-color: rgba(10,132,255,.34) !important;
+  background: rgba(10,132,255,.16) !important;
+}
+.settings-embedded-root .settings-apple-detail .flex > input.input {
+  width: auto !important;
+  flex: 1 1 0% !important;
+}
+@media (max-width: 700px) {
+  .settings-embedded-root .settings-apple-detail .settings-toggle-row {
+    align-items: center !important;
+  }
+}

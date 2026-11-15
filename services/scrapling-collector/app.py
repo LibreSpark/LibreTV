@@ -26,6 +26,7 @@ from scrapling.spiders import Response, Spider
 from registry_queue import JobCancelled, router as registry_router, register_candidate_playback, register_discovered_candidate, sync_candidate_validation
 import registry_queue as registry_store
 from stats import build_stats
+from seedhub import router as seedhub_router
 
 FMHY_VIDEO_URL = "https://fmhy.net/video"
 TOKEN = os.environ.get("SCRAPLING_API_TOKEN", "").strip()
@@ -58,6 +59,7 @@ if not TOKEN:
 
 app = FastAPI(title="LibreTV FMHY Scrapling Collector", docs_url=None, redoc_url=None)
 app.include_router(registry_router)
+app.include_router(seedhub_router)
 
 # Scrapling stores adaptive selector fingerprints in its own SQLite storage.
 Fetcher.adaptive = True

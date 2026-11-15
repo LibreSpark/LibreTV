@@ -4,19 +4,35 @@ import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-describe('iPhone homepage inline playback and top search', () => {
+describe('movie detail authentication retry', () => {
+  const detailPage = read('src/components/movie-detail-page.tsx');
+
+  it('retries the pending detail request after the shared login state becomes verified', () => {
+    expect(detailPage).toContain('const { checked, verified } = useAuth();');
+    expect(detailPage).toContain('if (!checked) return;');
+    expect(detailPage).toContain('[sourceKey, vodId, source, checked, verified]');
+  });
+});
+
+describe('iPhone homepage detail navigation and top search', () => {
   const home = read('src/app/page.tsx');
   const player = read('src/components/home/HomeInlinePlayer.tsx');
   const mobileSearch = read('src/app/iphone-home-inline.css');
-  const featuredHero = read('src/components/home/V4HomepageHero.tsx');
+  const homepageHero = read('src/components/home/V4HomepageHero.tsx');
+  const homepageContent = read('src/components/home/V4HomepageContent.tsx');
 
-  it('homepage recommendation posters open the inline player instead of the detail route', () => {
-    expect(home).toContain('const rankedMatches = rankMovieCandidatesByQuality(');
-    expect(home).toContain('setQuickPlayItem(rankedMatches[0]);');
-    expect(featuredHero).toContain('aria-label={`立即播放：${slide.title}`}');
-    expect(featuredHero).toContain('onClick={() => onPick(slide)}');
-    expect(home).toContain('onOpen={(item) => setQuickPlayItem(item)}');
-    expect(home).toContain('<HomeInlinePlayer item={quickPlayItem}');
+  it('homepage uses Douban featured artwork and real recommendation rails for detail navigation', () => {
+    expect(home).toContain('<V4HomepageHero onPick={handleHomepagePick} />');
+    expect(home).toContain('<V4HomepageContent onPick={handleHomepagePick} />');
+    expect(home).not.toContain('SeedHubHomepage');
+    expect(homepageHero).toContain("api.douban('movie', '热门'");
+    expect(homepageHero).toContain('slide.cover');
+    expect(homepageContent).toContain("api.douban('tv', '热门'");
+    expect(homepageContent).toContain("api.douban('movie', '热门'");
+    expect(homepageContent).toContain("api.hotList('douban_movie_weekly'");
+    expect(homepageContent).toContain('url={item.cover}');
+    expect(home).toContain('api.search(movie.title, selectedSources, yellowFilter)');
+    expect(home).toContain("router.push('/detail?' + params.toString())");
     expect(player).toContain("import('@/components/player-shell')");
     expect(player).toContain('api.detail(item.vodId, source, controller.signal)');
     expect(player).toContain('<PlayerShell');
@@ -74,11 +90,12 @@ describe('iPhone shared navigation, routed playback and runtime cleanup', () => 
     expect(spatial).toContain('<V4HomepageHeader />');
   });
 
-  it('routes catalogue posters and resource results into the shared inline player', () => {
+  it('routes catalogue posters, resource results and personal library entries into the detail center', () => {
     expect(spatial).toContain('const openRecommendation = async (movie: DoubanItem)');
     expect(spatial).toContain('onPick={openRecommendation}');
-    expect(spatial).toContain('<HomeInlinePlayer item={quickPlayItem}');
-    expect(spatial).not.toContain('router.push');
+    expect(spatial).toContain('onPick={openDetail}');
+    expect(spatial).toContain("router.push('/detail?' + params.toString())");
+    expect(spatial).toContain("const href = '/detail?' + params.toString()");
     expect(spatial).toContain('onClick={() => onPick(item)}');
   });
 
@@ -89,7 +106,8 @@ describe('iPhone shared navigation, routed playback and runtime cleanup', () => 
   });
 
   it('wires the homepage Friday orb tap to the existing synchronous voice start path', () => {
-    expect(homepageHeader).toContain('<AIFloatingBall showFab inlineMode={false}/>');
+    expect(homepageHeader).toContain("pathname !== '/detail'");
+    expect(homepageHeader).toContain('<AIFloatingBall showFab inlineMode={false} />');
     expect(friday).toContain('onOpen: openAndListen');
     expect(friday).toContain('onClick={handleFabClick}');
     expect(friday).toContain('const openAndListen = useCallback(() => {');
@@ -99,8 +117,8 @@ describe('iPhone shared navigation, routed playback and runtime cleanup', () => 
   });
 
   it('keeps the iPhone header search accessible and the orb tap independent of pointer capture', () => {
-    expect(searchModule).toContain('aria-label="搜索电影、电视剧"');
-    expect(searchModule).toContain('onSubmit');
+    expect(searchModule).toContain('aria-label="搜索"');
+    expect(searchModule).toContain("router.push('/search')");
     expect(mobileSearch).toContain('min-width: 84px !important;');
     expect(mobileSearch).toContain('.v4-header .v4-primary-nav');
     expect(fridayFab).not.toContain('setPointerCapture');
@@ -134,17 +152,17 @@ describe('iPhone shared navigation, routed playback and runtime cleanup', () => 
 
   it('keeps the shared player inline on iOS and preserves the fixed four-item dock', () => {
     const playerShell = read('src/components/player-shell.tsx');
-    const mobileLayout = read('src/app/iphone-glass.css');
+    const dockStyles = read('src/app/pr84-apple-tv-dock.css');
     expect(playerShell).toContain('playsInline: true');
     expect(playerShell).toContain('backdrop: false');
-    expect(playerShell).toContain('moreVideoAttr: { crossOrigin: \'anonymous\', playsInline: true }');
+    expect(playerShell).toContain('moreVideoAttr: { crossOrigin: \'anonymous\', playsInline: true,');
     expect(playerShell).toContain('setShowPlayFallback(true)');
     expect(playerShell).toContain('轻点开始播放');
     expect(playerShell).toContain('void art.play().then(() => setShowPlayFallback(false))');
-    expect(mobileLayout).toContain('.v4-mobile-tabbar {');
-    expect(mobileLayout).toContain('position: fixed;');
-    expect(mobileLayout).toContain('bottom: 0;');
-    expect(mobileLayout).toContain('env(safe-area-inset-bottom, 0px)');
+    expect(dockStyles).toContain('> nav.v4-mobile-tabbar {');
+    expect(dockStyles).toContain('position: fixed !important;');
+    expect(dockStyles).toContain('bottom: 0 !important;');
+    expect(dockStyles).toContain('height: calc(var(--tabbar-height) + var(--safe-area-bottom)) !important;');
   });
 
   it('applies light-theme colors to routed iPhone screens and keeps safe-area paint below the dock', () => {

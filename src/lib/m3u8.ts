@@ -13,7 +13,7 @@ export const LIVE_STREAM_BASE = '/api/live/stream?url=';
 
 /** URI 已是本站代理地址（新旧两种形式：/api/proxy/…、/api/proxy?url=…、/api/live/stream/…、/api/live/stream?url=…）时不再二次改写 */
 export function isProxiedUri(uri: string): boolean {
-  return uri.startsWith('/api/proxy') || uri.startsWith('/api/live/stream');
+  return /^\/api\/(?:proxy|live\/stream)(?:[/?#]|$)/.test(uri);
 }
 
 /**
@@ -46,13 +46,15 @@ export function rewriteM3u8(
   if (depth > 5) return content;
   const lines = content.split('\n');
   const out = lines.map((line) => {
-    if (line.startsWith('#EXT-X-KEY') || line.startsWith('#EXT-X-MAP')) {
-      return line.replace(/(URI=")([^"]+)(")/g, (m, p1: string, uri: string, p2: string) => {
-        if (isProxiedUri(uri)) return m;
-        return p1 + prefix + encodeURIComponent(makeAbsolute(uri, baseUrl)) + p2;
+    if (line.startsWith('#')) {
+      // URI 属性也出现在 MEDIA、I-FRAME-STREAM-INF、SESSION-KEY 等标签，
+      // 不仅是 KEY/MAP；统一改写，避免播放器绕过本站直播 SSRF 校验。
+      return line.replace(/(\bURI\s*=\s*")([^"]+)(")/gi, (match, before: string, uri: string, after: string) => {
+        if (isProxiedUri(uri)) return match;
+        return before + prefix + encodeURIComponent(makeAbsolute(uri, baseUrl)) + after;
       });
     }
-    if (line.startsWith('#') || line.trim() === '') return line;
+    if (line.trim() === '') return line;
     if (isProxiedUri(line)) return line;
     return prefix + encodeURIComponent(makeAbsolute(line, baseUrl));
   });

@@ -1,0 +1,50 @@
+name: PR84 KKPhim Read-only Source Probe
+
+on:
+  push:
+    branches:
+      - feature/homepage-cinema-lobby-order-2026-11-11
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: libretv-pr84-kkphim-probe
+  # Each probe is read-only; newer commits supersede stale runs and their queue.
+  cancel-in-progress: true
+
+jobs:
+  kkphim-probe:
+    name: Verify KKPhim API, episode metadata and HLS manifest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR84 feature commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test KKPhim probe response parsers
+        run: node --test scripts/pr84-kkphim-probe-utils.test.mjs
+      - name: Install Chrome for dynamic KKPhim embed inspection and PlayerShell playback
+        timeout-minutes: 10
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chrome
+      - name: Probe KKPhim metadata, embed/HLS paths, dynamic player requests, manifest and segment (read-only)
+        id: probe
+        timeout-minutes: 12
+        env:
+          PR84_BROWSER_CHANNEL: chrome
+        run: node scripts/pr84-kkphim-readonly-probe.mjs
+      - name: Verify KKPhim stream in LibreTV PlayerShell
+        timeout-minutes: 10
+        env:
+          PR84_PREVIEW_URL: https://libretv-pr84-preview.bggdbh.workers.dev
+          PR84_BROWSER_CHANNEL: chrome
+          PR84_KKPHIM_M3U8: ${{ steps.probe.outputs.kkphim_m3u8 }}
+        run: node scripts/pr84-preview-player-smoke.mjs

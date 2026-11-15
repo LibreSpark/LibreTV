@@ -62,7 +62,6 @@ export async function GET(req: NextRequest) {
       timeoutMs: IMAGE_TIMEOUT_MS,
       signal: req.signal,
       retries: 0,
-      safeRedirects: true,
       cache: 'no-store',
     });
 

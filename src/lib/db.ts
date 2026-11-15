@@ -73,7 +73,7 @@ export interface SegmentMetaEntry {
   lastAccess: number;
 }
 
-export type DownloadStatus = 'waiting' | 'downloading' | 'paused' | 'completed' | 'error';
+export type DownloadStatus = 'queued' | 'waiting' | 'validating' | 'downloading' | 'merging' | 'paused' | 'completed' | 'failed' | 'cancelled' | 'error';
 
 export interface DownloadTaskEntry {
   id: string;
@@ -82,7 +82,11 @@ export interface DownloadTaskEntry {
   title: string;
   /** 输出格式 */
   format: 'TS' | 'MP4';
+  /** 输入媒体类型，仅作识别与诊断；不会把 m3u8 URL 当成 MP4 文件 */
+  sourceFormat?: 'HLS' | 'MP4' | 'OTHER';
   status: DownloadStatus;
+  /** 最近一次可操作失败原因 */
+  errorMessage?: string;
   finished: number;
   total: number;
   errorNum: number;

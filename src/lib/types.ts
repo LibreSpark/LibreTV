@@ -27,7 +27,11 @@ export interface SearchResultItem {
 
 export interface VideoInfo {
   title?: string;
+  /** Original-language title supplied by the CMS when available. */
+  originalTitle?: string;
   cover?: string;
+  /** Wide cinematic artwork, distinct from the vertical title poster. */
+  backdrop?: string;
   desc?: string;
   typeName?: string;
   year?: string;
@@ -40,8 +44,34 @@ export interface VideoInfo {
   sourceUrl?: string;
 }
 
+export interface VideoEpisode {
+  /** 资源站 vod_play_url 中提供的真实分集名称；没有时为空字符串。 */
+  title: string;
+  url: string;
+  /** Optional original still URL, only when explicitly supplied for this episode. */
+  image?: string;
+  /** Original image URL and exact episode stream URL retained for provenance. */
+  imageSourceUrl?: string;
+  imageSourceEpisodeUrl?: string;
+  /** Capture/extraction timestamp supplied by the source; never synthesized. */
+  imageCapturedAt?: string;
+  /** External episode-artwork provenance; populated only after an exact season/episode match. */
+  tmdbSeriesId?: number;
+  tmdbEpisodeId?: number;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  imageSource?: 'tmdb';
+  imageKind?: 'episode-still' | 'series-backdrop';
+  /** Localized episode title from CMS/TMDB; separate from the source's episode index label. */
+  episodeName?: string;
+  description?: string;
+  duration?: string;
+}
+
 export interface VideoDetail {
   episodes: string[];
+  /** 可选的真实分集名称与地址；保留 episodes 以兼容现有播放器。 */
+  episodeItems?: VideoEpisode[];
   videoInfo: VideoInfo;
 }
 
@@ -49,6 +79,8 @@ export interface DoubanItem {
   id: string;
   title: string;
   cover: string;
+  /** Optional native HDR / Ultra HDR image URL; SDR cover remains the universal fallback. */
+  coverHdr?: string;
   rating?: string;
   isTv?: boolean;
 }
@@ -134,17 +166,28 @@ export interface RegistrySearchResource {
   source_name?: string;
 }
 
+export interface SeedHubSearchItem {
+  source_url: string;
+  title: string;
+  category: 'movies' | 'series' | 'anime';
+  poster_url: string | null;
+  discovered_at: number;
+  detail?: Record<string, unknown> | null;
+}
+
 export interface SearchResponse {
   list: SearchResultItem[];
   failures: { sourceKey: string; error: string; timedOut?: boolean }[];
   /** Verified playable resources are supplemental; never coerce direct media into CMS VOD results. */
   registryResources?: RegistrySearchResource[];
+  /** Public SeedHub catalogue metadata; not a playable-source assertion. */
+  seedhubItems?: SeedHubSearchItem[];
 }
 
 /** /api/search?stream=1 的 NDJSON 事件：逐源推送 + 最终聚合 */
 export type SearchStreamEvent =
   | ({ type: 'source' } & SourceSearchOutcome)
-  | { type: 'done'; list: SearchResultItem[]; failures: SearchResponse['failures']; registryResources?: RegistrySearchResource[] };
+  | { type: 'done'; list: SearchResultItem[]; failures: SearchResponse['failures']; registryResources?: RegistrySearchResource[]; seedhubItems?: SeedHubSearchItem[] };
 
 export interface DoubanResponse {
   items: DoubanItem[];

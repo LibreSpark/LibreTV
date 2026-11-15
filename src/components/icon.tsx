@@ -25,7 +25,20 @@ export type IconName =
   | 'link'
   | 'alert'
   | 'gear'
-  | 'home';
+  | 'home'
+  | 'play'
+  | 'database'
+  | 'radio'
+  | 'rss'
+  | 'palette'
+  | 'image'
+  | 'languages'
+  | 'house'
+  | 'audio-lines'
+  | 'shield-check'
+  | 'database-backup'
+  | 'network'
+  | 'info';
 
 const PATHS: Record<IconName, ReactNode> = {
   close: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />,
@@ -145,6 +158,19 @@ const PATHS: Record<IconName, ReactNode> = {
       d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75"
     />
   ),
+  play: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M8 5.5v13l10-6.5-10-6.5Z" />,
+  database: <><ellipse cx="12" cy="5" rx="8" ry="3" strokeWidth={1.7}/><path strokeWidth={1.7} d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/></>,
+  radio: <><circle cx="12" cy="13" r="2" strokeWidth={1.7}/><path strokeWidth={1.7} d="M5.6 6.6a9 9 0 0 0 0 12.8M18.4 6.6a9 9 0 0 1 0 12.8M8.5 9.5a5 5 0 0 0 0 7M15.5 9.5a5 5 0 0 1 0 7"/></>,
+  rss: <><path strokeWidth={1.7} d="M5 19h.01M5 12a7 7 0 0 1 7 7M5 5a14 14 0 0 1 14 14"/><circle cx="5" cy="19" r="1" strokeWidth={1.7}/></>,
+  palette: <><path strokeWidth={1.7} d="M12 3a9 9 0 1 0 0 18h1.2a2.1 2.1 0 0 0 1.5-3.6 1.7 1.7 0 0 1 1.2-2.9H18a3 3 0 0 0 3-3c0-4.7-4-8.5-9-8.5Z"/><circle cx="7.5" cy="11" r=".8"/><circle cx="10" cy="7.5" r=".8"/><circle cx="15" cy="8" r=".8"/></>,
+  image: <><rect x="3" y="4" width="18" height="16" rx="2" strokeWidth={1.7}/><circle cx="8.5" cy="9" r="1.5" strokeWidth={1.7}/><path strokeWidth={1.7} d="m4 17 5-5 3.5 3 2.5-2 5 4"/></>,
+  languages: <><circle cx="12" cy="12" r="9" strokeWidth={1.7}/><path strokeWidth={1.7} d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></>,
+  house: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m3 11 9-7 9 7M5.5 10v10h13V10M9 20v-6h6v6"/>,
+  'audio-lines': <><path strokeWidth={1.7} d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></>,
+  'shield-check': <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 3 19 6v5c0 4.8-3 8-7 10-4-2-7-5.2-7-10V6l7-3Zm-3 9 2 2 4-4"/>,
+  'database-backup': <><ellipse cx="11" cy="5" rx="7" ry="2.5" strokeWidth={1.7}/><path strokeWidth={1.7} d="M4 5v6c0 1.4 3.1 2.5 7 2.5M4 11v5c0 1.4 3.1 2.5 7 2.5"/><path strokeWidth={1.7} d="M17 13v7m-3-3 3-3 3 3"/></>,
+  network: <><circle cx="12" cy="5" r="2" strokeWidth={1.7}/><circle cx="5" cy="18" r="2" strokeWidth={1.7}/><circle cx="19" cy="18" r="2" strokeWidth={1.7}/><path strokeWidth={1.7} d="m11 7-5 9m7-9 5 9M7 18h10"/></>,
+  info: <><circle cx="12" cy="12" r="9" strokeWidth={1.7}/><path strokeWidth={1.7} d="M12 11v5m0-8h.01"/></>
 };
 
 export function Icon({ name, className = 'w-5 h-5' }: { name: IconName; className?: string }) {

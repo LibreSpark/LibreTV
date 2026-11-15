@@ -1,5 +1,4 @@
-/* Mobile-only navigation dock; desktop and tablet retain the full header navigation. */
-.v4-mobile-tabbar { display: none; }
+
 .v4-mobile-search-toggle { display: none; }
 
 /* LibreTV iPhone Safari profile
@@ -189,65 +188,7 @@
   .v4-resource-search input,
   .v4-resource-search button { width: 100%; min-height: 46px; }
   .v4-resource-result { min-width: 0; overflow-wrap: anywhere; }
-
-  /* Fixed four-destination dock. Its surface continues behind the iOS home indicator. */
-  .v4-mobile-tabbar {
-    position: fixed;
-    z-index: 220;
-    inset-inline: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    gap: 4px;
-    min-height: 62px;
-    padding: 7px 10px calc(7px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid rgba(128, 128, 140, .20);
-    color: rgb(var(--glass-text, 28 28 32));
-    background: rgba(var(--glass-panel-rgb, 250, 250, 252), .88);
-    -webkit-backdrop-filter: blur(22px) saturate(160%);
-    backdrop-filter: blur(22px) saturate(160%);
-    box-shadow: 0 -8px 28px rgba(0, 0, 0, .10);
-  }
-  .v4-mobile-tabbar a {
-    position: relative;
-    display: flex;
-    flex: 1 1 0;
-    min-width: 0;
-    min-height: 46px;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    border-radius: 13px;
-    color: inherit;
-    text-decoration: none;
-    font-size: 11px;
-    font-weight: 560;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .v4-mobile-tabbar a svg {
-    width: 20px;
-    height: 20px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .v4-mobile-tabbar a.is-active {
-    color: #D99A38;
-    background: rgba(217, 154, 56, .10);
-  }
-  .v4-mobile-tabbar a i {
-    position: absolute;
-    top: 2px;
-    width: 16px;
-    height: 2px;
-    border-radius: 2px;
-    background: currentColor;
-  }
-  body:has(.v4-mobile-tabbar) { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  body:has(.v4-mobile-tabbar) { padding-bottom: var(--tabbar-scroll-clearance); }
   body:has(.v4-home) .friday-fab {
     top: 42%;
     right: 12px;

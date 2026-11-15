@@ -1,0 +1,159 @@
+/* LibreTV Liquid Glass v1.0 — CSS is a minimal compatibility fallback.
+ * The upstream optical layer is rendered independently behind real controls.
+ * Keep this layer quiet so it never competes with refraction or content.
+ */
+.liquid-glass {
+  position: relative;
+  isolation: isolate;
+  background: rgba(12, 14, 19, .10);
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+  -webkit-backdrop-filter: blur(2px) saturate(108%);
+  backdrop-filter: blur(2px) saturate(108%);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.liquid-glass::before,
+.liquid-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.liquid-glass::before {
+  background: linear-gradient(180deg, rgba(255,255,255,.07), transparent 62%);
+  opacity: .32;
+}
+
+.liquid-glass::after {
+  border: 1px solid rgba(255,255,255,.055);
+  opacity: .5;
+}
+
+.liquid-glass-engine-slot {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.liquid-glass-engine-slot > * {
+  position: absolute !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+
+.liquid-glass-engine-root {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  transform: none !important;
+}
+
+.liquid-glass-engine-root > .glass {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  border-radius: inherit !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.liquid-glass-engine-root .glass__warp {
+  border-radius: inherit;
+}
+
+.liquid-glass > .liquid-glass-engine-slot {
+  z-index: 0;
+}
+
+.liquid-glass > :not(.liquid-glass-engine-slot) {
+  position: relative;
+  z-index: 1;
+}
+
+.liquid-glass[data-liquid-glass-engine="ready"] {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.liquid-glass[data-liquid-glass-engine="ready"]::before,
+.liquid-glass[data-liquid-glass-engine="ready"]::after {
+  display: none !important;
+}
+
+.liquid-glass--interactive {
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+.liquid-glass--interactive:active {
+  filter: brightness(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-glass--interactive {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .liquid-glass:not([data-liquid-glass-engine="ready"]) {
+    background: rgba(24, 24, 28, .94);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+
+/* Semantic buttons stay native and clickable; the optical engine lives on the
+   block wrapper so its internal div layers never become invalid button children. */
+.liquid-glass-button-wrap {
+  display: inline-flex;
+  min-width: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.liquid-glass-button-content {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: inherit;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.liquid-glass-button-content:focus-visible {
+  outline: 2px solid rgba(100, 170, 255, .9);
+  outline-offset: 2px;
+}
+
+.liquid-glass-button-content:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}

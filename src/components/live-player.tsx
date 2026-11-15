@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Artplayer from 'artplayer';
 import Hls, { type HlsConfig } from 'hls.js';
+import { LiveNetworkRecovery } from '@/lib/live-playback-recovery';
 import { Spinner } from './states';
 import { prefersTouchPointer } from '@/lib/touch-pointer';
 import { ART_DEFAULT_CONTROL_HIDE_MS, TOUCH_CONTROL_HIDE_MS } from '@/lib/control-hide';
@@ -145,7 +146,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     /** HLS 直播参数：小缓冲、快速追帧；与点播（大缓冲、进度恢复）刻意区分 */
     const setupHls = (video: HTMLVideoElement, mediaUrl: string, stage: 'direct' | 'proxy') => {
       cleanupEngines();
-      let liveNetRetryCount = 0;
+      const liveRecovery = new LiveNetworkRecovery(5);
       let mediaRecoverCount = 0;
       const hlsConfig: Partial<HlsConfig> = {
         debug: false,
@@ -174,6 +175,10 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
           }
         }
         video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.FRAG_LOADED, () => {
+        // 分片成功才代表直播链路真正恢复，清零连续网络错误计数。
+        liveRecovery.markFragmentLoaded();
       });
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (disposed || destroyed) return;
@@ -207,9 +212,9 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
           return;
         }
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          // 播放中网络抖动：尝试恢复拉流；连续失败达到阈值则报错退出
-          liveNetRetryCount++;
-          if (liveNetRetryCount > 5) {
+          // 播放中网络抖动：成功收到媒体分片后计数归零；连续失败达到阈值才退出
+          const recovery = liveRecovery.onNetworkError();
+          if (recovery.action === 'stop') {
             setError(`直播流中断${codeHint}，该源可能已失效，请尝试其他频道`);
             return;
           }

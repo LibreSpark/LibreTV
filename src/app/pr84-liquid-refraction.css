@@ -1,0 +1,415 @@
+/* PR84 — system-wide Liquid Glass / optical refraction layer.
+ * The page gets a restrained ambient optical field; UI surfaces receive edge
+ * refraction and specular light. Content and media pixels are never filtered.
+ */
+
+:root {
+  --lg-page-canvas: #000;
+  --lg-surface-tint: rgba(30, 30, 34, .42);
+  --lg-rim: rgba(255, 255, 255, .18);
+  --lg-specular: rgba(255, 255, 255, .22);
+  --lg-edge-glow: rgba(255, 255, 255, .24);
+}
+
+html,
+body {
+  background-color: var(--lg-page-canvas);
+}
+
+/* Whole-page refraction atmosphere: stays behind the app and never blurs text. */
+body {
+  position: relative;
+  isolation: isolate;
+}
+body::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: -18%;
+  pointer-events: none;
+  opacity: .34;
+  background:
+    radial-gradient(48% 34% at 12% 18%, rgba(91,145,190,.10), transparent 72%),
+    radial-gradient(42% 38% at 88% 72%, rgba(180,190,205,.075), transparent 74%),
+    radial-gradient(58% 24% at 52% 0%, rgba(255,255,255,.055), transparent 76%);
+  background-size: 130% 130%;
+  animation: libre-page-refraction 24s ease-in-out infinite alternate;
+}
+@keyframes libre-page-refraction {
+  0% { transform: translate3d(-1.2%, -.6%, 0); background-position: 0% 0%; }
+  100% { transform: translate3d(1.2%, .8%, 0); background-position: 100% 100%; }
+}
+
+/* Shared glass surfaces. No surface-wide transform, blur animation or filter. */
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar,
+  .v52-me-library-tile,
+  .v52-me-list-row,
+  .v4-spatial-screen[data-screen="settings"] .ipad-settings-content > section
+):not(:has(img, video, canvas)):not(.v4-mobile-tabbar) {
+  position: relative;
+  isolation: isolate;
+  border-color: var(--lg-rim);
+  -webkit-backdrop-filter: blur(20px) saturate(155%);
+  backdrop-filter: blur(20px) saturate(155%);
+}
+
+/* Soft rim highlight is static on ordinary cards; only light itself is animated
+   on the dock and compact search/assistant controls. */
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar,
+  .v52-me-library-tile,
+  .v52-me-list-row,
+  .v4-spatial-screen[data-screen="settings"] .ipad-settings-content > section
+):not(:has(img, video, canvas))::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: .48;
+  background:
+    radial-gradient(115% 90% at 50% -35%, rgba(255,255,255,.18), transparent 66%),
+    linear-gradient(118deg, rgba(255,255,255,.075), transparent 34%, transparent 70%, rgba(255,255,255,.045));
+}
+
+/* Compact controls get a barely perceptible moving highlight, not moving geometry. */
+:where(.ai-chat-panel, .v4-search, .home-v2-ai-search):not(:has(img, video, canvas))::before {
+  background-size: 180% 180%;
+  animation: libre-control-sheen 18s ease-in-out infinite alternate;
+}
+@keyframes libre-control-sheen {
+  from { background-position: 0% 0%; opacity: .34; }
+  to { background-position: 100% 100%; opacity: .58; }
+}
+
+/* Keep text, icons, controls and caret above every optical layer. */
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .v4-mobile-tabbar,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar,
+  .v52-me-library-tile,
+  .v52-me-list-row,
+  .v4-spatial-screen[data-screen="settings"] .ipad-settings-content > section
+):not(:has(img, video, canvas)) > * {
+  position: relative;
+  z-index: 1;
+}
+@keyframes libre-dock-refraction {
+  from { background-position: 0% 0%; opacity: .78; }
+  to { background-position: 100% 100%; opacity: 1; }
+}
+
+/* Hover refraction is handled by the upstream engine layer.
+   Never apply a filter to the semantic host: that would blur its text and icons. */
+:where(.glass-panel,.glass-popover,.glass-dialog,.glass-toolbar,.glass-button,.liquid-glass,.v4-mobile-tabbar,.ai-chat-panel,.v4-search,.home-v2-ai-search,.v4-header-icon,.v4-avatar,.v52-me-library-tile,.v52-me-list-row):focus-within {
+  --lg-specular: rgba(255,255,255,.34);
+}
+:where(.glass-panel,.glass-popover,.glass-dialog,.glass-toolbar,.glass-button,.liquid-glass,.v4-mobile-tabbar,.ai-chat-panel,.v4-search,.home-v2-ai-search,.v4-header-icon,.v4-avatar,.v52-me-library-tile,.v52-me-list-row):active {
+  border-color: rgba(255,255,255,.30);
+  box-shadow: inset 0 1px 0 var(--lg-specular), 0 8px 24px rgba(0,0,0,.20);
+}
+
+/* Media pixels remain source-faithful: no displacement, filters, overlays or
+   animation are applied to posters, HDR artwork, video or canvas surfaces. */
+/* iPhone Safari: lighter compositing budget, same clear content and rim light. */
+@media (hover: none), (pointer: coarse) {
+  :where(.glass-panel,.glass-popover,.glass-dialog,.glass-toolbar,.glass-button,.liquid-glass,.v4-mobile-tabbar,.ai-chat-panel,.v4-search,.home-v2-ai-search,.v4-header-icon,.v4-avatar,.v52-me-library-tile,.v52-me-list-row) {
+    -webkit-backdrop-filter: blur(15px) saturate(145%);
+    backdrop-filter: blur(15px) saturate(145%);
+  }
+}
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  :where(.glass-panel,.glass-popover,.glass-dialog,.glass-toolbar,.glass-button,.liquid-glass,.v4-mobile-tabbar,.ai-chat-panel,.v4-search,.home-v2-ai-search,.v4-header-icon,.v4-avatar,.v52-me-library-tile,.v52-me-list-row) {
+    background-color: rgba(24,24,28,.92);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  body::before { opacity: .12; animation: none; }
+  :where(.glass-panel,.glass-popover,.glass-dialog,.glass-toolbar,.glass-button,.liquid-glass,.v4-mobile-tabbar,.ai-chat-panel,.v4-search,.home-v2-ai-search,.v4-header-icon,.v4-avatar,.v52-me-library-tile,.v52-me-list-row) {
+    background-color: rgba(24,24,28,.94);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+}
+
+
+/* Media-frame optics: border/rim only. The poster/HDR/video pixels underneath
+   are untouched; the overlay is transparent and does not intercept gestures. */
+.lg-media-frame {
+  isolation: isolate;
+}
+.lg-media-frame::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.16), transparent 18%, transparent 72%, rgba(255,255,255,.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.20),
+    inset 0 -1px 0 rgba(255,255,255,.07);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .lg-media-frame::after {
+    background: none;
+    border-color: rgba(255,255,255,.22);
+  }
+}
+
+
+/* PR84 iPhone Liquid Glass refinement — reference-matched dock and readable Me surface. */
+/* The dock is optical glass, not a frosted grey slab: preserve scene detail
+   beneath it, keep labels crisp, and let only the specular highlight move. */
+@media (max-width: 700px) {
+
+  /* Keep the complete final settings row scrollable above the dock. */
+  body .v4-spatial-screen[data-screen="settings"] > .v4-spatial-main,
+  body .v4-spatial-screen[data-screen="settings"] .settings-embedded-root {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+    scroll-padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+  }
+  body .v4-spatial-screen[data-screen="me"] > .v4-spatial-main {
+    padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+    scroll-padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 52px) !important;
+  }
+}
+
+/* Me: restore a clear Apple-style type hierarchy on the black canvas. */
+.v4-spatial-screen[data-screen="me"] .v52-me-section-head h3 {
+  color: #e5e5ea !important;
+  opacity: 1 !important;
+  font-size: 18px !important;
+  font-weight: 720 !important;
+  letter-spacing: -.25px !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-empty {
+  color: #c2c2c8 !important;
+  background: #18181a !important;
+  border-color: rgba(255,255,255,.10) !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-empty strong,
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile strong,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row strong {
+  color: #f5f5f7 !important;
+  opacity: 1 !important;
+  font-weight: 650 !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-empty span,
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile small,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row small {
+  color: #a8a8b0 !important;
+  opacity: 1 !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-heading > span {
+  color: #a1a1aa !important;
+}
+.v4-spatial-screen[data-screen="me"] .v52-me-library-tile,
+.v4-spatial-screen[data-screen="me"] .v52-me-list-row {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+}
+@media (hover: none), (pointer: coarse) {
+}
+
+
+/* Liquid Glass v1.0 — final cascade contract.
+ * Engine-ready surfaces use the upstream optical layer; all other glass-like
+ * controls retain only a quiet 2px compatibility fallback.
+ */
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .v4-mobile-tabbar,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar,
+  .v52-me-library-tile,
+  .v52-me-list-row,
+  .v4-spatial-screen[data-screen="settings"] .ipad-settings-content > section
+):not([data-liquid-glass-engine="ready"]):not(:has(img, video, canvas)) {
+  -webkit-backdrop-filter: blur(2px) saturate(108%) !important;
+  backdrop-filter: blur(2px) saturate(108%) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10) !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .v4-mobile-tabbar,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar,
+  .v52-me-library-tile,
+  .v52-me-list-row,
+  .v4-spatial-screen[data-screen="settings"] .ipad-settings-content > section
+):not([data-liquid-glass-engine="ready"])::before {
+  opacity: .28 !important;
+  animation: none !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .v4-mobile-tabbar,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar
+)[data-liquid-glass-engine="ready"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.liquid-glass[data-liquid-glass-engine="ready"]::before,
+.liquid-glass[data-liquid-glass-engine="ready"]::after {
+  display: none !important;
+}
+
+@media (hover: none), (pointer: coarse) {
+  :where(
+    .glass-panel,
+    .glass-popover,
+    .glass-dialog,
+    .glass-toolbar,
+    .glass-button,
+    .liquid-glass,
+    .v4-mobile-tabbar,
+    .ai-chat-panel,
+    .v4-search,
+    .home-v2-ai-search,
+    .v4-header-icon,
+    .v4-avatar,
+    .v52-me-library-tile,
+    .v52-me-list-row
+  ):not([data-liquid-glass-engine="ready"]) {
+    -webkit-backdrop-filter: blur(2px) saturate(108%) !important;
+    backdrop-filter: blur(2px) saturate(108%) !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .liquid-glass:not([data-liquid-glass-engine="ready"]) {
+    background: rgba(24,24,28,.94) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+
+/* Do not stack legacy pseudo-glass styling over the upstream engine. */
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .v4-mobile-tabbar,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar
+)[data-liquid-glass-engine="ready"] {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .v4-mobile-tabbar,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar
+)[data-liquid-glass-engine="ready"]::before,
+:where(
+  .glass-panel,
+  .glass-popover,
+  .glass-dialog,
+  .glass-toolbar,
+  .glass-button,
+  .liquid-glass,
+  .v4-mobile-tabbar,
+  .ai-chat-panel,
+  .v4-search,
+  .home-v2-ai-search,
+  .v4-header-icon,
+  .v4-avatar
+)[data-liquid-glass-engine="ready"]::after {
+  display: none !important;
+}
+
+
+/* PR84 Apple TV reference dock — full-bleed, heavy dark glass.
+ * Keep this surface native CSS so Safari gets the same frosted treatment
+ * even when the optional WebGL displacement engine is unavailable.
+ */
+@media (max-width: 700px) {
+}
+
+@media (prefers-reduced-transparency: reduce) and (max-width: 700px) {
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload, QualityProbeItem, QualityProbeResult } from './types';
+import { readScraplingConfig } from './collector-browser-config';
 
 /**
  * 客户端 API 封装。401 时触发全局事件打开登录框，
@@ -85,6 +86,16 @@ async function consumeNdjson<T>(res: Response, onEvent: (event: T) => void): Pro
   consume(buffer);
 }
 
+function searchRequestHeaders(): Headers {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const config = readScraplingConfig();
+  if (config.base && config.token) {
+    headers.set('X-Scrapling-Api-Base', config.base);
+    headers.set('X-Scrapling-Api-Token', config.token);
+  }
+  return headers;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -133,7 +144,7 @@ export const api = {
     if (!onSource) {
       return request<SearchResponse>('/api/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: searchRequestHeaders(),
         body: JSON.stringify({ wd, sources, filterAdult }),
         signal,
       });
@@ -330,7 +341,7 @@ async function searchStream(
 ): Promise<SearchResponse> {
   const res = await fetch('/api/search?stream=1', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: searchRequestHeaders(),
     body: JSON.stringify({ wd, sources, filterAdult }),
     signal,
   });
@@ -343,7 +354,7 @@ async function searchStream(
       if (event.type === 'source') {
         onSource(event);
       } else if (event.type === 'done') {
-        final = { list: event.list, failures: event.failures, ...(event.registryResources?.length ? { registryResources: event.registryResources } : {}) };
+        final = { list: event.list, failures: event.failures, ...(event.registryResources?.length ? { registryResources: event.registryResources } : {}), ...(event.seedhubItems?.length ? { seedhubItems: event.seedhubItems } : {}) };
       }
     });
     return final;

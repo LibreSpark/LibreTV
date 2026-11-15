@@ -16,6 +16,7 @@ import { formatTime } from '@/lib/utils';
 import { executeFridayPlayerCommand, parseFridayPlayerCommand } from '@/lib/friday/player-control';
 import { prefersTouchPointer } from '@/lib/touch-pointer';
 import { requestNativeFullscreenWithFallback, type NativeFullscreenVideo } from '@/lib/player-fullscreen';
+import { bindPlaybackUiEvents } from '@/lib/player-playback-ui';
 import {
   findActiveSegment,
   findCrossedEnding,
@@ -111,6 +112,8 @@ export interface PlayerSkipApi {
   pause(): void;
   /** 当前是否处于暂停状态 */
   isPaused(): boolean;
+  getPlaybackRate(): number;
+  setPlaybackRate(rate: number): void;
 }
 
 interface PlayerShellProps {
@@ -343,6 +346,37 @@ export function PlayerShell({
   const restoredRef = useRef(false);
   // 某些 HLS 源在 MANIFEST_PARSED 时 duration 仍未就绪，延迟到媒体元数据可用后恢复
   const restoreCleanupRef = useRef<(() => void) | null>(null);
+  const metadataWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearMetadataWatchdog = () => {
+    if (metadataWatchdogRef.current) clearTimeout(metadataWatchdogRef.current);
+    metadataWatchdogRef.current = null;
+  };
+  const armMetadataWatchdog = (video: HTMLVideoElement, mediaUrl: string) => {
+    clearMetadataWatchdog();
+    metadataWatchdogRef.current = setTimeout(() => {
+      metadataWatchdogRef.current = null;
+      if (video.readyState >= 1) return;
+      const mediaError = video.error;
+      const errorMessage = mediaError?.code === 2
+        ? '视频地址或媒体分片请求失败，请更换播放源'
+        : mediaError?.code === 3
+          ? '媒体解码失败，请尝试其他播放源或格式'
+          : mediaError?.code === 4
+            ? '播放源无效或格式不受支持，请更换播放源'
+            : video.networkState === 3
+              ? '没有取得有效媒体地址，请更换播放源'
+              : '媒体元数据加载超时，请检查播放源或网络后重试';
+      setError(errorMessage);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[LibreTV player] metadata timeout', {
+          mediaUrl,
+          readyState: video.readyState,
+          networkState: video.networkState,
+          errorCode: mediaError?.code ?? null,
+        });
+      }
+    }, 30_000);
+  };
   // setupHls 可能改走代理形式，video:error 重试要用最近一次的地址
   const currentMediaUrlRef = useRef(url);
   // 本集的恢复策略实例：跨直连/代理两级重建共享计数
@@ -490,6 +524,7 @@ export function PlayerShell({
 
   /** Native progressive media path for formats the existing HTMLVideoElement can play. */
   const setupDirectMedia = (video: HTMLVideoElement, mediaUrl: string) => {
+    clearMetadataWatchdog();
     restoreCleanupRef.current?.();
     restoreCleanupRef.current = null;
     if (qualityPreferenceHandlerRef.current) {
@@ -499,15 +534,12 @@ export function PlayerShell({
     hlsRef.current?.destroy();
     hlsRef.current = null;
     const mediaKind = getMediaPlaybackKind(mediaUrl, propsRef.current.mediaType);
-    if (mediaKind === 'mp4' || mediaKind === 'webm') {
-      setupDirectMedia(video, mediaUrl);
-      return;
-    }
-    if (mediaKind === 'unsupported') {
-      setError('当前媒体格式尚未接入播放器，请选择 HLS、MP4 或 WebM 资源');
+    if (mediaKind !== 'mp4' && mediaKind !== 'webm') {
+      setError('当前直链格式无效，请选择 HLS、MP4 或 WebM 资源');
       return;
     }
     currentMediaUrlRef.current = mediaUrl;
+    armMetadataWatchdog(video, mediaUrl);
     // Native progressive playback does not need fetch CORS; forcing crossorigin=anonymous
     // can make otherwise public media fail when the host omits Access-Control-Allow-Origin.
     video.removeAttribute('crossorigin');
@@ -552,6 +584,7 @@ export function PlayerShell({
    * 注意：不销毁 ArtPlayer，只销毁并重建 hls，从而保留网页全屏等播放器状态。
    */
   const setupHls = (video: HTMLVideoElement, mediaUrl: string, allowProxyFallback: boolean) => {
+    clearMetadataWatchdog();
     restoreCleanupRef.current?.();
     restoreCleanupRef.current = null;
     if (qualityPreferenceHandlerRef.current) {
@@ -561,6 +594,15 @@ export function PlayerShell({
     hlsRef.current?.destroy();
     hlsRef.current = null;
     currentMediaUrlRef.current = mediaUrl;
+    const mediaKind = getMediaPlaybackKind(mediaUrl, propsRef.current.mediaType);
+    if (mediaKind === 'mp4' || mediaKind === 'webm') {
+      setupDirectMedia(video, mediaUrl);
+      return;
+    }
+    if (mediaKind === 'unsupported') {
+      setError('当前媒体格式尚未接入播放器，请选择 HLS、MP4 或 WebM 资源');
+      return;
+    }
     if (!Hls.isSupported()) {
       if (!video.canPlayType('application/vnd.apple.mpegurl') && !video.canPlayType('application/x-mpegURL')) {
         hlsRef.current = null;
@@ -568,6 +610,11 @@ export function PlayerShell({
         return;
       }
       hlsRef.current = null;
+      armMetadataWatchdog(video, mediaUrl);
+      // Safari's native HLS pipeline does not need CORS-readable media bytes.
+      // Keeping crossorigin="anonymous" here can make otherwise playable
+      // cross-origin HLS streams fail when the source omits ACAO headers.
+      video.removeAttribute('crossorigin');
       setAvailableQualityHeights([]);
       setQualityControlMode('native');
       setQualityNotice('当前使用浏览器原生 HLS，Safari 会自行选择档位，网页无法强制锁定 1080P 或 4K。实际解码分辨率仍会显示。');
@@ -593,7 +640,11 @@ export function PlayerShell({
           }
           video.play().catch(() => setShowPlayFallback(true));
         } catch {
-          // IndexedDB failure must not block native-HLS playback.
+          // A failed progress lookup must never block native-HLS playback.
+          restoredRef.current = true;
+          restoreCleanupRef.current?.();
+          restoreCleanupRef.current = null;
+          video.play().catch(() => setShowPlayFallback(true));
         } finally {
           nativeRestoreInFlight = false;
         }
@@ -608,22 +659,8 @@ export function PlayerShell({
       video.load();
       return;
     }
-    const mediaKind = getMediaPlaybackKind(mediaUrl, propsRef.current.mediaType);
-    if (mediaKind === 'mp4' || mediaKind === 'webm') {
-      setupDirectMedia(video, mediaUrl);
-      return;
-    }
-    if (mediaKind === 'unsupported') {
-      setError('当前媒体格式尚未接入播放器，请选择 HLS、MP4 或 WebM 资源');
-      return;
-    }
-
-    const nativeHls = !Hls.isSupported();
-    if (nativeHls && !video.canPlayType('application/vnd.apple.mpegurl')) {
-      setError('当前浏览器既不支持 hls.js，也不支持原生 HLS 播放');
-      return;
-    }
-    const hls = nativeHls ? null : new Hls(buildHlsConfig());
+    armMetadataWatchdog(video, mediaUrl);
+    const hls = new Hls(buildHlsConfig());
     hlsRef.current = hls;
     setQualityControlMode('hls');
     const handleQualityPreferenceChange = () => {
@@ -902,8 +939,9 @@ export function PlayerShell({
       type: getMediaPlaybackKind(initialUrl, mediaType) === 'mp4' ? 'mp4' : getMediaPlaybackKind(initialUrl, mediaType) === 'webm' ? 'webm' : 'm3u8',
       volume: 0.8,
       autoplay: true,
-      pip: true,
-      autoMini: true,
+      // PR84 mobile watch: never spawn floating PiP/mini-player windows over the page.
+      pip: false,
+      autoMini: false,
       screenshot: true,
       setting: true,
       playbackRate: true,
@@ -911,16 +949,19 @@ export function PlayerShell({
       // Touch devices use native iOS video fullscreen first, with a web fullscreen fallback.
       fullscreen: !touchPointer,
       fullscreenWeb: !touchPointer,
-      miniProgressBar: true,
+      miniProgressBar: false,
       mutex: true,
       // Keep iOS Safari's video compositing stable without a frosted backdrop.
       backdrop: false,
       playsInline: true,
+      // ArtPlayer rotates its web-fullscreen surface to match video orientation on
+      // touch devices. iOS native fullscreen remains controlled by WebKit/system rotation.
+      autoOrientation: touchPointer,
       airplay: true,
       hotkey: false,
-      theme: '#2563eb',
+      theme: '#ffffff',
       lang: navigator.language.toLowerCase().startsWith('zh') ? 'zh-cn' : 'en',
-      moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
+      moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true, disablePictureInPicture: true },
       // 上/下集放在播放键右侧：换集是看剧最高频的动作，不该让用户滚回页面下方找按钮
       controls: [
         {
@@ -974,6 +1015,10 @@ export function PlayerShell({
       },
     });
     artRef.current = art;
+    // Native media events are the source of truth. Bridge them into ArtPlayer's
+    // public play/pause event bus so its center and bottom controls stay in sync,
+    // including pauses initiated by iOS media controls or external callers.
+    const cleanupPlaybackUi = bindPlaybackUiEvents(art.video, (event) => art.emit(event));
     window.dispatchEvent(new CustomEvent('friday-player-state', { detail: { active: true } }));
 
     // 进度条区间可视化：初始渲染一次，换集 duration 变化时重绘
@@ -1030,6 +1075,17 @@ export function PlayerShell({
         }
       },
       isPaused: () => artRef.current?.video?.paused ?? true,
+      getPlaybackRate: () => {
+        const rate = artRef.current?.video?.playbackRate;
+        return typeof rate === 'number' && Number.isFinite(rate) ? rate : 1;
+      },
+      setPlaybackRate: (rate) => {
+        if (!Number.isFinite(rate) || rate < 0.25 || rate > 4) return;
+        const video = artRef.current?.video;
+        if (!video) return;
+        video.playbackRate = rate;
+        video.defaultPlaybackRate = rate;
+      },
     });
 
     /**
@@ -1057,6 +1113,8 @@ export function PlayerShell({
     };
     art.on('video:loadedmetadata', reportVideoHeight);
     art.on('video:canplay', reportVideoHeight);
+    art.on('video:loadedmetadata', clearMetadataWatchdog);
+    art.on('video:canplay', clearMetadataWatchdog);
     // resize 不在 ArtPlayer 的视频事件转发表里，直接挂原生事件
     art.video?.addEventListener('resize', reportVideoHeight);
 
@@ -1127,7 +1185,18 @@ export function PlayerShell({
         setupHls(art.video, currentMediaUrlRef.current, true);
         return;
       }
-      setError('视频播放失败，请尝试其他视频源');
+      const mediaError = art.video?.error;
+      const errorMessage = mediaError?.code === 1
+        ? '播放请求已取消，请重新点击播放'
+        : mediaError?.code === 2
+          ? '视频地址或媒体分片请求失败，请更换播放源'
+          : mediaError?.code === 3
+            ? '媒体解码失败，请尝试其他播放源或格式'
+            : mediaError?.code === 4
+              ? '播放源无效或格式不受支持，请更换播放源'
+              : '视频播放失败，请尝试其他视频源';
+      clearMetadataWatchdog();
+      setError(errorMessage);
     });
     art.on('video:timeupdate', () => {
       const metrics = playbackMetricsRef.current;
@@ -1385,7 +1454,9 @@ export function PlayerShell({
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
       nativeFullscreenCleanupRef.current?.();
       nativeFullscreenCleanupRef.current = null;
+      cleanupPlaybackUi();
       if (playbackConfirmationTimerRef.current) clearTimeout(playbackConfirmationTimerRef.current);
+      clearMetadataWatchdog();
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       el?.removeEventListener('touchstart', onTouchStart);
       el?.removeEventListener('touchend', onTouchEnd);
@@ -1471,10 +1542,10 @@ export function PlayerShell({
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
-      <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
+      <div className="player-quality-controls absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
         <button
           type="button"
-          className="rounded-full border border-white/20 bg-black/75 px-3 py-1.5 text-xs font-medium text-white shadow-lg backdrop-blur"
+          className="player-quality-badge"
           aria-expanded={qualityPanelOpen}
           aria-label="画质设置"
           onClick={() => setQualityPanelOpen((open) => !open)}
@@ -1560,7 +1631,7 @@ export function PlayerShell({
       {showPlayFallback && showPoster && !error && (
         <button
           type="button"
-          className="absolute inset-x-0 bottom-5 z-20 mx-auto min-h-11 w-fit rounded-full bg-amber-400 px-6 py-3 text-sm font-semibold text-black shadow-lg"
+          className="absolute inset-x-0 top-1/2 z-20 mx-auto min-h-11 w-fit -translate-y-1/2 rounded-full border border-white/20 bg-black/75 px-6 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur-xl"
           onClick={() => {
             const art = artRef.current;
             if (!art) return;
@@ -1606,7 +1677,7 @@ export function PlayerShell({
         </div>
       )}
       {(hint || undoSkip) && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-sm text-white animate-fade-in">
+        <div role="status" className="absolute top-3 left-3 z-30 flex max-w-[min(72%,360px)] items-center gap-1.5 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[10px] leading-tight text-white/90 shadow-sm backdrop-blur-xl animate-fade-in">
           {/* 撤销窗口比普通提示长：hint 已淡出时仍要让用户知道刚才跳过了什么 */}
           <span className="pointer-events-none">
             {hint || (undoSkip ? `已跳过${SEGMENT_LABELS[undoSkip.segment.type]}` : '')}
@@ -1622,11 +1693,7 @@ export function PlayerShell({
           )}
         </div>
       )}
-      {autoplayNext && !error && (
-        <div className="absolute bottom-16 right-3 text-[10px] text-muted bg-black/50 px-2 py-0.5 rounded pointer-events-none">
-          自动连播已开启
-        </div>
-      )}
+
     </div>
   );
 }

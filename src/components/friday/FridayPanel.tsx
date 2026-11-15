@@ -3,6 +3,7 @@
 import React from "react";
 import type { RefObject } from "react";
 import FridayOrb from "@/components/friday/FridayOrb";
+import { LiquidGlassSurface } from "@/components/ui/liquid-glass";
 import { FridayConversation } from "@/components/friday/FridayConversation";
 import { FridayComposer } from "@/components/friday/FridayComposer";
 import { getMovieDataForMessage, getPartText } from "@/lib/friday/message";
@@ -131,7 +132,9 @@ export function FridayPanel({
     workflows: workflowBySearchId,
   }));
   return (
-              <section
+              <LiquidGlassSurface
+                as="section"
+                variant="panel"
                 className={`friday-panel ${
                   expanded ? "friday-expanded" : ""
                 } ${immersive ? "friday-immersive" : ""} ${closing ? "friday-closing" : ""}`}
@@ -273,6 +276,6 @@ export function FridayPanel({
                   onHideAssistant={onHideAssistant}
                   language={language}
                 />
-              </section>
+              </LiquidGlassSurface>
   );
 }
