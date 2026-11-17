@@ -302,3 +302,69 @@ def test_expired_lease_at_max_attempts_fails_workflow_instead_of_stalling() -> N
                 "DELETE FROM resource_workflows WHERE workflow_id = %s",
                 (workflow_id,),
             )
+
+
+@pytest.mark.skipif(
+    not os.getenv("DATABASE_URL"),
+    reason="PostgreSQL integration database is not configured",
+)
+def test_workflow_retry_uses_exponential_backoff_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    database_url = os.environ["DATABASE_URL"]
+    store = PostgresWorkflowStore(database_url)
+    store.initialize()
+    workflow_id = "dag_backoff_" + uuid.uuid4().hex
+    fixed_now = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr("app.workflow_store._now", lambda: fixed_now)
+
+    try:
+        assert store.create_workflow(
+            workflow_id,
+            [{"node_id": "crawl", "node_type": "crawl", "max_attempts": 3}],
+            [],
+        )
+        first = store.claim_ready_node("worker-backoff-1", workflow_id=workflow_id)
+        assert first is not None
+        assert store.fail_node(
+            workflow_id,
+            "crawl",
+            "worker-backoff-1",
+            first["lease_generation"],
+            "temporary failure",
+        ) == "retry_wait"
+
+        with psycopg.connect(database_url) as db:
+            first_available_at = db.execute(
+                "SELECT available_at FROM resource_workflow_nodes "
+                "WHERE workflow_id = %s AND node_id = 'crawl'",
+                (workflow_id,),
+            ).fetchone()[0]
+        assert first_available_at == fixed_now + timedelta(seconds=5)
+
+        fixed_now += timedelta(seconds=5)
+        second = store.claim_ready_node("worker-backoff-2", workflow_id=workflow_id)
+        assert second is not None
+        assert second["attempt_count"] == 2
+        assert store.fail_node(
+            workflow_id,
+            "crawl",
+            "worker-backoff-2",
+            second["lease_generation"],
+            "temporary failure again",
+        ) == "retry_wait"
+
+        with psycopg.connect(database_url) as db:
+            second_available_at = db.execute(
+                "SELECT available_at FROM resource_workflow_nodes "
+                "WHERE workflow_id = %s AND node_id = 'crawl'",
+                (workflow_id,),
+            ).fetchone()[0]
+        assert second_available_at == fixed_now + timedelta(seconds=10)
+    finally:
+        with psycopg.connect(database_url) as db:
+            db.execute(
+                "DELETE FROM resource_workflows WHERE workflow_id = %s",
+                (workflow_id,),
+            )
+
