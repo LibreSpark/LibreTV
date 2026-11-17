@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -115,7 +116,7 @@ class SiteGovernor:
 
     def record_failure(self, host: str) -> None:
         """Record a response failure after releasing the per-host pacing lease."""
-        now = asyncio.get_running_loop().time()
+        now = time.monotonic()
         state = self._state(host, now)
         self._record_failure(state, now)
 
