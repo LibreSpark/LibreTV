@@ -1,10 +1,10 @@
 # Authorized live acceptance
 
-Live checks are deliberately manual. CI simulations must not be reported as proof of a real model gateway, a real public crawl, or sustained 4K playback. GitHub only accepts `workflow_dispatch` when the workflow file exists on the repository's default branch; this PR-only workflow cannot be dispatched until that prerequisite is met. Do not copy it to `main` without explicit authorization. Until then, run the documented scripts in an authorized environment with the required secrets and proxy configured.
+Live checks are deliberately manual. CI simulations must not be reported as proof of a real model gateway, a real public crawl, or sustained 4K playback. GitHub only accepts `workflow_dispatch` when the workflow file exists on the repository's default branch; these PR-only workflows cannot be dispatched while they exist only on this branch. Do not copy them to `main` without explicit authorization. Until then, run the documented scripts in an authorized environment with the required secrets and controlled egress proxy configured.
 
 ## 1. Live AI supervisor and public crawl
 
-Configure these repository **Actions secrets** before dispatching `Authorized Live Collector Acceptance`:
+Configure these repository **Actions secrets** before running `Authorized Live Collector Acceptance` in an authorized environment:
 
 - `SUPERVISOR_API_KEY`: model gateway credential
 - `SUPERVISOR_MODEL`: exact model identifier
@@ -14,7 +14,7 @@ Configure these repository **Actions secrets** before dispatching `Authorized Li
 - `LIVE_ACCEPTANCE_PAGE_URL`: one explicitly authorized catalogue page for the AI supervisor probe
 - `LIVE_ACCEPTANCE_URL_LIST`: newline-separated explicitly authorized seed URLs for scale acceptance
 
-Dispatch the workflow from the PR branch and select:
+Select one probe:
 
 - `ai-supervisor`: one authorized page fetch, one model completion, and a selector match check
 - `live-scale`: fetch only the explicitly listed seed URLs, up to 1,000 unique URLs
@@ -26,7 +26,7 @@ The scale probe requires exact host allowlisting and the controlled egress proxy
 
 ## 2. Sustained real 4K playback
 
-Configure these repository Actions secrets/variables before dispatching `Authorized Live 4K Playback Acceptance`:
+Configure these repository Actions secrets/variables before running `Authorized Live 4K Playback Acceptance` in an authorized environment:
 
 - Secret `LIBRETV_4K_TEST_URL`: an authorized, directly playable public HTTP(S) MP4 or HLS URL
 - Secret `LIBRETV_4K_ALLOWED_HOSTS`: comma-separated exact hostnames
@@ -34,7 +34,7 @@ Configure these repository Actions secrets/variables before dispatching `Authori
 
 The browser probe uses Chrome with media codecs, selects a 2160p-or-higher HLS rendition when available, checks decoded dimensions are at least 3840x2160, and requires continuous playback progress for the configured duration. It does not bypass DRM, authentication, paywalls, or access controls. Do not provide protected streams or credentials in URLs.
 
-A successful run proves the supplied sample decoded and played in desktop Chromium for the measured duration. It does not prove iPhone Safari playback; that remains a separate physical-device acceptance.
+The workflow preserves its JSON result and stderr diagnostics in a 14-day Actions artifact. A successful run proves the supplied sample decoded and played in desktop Chromium for the measured duration. It does not prove iPhone Safari playback; that remains a separate physical-device acceptance.
 
 ## Evidence levels
 
