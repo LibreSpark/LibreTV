@@ -1,6 +1,6 @@
 # Authorized live acceptance
 
-Live checks are deliberately manual. CI simulations must not be reported as proof of a real model gateway, a real public crawl, or sustained 4K playback.
+Live checks are deliberately manual. CI simulations must not be reported as proof of a real model gateway, a real public crawl, or sustained 4K playback. GitHub only accepts `workflow_dispatch` when the workflow file exists on the repository's default branch; this PR-only workflow cannot be dispatched until that prerequisite is met. Do not copy it to `main` without explicit authorization. Until then, run the documented scripts in an authorized environment with the required secrets and proxy configured.
 
 ## 1. Live AI supervisor and public crawl
 
@@ -22,7 +22,7 @@ Dispatch the workflow from the PR branch and select:
 
 The URL-list secret is subject to GitHub's secret size limit. For a larger authorized inventory, run the same documented command locally or use an approved private artifact handoff rather than committing private target lists to the repository.
 
-The scale probe requires exact host allowlisting and the controlled egress proxy. Scrapling Spider obeys robots.txt, uses one concurrent request per domain, applies at least a one-second per-domain delay, and does not expand page links. The result is a bounded seed-fetch measurement, not a claim of unrestricted web-wide discovery.
+The scale probe requires exact host allowlisting and the controlled egress proxy. Scrapling Spider obeys robots.txt, uses one concurrent request per domain, applies its configured per-domain delay, and does not expand page links. The result is a bounded seed-fetch measurement, not a claim of unrestricted web-wide discovery. When run through the workflow, its JSON report and stderr diagnostics are uploaded as a 14-day Actions artifact, including on failure when files were produced.
 
 ## 2. Sustained real 4K playback
 
