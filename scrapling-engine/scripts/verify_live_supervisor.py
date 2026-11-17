@@ -40,11 +40,20 @@ async def main() -> int:
         ensure_robots_allowed, safe_url, settings.request_timeout_seconds
     )
     page = await asyncio.to_thread(
-        ScraplingAdapter.fetch_page, safe_url, settings.request_timeout_seconds
+        ScraplingAdapter.fetch_page,
+        safe_url,
+        settings.request_timeout_seconds,
+        False,
     )
+    status_code = getattr(page, "status", None)
+    if not isinstance(status_code, int) or not 200 <= status_code < 300:
+        raise SystemExit(
+            f"The authorized page did not return a 2xx response (status={status_code!r}); "
+            "redirects are not followed by this acceptance check."
+        )
     final_url = validate_public_http_url(str(getattr(page, "url", None) or safe_url))
     if (urlsplit(final_url).hostname or "").lower() != host:
-        raise SystemExit("The page redirected to a different host; acceptance stopped.")
+        raise SystemExit("The response URL does not match the authorized host; acceptance stopped.")
 
     body = getattr(page, "body", b"")
     html = (
