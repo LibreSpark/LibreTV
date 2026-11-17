@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 from pathlib import Path
 
 import pytest
 
-from scripts.verify_live_authorized_scale import load_authorized_urls, run
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "verify_live_authorized_scale.py"
+SPEC = importlib.util.spec_from_file_location("live_scale_acceptance", SCRIPT_PATH)
+assert SPEC is not None and SPEC.loader is not None
+LIVE_SCALE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(LIVE_SCALE)
+load_authorized_urls = LIVE_SCALE.load_authorized_urls
+run = LIVE_SCALE.run
 
 
 def test_live_scale_input_is_deduplicated_and_limited(tmp_path: Path) -> None:
@@ -51,7 +58,7 @@ async def test_live_scale_requires_controlled_egress_proxy(
 ) -> None:
     source = tmp_path / "authorized.txt"
     source.write_text("https://93.184.216.34/catalog\n", encoding="utf-8")
-    monkeypatch.setattr("scripts.verify_live_authorized_scale.settings.egress_proxy_url", None)
+    monkeypatch.setattr(LIVE_SCALE.settings, "egress_proxy_url", None)
 
     args = argparse.Namespace(
         input=source,
