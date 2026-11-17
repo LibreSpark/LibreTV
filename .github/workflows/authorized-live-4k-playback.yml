@@ -1,0 +1,34 @@
+name: Authorized Live 4K Playback Acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authorized-live-4k-playback
+  cancel-in-progress: false
+
+jobs:
+  live-4k-playback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      LIBRETV_4K_TEST_URL: ${{ secrets.LIBRETV_4K_TEST_URL }}
+      LIBRETV_4K_ALLOWED_HOSTS: ${{ secrets.LIBRETV_4K_ALLOWED_HOSTS }}
+      LIBRETV_4K_DURATION_SECONDS: ${{ vars.LIBRETV_4K_DURATION_SECONDS || '600' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install project dependencies
+        run: npm ci
+      - name: Install isolated Playwright runner
+        run: npm install --no-save --package-lock=false playwright@1.55.0
+      - name: Install Chrome with media codecs
+        run: npx playwright install --with-deps chrome
+      - name: Verify sustained real 4K decode and playback
+        run: node scripts/verify-live-4k-playback.mjs
