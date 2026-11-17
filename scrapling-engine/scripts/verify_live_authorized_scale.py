@@ -63,7 +63,13 @@ async def run(args: argparse.Namespace) -> int:
         "submitted_urls": len(urls),
         "returned_items": len(items),
         "successful_responses": successful,
-        "redirects_rejected": sum(1 for item in items if isinstance(item, dict) and isinstance(item.get("status"), int) and 300 <= item["status"] < 400),
+        "redirects_rejected": sum(
+            1
+            for item in items
+            if isinstance(item, dict)
+            and isinstance(item.get("status"), int)
+            and 300 <= item["status"] < 400
+        ),
         "failed_or_missing": failed,
         "host_count": len({urlsplit(url).hostname for url in urls}),
         "rate_policy": "robots.txt obeyed; concurrency=1 per domain; minimum 1 second per domain",
