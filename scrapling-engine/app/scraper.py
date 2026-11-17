@@ -33,14 +33,18 @@ class ScraplingAdapter:
     """Thin adapter around upstream Scrapling; no replacement parser is introduced."""
 
     @staticmethod
-    def fetch_page(url: str, timeout: float = 25.0) -> Any:
+    def fetch_page(
+        url: str,
+        timeout: float = 25.0,
+        follow_redirects: bool | str = "safe",
+    ) -> Any:
         # Scrapling >=0.4.5 supports safe redirect handling, rejecting redirects
         # to internal/private destinations. Network egress policy is still required
         # to close the DNS-rebinding gap between validation and connection.
         page = Fetcher.get(
             url,
             timeout=timeout,
-            follow_redirects="safe",
+            follow_redirects=follow_redirects,
             proxy=settings.egress_proxy_url,
             impersonate=None,
             stealthy_headers=False,
