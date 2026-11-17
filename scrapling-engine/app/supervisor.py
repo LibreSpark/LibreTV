@@ -124,7 +124,10 @@ class SupervisorClient:
                 status = getattr(getattr(exc, "response", None), "status_code", None)
                 suffix = f" (HTTP {status})" if status else ""
                 message = f"Supervisor rule-generation request failed{suffix}."
-                if isinstance(exc, httpx.TransportError) or status in {408, 409, 425, 429} or (status is not None and status >= 500):
+                retryable_status = status in {408, 409, 425, 429} or (
+                    status is not None and status >= 500
+                )
+                if isinstance(exc, httpx.TransportError) or retryable_status:
                     raise RetryableSupervisorError(message) from exc
                 raise RuntimeError(message) from exc
 
