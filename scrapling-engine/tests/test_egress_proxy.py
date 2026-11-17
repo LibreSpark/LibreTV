@@ -151,10 +151,7 @@ async def test_parallel_connect_tunnels_are_not_serialized_by_site_governor(monk
         for _ in range(2):
             reader, writer = await asyncio.open_connection("127.0.0.1", proxy_port)
             clients.append(writer)
-            writer.write(
-                b"CONNECT example.com:443 HTTP/1.1\r\n"
-                b"Host: example.com:443\r\n\r\n"
-            )
+            writer.write(b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n")
             await writer.drain()
             response = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=3)
             assert response.startswith(b"HTTP/1.1 200")
