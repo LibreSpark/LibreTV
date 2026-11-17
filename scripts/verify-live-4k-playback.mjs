@@ -35,6 +35,10 @@ const target = validateTarget();
 const browser = await chromium.launch({
   channel: 'chrome',
   headless: true,
+  // The workflow starts the repository's validated DNS-pinning egress proxy
+  // on loopback. Chromium must use it for every remote media request so the
+  // hostname allowlist is backed by pinned public IP connections.
+  proxy: { server: process.env.LIBRETV_4K_EGRESS_PROXY || 'http://127.0.0.1:8080' },
   args: ['--autoplay-policy=no-user-gesture-required'],
 });
 let failure;
