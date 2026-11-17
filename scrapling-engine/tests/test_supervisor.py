@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from app.supervisor import SupervisorClient
+from app.supervisor import RetryableSupervisorError, SupervisorClient
 
 
 @pytest.mark.asyncio
@@ -225,3 +225,43 @@ def test_live_supervisor_requests_require_egress_proxy() -> None:
             "test-secret",
             "test-model",
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [408, 409, 425, 429, 500, 502, 503, 504])
+async def test_supervisor_transient_http_errors_are_retryable(status: int) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, request=request)
+
+    client = SupervisorClient(
+        "https://model.example/v1",
+        "test-secret",
+        "test-model",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(RetryableSupervisorError):
+        await client.generate_extraction_rule(
+            "Extract movie titles",
+            "https://example.com/catalog",
+            "<html><body>fixture</body></html>",
+        )
+
+
+@pytest.mark.asyncio
+async def test_supervisor_permanent_http_error_is_not_retryable() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, request=request)
+
+    client = SupervisorClient(
+        "https://model.example/v1",
+        "test-secret",
+        "test-model",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(RuntimeError, match="HTTP 400") as error:
+        await client.generate_extraction_rule(
+            "Extract movie titles",
+            "https://example.com/catalog",
+            "<html><body>fixture</body></html>",
+        )
+    assert not isinstance(error.value, RetryableSupervisorError)
