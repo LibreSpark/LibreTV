@@ -103,9 +103,12 @@ def _authority(value: str, expected_port: int) -> tuple[str, int]:
         not parsed.hostname
         or parsed.username is not None
         or parsed.password is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
         or port != expected_port
     ):
-        raise EgressDenied("Only standard public HTTP(S) ports are allowed")
+        raise EgressDenied("Only a host and standard public HTTP(S) port are allowed")
     return parsed.hostname, port
 
 
