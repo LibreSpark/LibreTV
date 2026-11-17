@@ -120,21 +120,23 @@ try {
     }, target.href);
   }
 
+  // HLS level selection is asynchronous: MANIFEST_PARSED only confirms that
+  // renditions were discovered, not that the selected 2160p stream is decoded.
+  // Wait for actual browser-decoded dimensions before starting the timed run.
+  await page.waitForFunction(
+    () => {
+      const video = document.querySelector('#v');
+      return (
+        video &&
+        video.readyState >= 2 &&
+        video.videoWidth >= 3840 &&
+        video.videoHeight >= 2160
+      );
+    },
+    null,
+    { timeout: 60_000 },
+  );
   await page.locator('#v').evaluate(async (video) => {
-    if (video.readyState < 1) await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('4K media metadata timed out.')), 60000);
-      video.addEventListener('loadedmetadata', () => {
-        clearTimeout(timeout);
-        resolve();
-      }, { once: true });
-      video.addEventListener('error', () => {
-        clearTimeout(timeout);
-        reject(new Error('Browser could not load the authorized media sample.'));
-      }, { once: true });
-    });
-    if (video.videoHeight < 2160) {
-      throw new Error('Decoded video height is below 2160 pixels.');
-    }
     await video.play();
   });
 
