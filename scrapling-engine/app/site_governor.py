@@ -113,6 +113,12 @@ class SiteGovernor:
             state.touched_at = loop.time()
             state.gate.release()
 
+    def record_failure(self, host: str) -> None:
+        """Record a response failure after releasing the per-host pacing lease."""
+        now = asyncio.get_running_loop().time()
+        state = self._state(host, now)
+        self._record_failure(state, now)
+
     def _record_failure(self, state: _HostState, now: float) -> None:
         state.failures += 1
         if state.failures >= self.failure_threshold:
