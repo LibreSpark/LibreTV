@@ -25,7 +25,7 @@ from app.rule_store import PostgresRuleStore
 from app.scraper import ScraplingAdapter
 from app.security import validate_public_http_url
 from app.spider import ScraplingSpiderAdapter
-from app.supervisor import SupervisorClient
+from app.supervisor import RetryableSupervisorError, SupervisorClient
 from app.workflow_store import PostgresWorkflowStore
 
 logger = logging.getLogger("libretv.scrapling.workflow_worker")
@@ -510,6 +510,10 @@ class WorkflowWorker:
     async def _generate_extraction_rule(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             return await self._generate_extraction_rule_impl(payload)
+        except RetryableSupervisorError:
+            # Provider/network outages must reach process_once so the durable DAG
+            # can schedule a bounded retry instead of recording a false success.
+            raise
         except Exception as exc:
             workflow_id = str(payload.get("_workflow_id") or "unknown")
             logger.info(
