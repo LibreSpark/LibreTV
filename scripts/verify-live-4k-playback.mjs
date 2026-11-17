@@ -21,8 +21,9 @@ function validateTarget() {
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
     throw new Error('The authorized media URL must be an absolute HTTP(S) URL without credentials.');
   }
-  if (url.port && !['80', '443'].includes(url.port)) {
-    throw new Error('Only standard HTTP(S) ports are permitted.');
+  const expectedPort = url.protocol === 'https:' ? '443' : '80';
+  if (url.port && url.port !== expectedPort) {
+    throw new Error('Only the default port for the selected HTTP(S) scheme is permitted.');
   }
   if (!allowedHosts.has(url.hostname.toLowerCase())) {
     throw new Error('The media host is not present in the exact hostname allowlist.');
@@ -43,6 +44,29 @@ try {
     deviceScaleFactor: 1,
   });
   page.setDefaultTimeout(60_000);
+  // Enforce the exact hostname allowlist on every media, manifest, segment, and
+  // redirect request—not only on the initial URL supplied to the workflow.
+  await page.route('**/*', async (route) => {
+    let requestUrl;
+    try {
+      requestUrl = new URL(route.request().url());
+    } catch {
+      await route.abort('blockedbyclient');
+      return;
+    }
+    const requestPort = requestUrl.protocol === 'https:' ? '443' : '80';
+    if (
+      !['http:', 'https:'].includes(requestUrl.protocol) ||
+      requestUrl.username ||
+      requestUrl.password ||
+      (requestUrl.port && requestUrl.port !== requestPort) ||
+      !allowedHosts.has(requestUrl.hostname.toLowerCase())
+    ) {
+      await route.abort('blockedbyclient');
+      return;
+    }
+    await route.continue();
+  });
   await page.setContent(
     '<!doctype html><html><body style="margin:0;background:#000">' +
       '<video id="v" muted playsinline controls style="width:100vw;height:100vh"></video>' +
