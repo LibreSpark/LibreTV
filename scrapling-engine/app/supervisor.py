@@ -8,6 +8,10 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
+class RetryableSupervisorError(RuntimeError):
+    """Temporary provider/network failure that should consume a DAG retry."""
+
+
 class DiscoveryPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -119,7 +123,10 @@ class SupervisorClient:
             except httpx.HTTPError as exc:
                 status = getattr(getattr(exc, "response", None), "status_code", None)
                 suffix = f" (HTTP {status})" if status else ""
-                raise RuntimeError(f"Supervisor rule-generation request failed{suffix}.") from exc
+                message = f"Supervisor rule-generation request failed{suffix}."
+                if isinstance(exc, httpx.TransportError) or status in {408, 409, 425, 429} or (status is not None and status >= 500):
+                    raise RetryableSupervisorError(message) from exc
+                raise RuntimeError(message) from exc
 
         try:
             body: dict[str, Any] = response.json()
@@ -181,7 +188,10 @@ class SupervisorClient:
             except httpx.HTTPError as exc:
                 status = getattr(getattr(exc, "response", None), "status_code", None)
                 suffix = f" (HTTP {status})" if status else ""
-                raise RuntimeError(f"Supervisor model request failed{suffix}.") from exc
+                message = f"Supervisor model request failed{suffix}."
+                if isinstance(exc, httpx.TransportError) or status in {408, 409, 425, 429} or (status is not None and status >= 500):
+                    raise RetryableSupervisorError(message) from exc
+                raise RuntimeError(message) from exc
 
         try:
             body: dict[str, Any] = response.json()
