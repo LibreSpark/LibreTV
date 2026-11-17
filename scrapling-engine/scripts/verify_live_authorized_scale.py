@@ -36,7 +36,8 @@ def load_authorized_urls(path: Path, allowed_hosts: set[str], limit: int) -> lis
 async def run(args: argparse.Namespace) -> int:
     if not settings.egress_proxy_url:
         raise ValueError(
-            "SCRAPLING_EGRESS_PROXY is required; live acceptance must use the controlled egress proxy."
+            "SCRAPLING_EGRESS_PROXY is required; live acceptance must use "
+            "the controlled egress proxy."
         )
     allowed_hosts = {host.strip().lower() for host in args.allowed_hosts.split(",") if host.strip()}
     if not allowed_hosts:
@@ -76,7 +77,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run a bounded live crawl against an explicit authorized URL list."
     )
-    parser.add_argument("--input", type=Path, required=True, help="UTF-8 file with one URL per line.")
+    parser.add_argument(
+        "--input", type=Path, required=True, help="UTF-8 file with one URL per line."
+    )
     parser.add_argument(
         "--allowed-hosts",
         required=True,
