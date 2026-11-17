@@ -601,3 +601,65 @@ async def test_parallel_http_responses_are_not_serialized_by_site_governor(monke
         target_server.close()
         await proxy_server.wait_closed()
         await target_server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_fragmented_http_429_status_is_recorded_by_site_governor(monkeypatch):
+    from app import egress_proxy
+    from app.site_governor import SiteGovernor
+
+    governor = SiteGovernor(minimum_interval_seconds=0, failure_threshold=1)
+    monkeypatch.setattr(egress_proxy, "site_governor", governor)
+
+    async def target(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 4")
+        await writer.drain()
+        await asyncio.sleep(0.01)
+        writer.write(
+            b"29 Too Many Requests\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n\r\n"
+        )
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    target_server = await asyncio.start_server(target, "127.0.0.1", 0)
+    target_port = target_server.sockets[0].getsockname()[1]
+
+    async def fake_open_pinned_connection(host, port):
+        assert host == "example.com"
+        assert port == 80
+        reader, writer = await asyncio.open_connection("127.0.0.1", target_port)
+        return reader, writer, ipaddress.ip_address("93.184.216.34")
+
+    monkeypatch.setattr(
+        egress_proxy,
+        "open_pinned_connection",
+        fake_open_pinned_connection,
+    )
+    proxy_server = await asyncio.start_server(
+        egress_proxy.handle_client,
+        "127.0.0.1",
+        0,
+    )
+    proxy_port = proxy_server.sockets[0].getsockname()[1]
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", proxy_port)
+        writer.write(
+            b"GET http://example.com/catalog HTTP/1.1\r\n"
+            b"Host: example.com\r\n\r\n"
+        )
+        await writer.drain()
+        response = await asyncio.wait_for(reader.read(), timeout=3)
+        assert response.startswith(b"HTTP/1.1 429 Too Many Requests")
+        assert governor.snapshot("example.com")["failures"] == 1
+        assert governor.snapshot("example.com")["open_until"] > 0
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        proxy_server.close()
+        target_server.close()
+        await proxy_server.wait_closed()
+        await target_server.wait_closed()
