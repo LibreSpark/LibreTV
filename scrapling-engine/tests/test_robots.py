@@ -63,3 +63,22 @@ def test_robots_network_error_fails_closed(monkeypatch) -> None:
 
     with pytest.raises(RobotsUnavailableError):
         ensure_robots_allowed("https://robots-timeout.example/public")
+
+
+def test_robots_redirect_is_not_followed_and_fails_closed(monkeypatch) -> None:
+    page = Mock()
+    page.status = 302
+    page.body = b""
+    captured = {}
+    monkeypatch.setattr("app.robots._cache", {})
+
+    def fake_get(*args, **kwargs):
+        captured.update(kwargs)
+        return page
+
+    monkeypatch.setattr("app.robots.Fetcher.get", fake_get)
+
+    with pytest.raises(RobotsUnavailableError):
+        ensure_robots_allowed("https://robots-redirect.example/public")
+
+    assert captured["follow_redirects"] is False
