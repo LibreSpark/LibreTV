@@ -97,7 +97,7 @@ try {
   }
 
   await page.locator('#v').evaluate(async (video) => {
-    await new Promise((resolve, reject) => {
+    if (video.readyState < 1) await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('4K media metadata timed out.')), 60000);
       video.addEventListener('loadedmetadata', () => {
         clearTimeout(timeout);
