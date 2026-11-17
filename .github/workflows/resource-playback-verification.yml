@@ -22,6 +22,8 @@ on:
       - "services/scrapling-collector/app.py"
       - "services/scrapling-collector/tests/test_collector.py"
       - ".github/workflows/resource-playback-verification.yml"
+      - "scripts/verify-live-4k-playback.mjs"
+      - ".github/workflows/authorized-live-4k-playback.yml"
       - "src/lib/api-guard.ts"
       - "src/lib/api-guard.test.ts"
       - "src/app/api/auth-guard.test.ts"
@@ -91,3 +93,14 @@ jobs:
         run: python -m py_compile app.py
       - name: Collector unit tests
         run: python -m unittest discover -s tests -v
+
+
+  live-4k-script-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate authorized 4K acceptance script syntax
+        run: node --check scripts/verify-live-4k-playback.mjs
