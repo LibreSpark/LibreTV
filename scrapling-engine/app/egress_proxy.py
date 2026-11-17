@@ -293,6 +293,20 @@ async def _handle_http_upstream(
     try:
         target_writer.write(b"\r\n".join(request) + b"\r\n\r\n")
         await target_writer.drain()
+        # Parse the complete response head: TCP reads may split the status
+        # line, which can otherwise hide 429/5xx responses from the breaker.
+        response_head = await asyncio.wait_for(
+            target_reader.readuntil(b"\r\n\r\n"),
+            timeout=IDLE_TIMEOUT_SECONDS,
+        )
+        status_line = response_head.split(b"\r\n", 1)[0].split()
+        if len(status_line) >= 2:
+            try:
+                response_status_code = int(status_line[1])
+            except ValueError:
+                response_status_code = None
+        writer.write(response_head)
+        await writer.drain()
         while True:
             chunk = await asyncio.wait_for(
                 target_reader.read(64 * 1024),
@@ -300,13 +314,6 @@ async def _handle_http_upstream(
             )
             if not chunk:
                 break
-            if response_status_code is None:
-                status_line = chunk.split(b"\r\n", 1)[0].split()
-                if len(status_line) >= 2:
-                    try:
-                        response_status_code = int(status_line[1])
-                    except ValueError:
-                        response_status_code = None
             writer.write(chunk)
             await writer.drain()
     finally:
