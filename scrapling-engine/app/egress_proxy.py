@@ -260,7 +260,23 @@ async def _handle_http_upstream(
 
     # Validate the complete request before opening an outbound socket. Invalid
     # headers must not let clients consume pinned target sockets.
-    target_reader, target_writer, pinned_ip = await open_pinned_connection(host, port)
+    # Pace connection establishment, not the lifetime of the HTTP response.
+    # Holding this lease while streaming a large media body serializes same-host
+    # segment requests and can stall parallel HLS/DASH downloads.
+    async with site_governor.request(host) as lease:
+        try:
+            target_reader, target_writer, pinned_ip = await open_pinned_connection(host, port)
+        except EgressConnectionFailed:
+            lease.mark_failure()
+            raise
+        except EgressDenied:
+            lease.ignore()
+            raise
+        except Exception:
+            lease.mark_failure()
+            raise
+        lease.mark_success()
+
     logger.info("Pinned HTTP request to %s:%s via %s", host, port, pinned_ip)
 
     path = parsed.path or "/"
@@ -305,33 +321,7 @@ async def _handle_http(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
 ) -> None:
-    parts = request_line.split()
-    if len(parts) != 3 or parts[0] not in {"GET", "HEAD"}:
-        await _handle_http_upstream(request_line, header_lines, reader, writer)
-        return
-    try:
-        host = urlsplit(parts[1]).hostname
-    except ValueError:
-        host = None
-    if not host:
-        await _handle_http_upstream(request_line, header_lines, reader, writer)
-        return
-    async with site_governor.request(host) as lease:
-        try:
-            status = await _handle_http_upstream(request_line, header_lines, reader, writer)
-        except EgressConnectionFailed:
-            lease.mark_failure()
-            raise
-        except EgressDenied:
-            lease.ignore()
-            raise
-        except Exception:
-            lease.mark_failure()
-            raise
-        if status == 429 or status is not None and status >= 500:
-            lease.mark_failure()
-        else:
-            lease.mark_success()
+    await _handle_http_upstream(request_line, header_lines, reader, writer)
 
 
 async def handle_client(
