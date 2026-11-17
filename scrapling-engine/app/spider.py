@@ -34,12 +34,20 @@ class _SeedSpider(Spider):
                 stealthy_headers=False,
                 impersonate=None,
                 timeout=settings.request_timeout_seconds,
-                follow_redirects="safe",
+                follow_redirects=False,
                 proxy=settings.egress_proxy_url,
             ),
         )
 
     async def parse(self, response: Response):
+        status = getattr(response, "status", None)
+        if isinstance(status, int) and 300 <= status < 400:
+            yield {
+                "url": str(response.url),
+                "status": status,
+                "error": "redirect_not_followed",
+            }
+            return
         body = getattr(response, "body", b"")
         if isinstance(body, (bytes, bytearray)) and len(body) > settings.max_response_bytes:
             yield {
