@@ -51,3 +51,25 @@ def test_regex_extraction_converts_timeout_to_validation_error(monkeypatch) -> N
 
     with pytest.raises(ValueError, match="time limit"):
         ScraplingAdapter.extract(page, "chapter", "regex")
+
+
+def test_fetch_page_can_disable_redirect_following(monkeypatch) -> None:
+    page = Mock()
+    page.headers = {}
+    page.body = b"<html>ok</html>"
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured.update(kwargs)
+        return page
+
+    monkeypatch.setattr("app.scraper.Fetcher.get", fake_get)
+
+    result = ScraplingAdapter.fetch_page(
+        "https://example.com/",
+        timeout=10,
+        follow_redirects=False,
+    )
+
+    assert result is page
+    assert captured["follow_redirects"] is False
