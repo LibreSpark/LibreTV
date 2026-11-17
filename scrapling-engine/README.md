@@ -115,3 +115,17 @@ python -m scripts.verify_live_supervisor
 ```
 
 该探针只抓取 allowlist 中的一个页面，并发起一次模型 completion；遵守 robots.txt、使用受控出口代理、拒绝跨主机重定向。它只验证真实网关返回的 CSS/XPath 规则能否在同一页面命中，不保存或激活规则，也不注册候选资源。没有明确授权域名和网关凭据时不会运行真实探测。
+
+
+## 授权公网规模验收（最多 1,000 个明确列出的 URL）
+
+真实公网规模验收不能由队列压力测试替代。运行前，必须获得目标站点授权，并将每个允许测试的页面 URL 写入 UTF-8 文件（每行一个 URL）；通过精确主机 allowlist 限制目标：
+
+```bash
+python -m scripts.verify_live_authorized_scale \
+  --input ./authorized-urls.txt \
+  --allowed-hosts example.org,www.example.org \
+  --max-urls 1000
+```
+
+该探针只请求文件中明确列出的 URL，不跟随页面链接扩张；遵守 robots.txt，按域名单并发、至少 1 秒间隔，并使用采集器已配置的安全出口代理。目标主机不在 allowlist、URL 不安全或超过数量上限时立即拒绝。输出包含提交数、成功数、失败/缺失数和 Spider 统计。只有实际运行并保存报告后，才能声称完成了真实公网规模验收。测试必须遵守站点授权方另行规定的更严格频率限制；当前探针默认不支持提高请求频率。
