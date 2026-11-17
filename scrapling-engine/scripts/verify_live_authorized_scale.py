@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from app.config import settings
 from app.security import validate_public_http_url
 from app.spider import ScraplingSpiderAdapter
 
@@ -33,6 +34,10 @@ def load_authorized_urls(path: Path, allowed_hosts: set[str], limit: int) -> lis
 
 
 async def run(args: argparse.Namespace) -> int:
+    if not settings.egress_proxy_url:
+        raise ValueError(
+            "SCRAPLING_EGRESS_PROXY is required; live acceptance must use the controlled egress proxy."
+        )
     allowed_hosts = {host.strip().lower() for host in args.allowed_hosts.split(",") if host.strip()}
     if not allowed_hosts:
         raise ValueError("--allowed-hosts must contain at least one authorized hostname.")
