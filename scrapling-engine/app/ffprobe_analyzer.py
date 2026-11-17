@@ -101,7 +101,8 @@ def _decode_and_extract_frame(media_path: Path, timeout_seconds: int) -> dict[st
     base = [
         "prlimit",
         f"--cpu={phase_timeout}:{phase_timeout + 5}",
-        "--as=536870912",
+        "--as=1073741824",
+        "--stack=1048576:1048576",
         "--core=0:0",
         "--nofile=64:64",
         "--fsize=2097152:2097152",

@@ -174,7 +174,8 @@ cpu = str(min(os.sched_getaffinity(0)))
 command = [
     "prlimit",
     "--cpu=5:10",
-    "--as=536870912",
+    "--as=1073741824",
+    "--stack=1048576:1048576",
     "--core=0:0",
     "--nofile=64:64",
     "--fsize=2097152:2097152",

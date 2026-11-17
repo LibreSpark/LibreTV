@@ -219,6 +219,8 @@ def test_decode_failure_reports_bounded_ffmpeg_diagnostic(tmp_path, monkeypatch)
         assert "-threads" in command
         assert "-filter_threads" in command
         assert "-filter_complex_threads" in command
+        assert "--as=1073741824" in command
+        assert "--stack=1048576:1048576" in command
         assert "taskset" in command
         assert "-xerror" in command
         kwargs["stderr"].write(b"fixture-specific decoder error" + b"x" * 1000)
