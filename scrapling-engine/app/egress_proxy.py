@@ -312,6 +312,10 @@ async def _handle_http_upstream(
             await target_writer.wait_closed()
         except OSError:
             pass
+    if response_status_code == 429 or (
+        response_status_code is not None and response_status_code >= 500
+    ):
+        site_governor.record_failure(host)
     return response_status_code
 
 
