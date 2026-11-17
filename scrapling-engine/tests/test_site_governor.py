@@ -63,3 +63,15 @@ async def test_site_governor_applies_per_site_minimum_interval() -> None:
     await asyncio.gather(request(), request())
     assert len(starts) == 2
     assert max(starts) - min(starts) >= 0.015
+
+
+def test_record_failure_can_be_applied_after_pacing_lease_is_released() -> None:
+    governor = SiteGovernor(
+        minimum_interval_seconds=0,
+        failure_threshold=1,
+        base_cooldown_seconds=0.1,
+        maximum_cooldown_seconds=0.1,
+    )
+    governor.record_failure("example.com")
+    assert governor.snapshot("example.com")["failures"] == 1
+    assert governor.snapshot("example.com")["open_until"] > 0
