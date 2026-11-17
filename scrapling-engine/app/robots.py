@@ -43,7 +43,7 @@ def ensure_robots_allowed(url: str, timeout: float | None = None) -> None:
             response = Fetcher.get(
                 robots_url,
                 timeout=timeout or settings.request_timeout_seconds,
-                follow_redirects="safe",
+                follow_redirects=False,
                 proxy=settings.egress_proxy_url,
                 impersonate=None,
                 stealthy_headers=False,
@@ -54,6 +54,10 @@ def ensure_robots_allowed(url: str, timeout: float | None = None) -> None:
                 "robots.txt could not be checked; refusing the fetch."
             ) from exc
         status = getattr(response, "status", 200)
+        if isinstance(status, int) and 300 <= status < 400:
+            raise RobotsUnavailableError(
+                "robots.txt redirected; refusing to follow an unapproved redirect."
+            )
         if isinstance(status, int) and (status in {401, 403, 429} or status >= 500):
             raise RobotsUnavailableError("robots.txt could not be checked; refusing the fetch.")
         parser = RobotFileParser(robots_url)
