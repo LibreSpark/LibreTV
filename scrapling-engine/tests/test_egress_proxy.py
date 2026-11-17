@@ -11,9 +11,33 @@ import pytest
 
 from app.egress_proxy import (
     EgressDenied,
+    _authority,
     open_pinned_connection,
     resolve_public_addresses,
 )
+
+
+@pytest.mark.parametrize(
+    "authority",
+    [
+        "example.com:443/path",
+        "example.com:443?query=1",
+        "example.com:443#fragment",
+        "user@example.com:443",
+        "example.com:80",
+    ],
+)
+def test_connect_authority_rejects_non_authority_components(authority: str):
+    with pytest.raises(EgressDenied):
+        _authority(authority, 443)
+
+
+def test_connect_authority_accepts_host_and_expected_port():
+    assert _authority("example.com:443", 443) == ("example.com", 443)
+    assert _authority("[2606:2800:220:1:248:1893:25c8:1946]:443", 443) == (
+        "2606:2800:220:1:248:1893:25c8:1946",
+        443,
+    )
 
 
 def _record(address: str):
