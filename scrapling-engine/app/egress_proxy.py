@@ -165,9 +165,25 @@ async def _handle_connect_upstream(
     writer: asyncio.StreamWriter,
 ) -> None:
     host, port = _authority(authority, 443)
-    target_reader, target_writer, pinned_ip = await open_pinned_connection(host, port)
+    # Apply per-host pacing to connection establishment only. Holding the
+    # governor lease for the lifetime of a TLS tunnel serializes parallel
+    # browser connections and can stall segmented 4K playback.
+    async with site_governor.request(host) as lease:
+        try:
+            target_reader, target_writer, pinned_ip = await open_pinned_connection(host, port)
+        except EgressConnectionFailed:
+            lease.mark_failure()
+            raise
+        except EgressDenied:
+            lease.ignore()
+            raise
+        except Exception:
+            lease.mark_failure()
+            raise
+        lease.mark_success()
+
     logger.info("Pinned HTTPS tunnel to %s:%s via %s", host, port, pinned_ip)
-    writer.write(b"HTTP/1.1 200 Connection Established\r\nProxy-Agent: LibreTV-Egress\r\n\r\n")
+    writer.write(b"HTTP/1.1 200 Connection Established\\r\\nProxy-Agent: LibreTV-Egress\\r\\n\\r\\n")
     await writer.drain()
     try:
         await _tunnel(reader, writer, target_reader, target_writer)
@@ -184,20 +200,7 @@ async def _handle_connect(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
 ) -> None:
-    host, _ = _authority(authority, 443)
-    async with site_governor.request(host) as lease:
-        try:
-            await _handle_connect_upstream(authority, reader, writer)
-        except EgressConnectionFailed:
-            lease.mark_failure()
-            raise
-        except EgressDenied:
-            lease.ignore()
-            raise
-        except Exception:
-            lease.mark_failure()
-            raise
-        lease.mark_success()
+    await _handle_connect_upstream(authority, reader, writer)
 
 
 async def _handle_http_upstream(
