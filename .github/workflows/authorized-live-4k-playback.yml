@@ -30,5 +30,19 @@ jobs:
         run: npm install --no-save --package-lock=false playwright@1.55.0
       - name: Install Chrome with media codecs
         run: npx playwright install --with-deps chrome
+      - name: Prepare 4K acceptance evidence directory
+        run: mkdir -p acceptance-artifacts
       - name: Verify sustained real 4K decode and playback
-        run: node scripts/verify-live-4k-playback.mjs
+        run: |
+          set -o pipefail
+          node scripts/verify-live-4k-playback.mjs \
+            2> acceptance-artifacts/4k-playback.stderr.log \
+            | tee acceptance-artifacts/4k-playback.json
+      - name: Upload 4K playback acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authorized-live-4k-playback-${{ github.run_id }}
+          path: acceptance-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
