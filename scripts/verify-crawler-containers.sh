@@ -157,8 +157,9 @@ fi
 # no-network sidecar, stage it in the worker-only volume, and request a real probe.
 echo "[runtime] Generate a probe fixture in the isolated sidecar"
 timeout 30s "${compose[@]}" exec -T scrapling-media-probe ffmpeg -hide_banner -loglevel error \
-  -f lavfi -i color=c=black:s=320x240:r=1:d=1 -frames:v 1 \
-  -c:v mpeg4 -threads 1 -y /probe/outbox/probe-smoke.mp4
+  -f lavfi -i "color=c=black:s=320x240:r=25:d=2" -t 2 \
+  -an -c:v mpeg4 -pix_fmt yuv420p -threads 1 -movflags +faststart \
+  -y /probe/outbox/probe-smoke.mp4
 "${compose[@]}" exec -T scrapling-media-probe test -s /probe/outbox/probe-smoke.mp4
 worker_container=$("${compose[@]}" ps -q scrapling-workflow-worker)
 echo "[runtime] Stage the media fixture into the worker-only writable volume"
