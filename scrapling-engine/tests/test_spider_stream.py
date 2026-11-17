@@ -36,7 +36,7 @@ def test_spider_adapter_uses_async_stream_without_signal_start(monkeypatch) -> N
     assert result["stats"]["requests_count"] == 1
 
 
-def test_spider_configures_user_agent_timeout_and_safe_redirects(monkeypatch) -> None:
+def test_spider_configures_user_agent_timeout_and_disables_redirects(monkeypatch) -> None:
     captured = {}
 
     class FakeFetcherSession:
@@ -55,7 +55,7 @@ def test_spider_configures_user_agent_timeout_and_safe_redirects(monkeypatch) ->
     assert captured["session_id"] == "default"
     assert captured["headers"]["User-Agent"]
     assert captured["timeout"] > 0
-    assert captured["follow_redirects"] == "safe"
+    assert captured["follow_redirects"] is False
     assert captured["stealthy_headers"] is False
     assert captured["impersonate"] is None
 
