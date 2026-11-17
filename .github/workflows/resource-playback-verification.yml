@@ -40,6 +40,8 @@ on:
       - "src/lib/collector-playback-eligibility.ts"
       - "src/lib/collector-playback-eligibility.test.ts"
       - ".github/workflows/resource-playback-verification.yml"
+      - "scripts/verify-live-4k-playback.mjs"
+      - ".github/workflows/authorized-live-4k-playback.yml"
       - "src/lib/api-guard.ts"
       - "src/lib/api-guard.test.ts"
       - "src/app/api/auth-guard.test.ts"
