@@ -13,7 +13,7 @@ from app.config import settings
 
 
 class _SeedSpider(Spider):
-    """A polite, seed-only Spider; link expansion stays disabled pending egress guards."""
+    """Polite seed-only crawler; redirects are surfaced, never automatically followed."""
 
     name = "libretv_seed_crawler"
     robots_txt_obey = True
