@@ -522,11 +522,7 @@ async def test_parallel_http_responses_are_not_serialized_by_site_governor(monke
         if accepted == 2:
             both_requests_accepted.set()
         await asyncio.wait_for(both_requests_accepted.wait(), timeout=3)
-        writer.write(
-            b"HTTP/1.1 200 OK\\r\\n"
-            b"Content-Length: 2\\r\\n"
-            b"Connection: close\\r\\n\\r\\nok"
-        )
+        writer.write(b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\nok")
         await writer.drain()
         writer.close()
         await writer.wait_closed()
@@ -568,9 +564,7 @@ async def test_parallel_http_responses_are_not_serialized_by_site_governor(monke
                 + b"Host: example.com\\r\\n\\r\\n"
             )
             await writer.drain()
-            responses.append(
-                await asyncio.wait_for(reader.read(), timeout=4)
-            )
+            responses.append(await asyncio.wait_for(reader.read(), timeout=4))
 
         await asyncio.gather(request("/segment-1"), request("/segment-2"))
         assert accepted == 2
