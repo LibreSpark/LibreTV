@@ -24,6 +24,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Install project dependencies
         run: npm ci
       - name: Install isolated Playwright runner
@@ -32,12 +35,35 @@ jobs:
         run: npx playwright install --with-deps chrome
       - name: Prepare 4K acceptance evidence directory
         run: mkdir -p acceptance-artifacts
+      - name: Start loopback-only DNS-pinning egress proxy
+        run: |
+          set -euo pipefail
+          (
+            cd scrapling-engine
+            EGRESS_PROXY_HOST=127.0.0.1 EGRESS_PROXY_PORT=8080 python -m app.egress_proxy
+          ) > acceptance-artifacts/egress-proxy.log 2>&1 &
+          echo $! > acceptance-artifacts/egress-proxy.pid
+          for attempt in $(seq 1 50); do
+            if python -c "import socket; s=socket.create_connection(('127.0.0.1', 8080), timeout=1); s.close()"; then
+              exit 0
+            fi
+            sleep 0.2
+          done
+          cat acceptance-artifacts/egress-proxy.log
+          echo 'DNS-pinning egress proxy failed to start' >&2
+          exit 1
       - name: Verify sustained real 4K decode and playback
         run: |
           set -o pipefail
           node scripts/verify-live-4k-playback.mjs \
             2> acceptance-artifacts/4k-playback.stderr.log \
             | tee acceptance-artifacts/4k-playback.json
+      - name: Stop loopback-only egress proxy
+        if: always()
+        run: |
+          if [ -f acceptance-artifacts/egress-proxy.pid ]; then
+            kill "$(cat acceptance-artifacts/egress-proxy.pid)" 2>/dev/null || true
+          fi
       - name: Upload 4K playback acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
