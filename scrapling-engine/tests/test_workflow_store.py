@@ -308,7 +308,9 @@ def test_expired_lease_at_max_attempts_fails_workflow_instead_of_stalling() -> N
     not os.getenv("DATABASE_URL"),
     reason="PostgreSQL integration database is not configured",
 )
-def test_workflow_retry_uses_exponential_backoff_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_workflow_retry_uses_exponential_backoff_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from datetime import UTC, datetime, timedelta
 
     database_url = os.environ["DATABASE_URL"]
