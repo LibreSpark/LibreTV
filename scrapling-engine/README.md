@@ -92,3 +92,26 @@ GitHub Actions 对引擎、PostgreSQL 集成、隔离容器验收和网站 API/U
 - HLS/DASH 的码率、分辨率和 HDR 是清单声明，不等于真实画质；抽帧探测也不是全片损坏扫描或视觉质量评估。
 - 人工批准仅发布当前播放器能实际验收且未检测到加密/DRM保护的来源。
 - 公网采集与任意站点兼容性仍需在部署方授权范围内验证；CI 容器通过不代表任意目标网站都能抓取。
+
+
+## 真实 AI 网关验收（显式授权、单页探测）
+
+CI 的 MockTransport 测试不代表真实模型已接通。要做一次真实网关验收，必须先取得目标站点授权，并在运行环境设置：
+
+```dotenv
+SUPERVISOR_API_BASE=https://你的兼容接口/v1
+SUPERVISOR_API_KEY=由密钥管理器注入
+SUPERVISOR_MODEL=实际模型名
+SCRAPLING_EGRESS_PROXY=http://scrapling-egress-proxy:8080
+LIVE_ACCEPTANCE_PAGE_URL=https://已授权站点.example/catalog
+LIVE_ACCEPTANCE_ALLOWED_HOSTS=已授权站点.example
+LIVE_ACCEPTANCE_GOAL=提取公开目录中的影片标题
+```
+
+从 `scrapling-engine` 目录执行：
+
+```bash
+python -m scripts.verify_live_supervisor
+```
+
+该探针只抓取 allowlist 中的一个页面，并发起一次模型 completion；遵守 robots.txt、使用受控出口代理、拒绝跨主机重定向。它只验证真实网关返回的 CSS/XPath 规则能否在同一页面命中，不保存或激活规则，也不注册候选资源。没有明确授权域名和网关凭据时不会运行真实探测。
