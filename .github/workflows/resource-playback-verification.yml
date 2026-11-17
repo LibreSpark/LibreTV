@@ -24,6 +24,7 @@ on:
       - ".github/workflows/resource-playback-verification.yml"
       - "scripts/verify-live-4k-playback.mjs"
       - ".github/workflows/authorized-live-4k-playback.yml"
+      - ".github/workflows/authorized-live-collector-acceptance.yml"
       - "src/lib/api-guard.ts"
       - "src/lib/api-guard.test.ts"
       - "src/app/api/auth-guard.test.ts"
@@ -106,3 +107,5 @@ jobs:
           node-version: 22
       - name: Validate authorized 4K acceptance script syntax
         run: node --check scripts/verify-live-4k-playback.mjs
+      - name: Validate manual live acceptance workflow YAML
+        run: ruby -e 'require "yaml"; ARGV.each { |file| YAML.load_file(file) }' .github/workflows/authorized-live-4k-playback.yml .github/workflows/authorized-live-collector-acceptance.yml
