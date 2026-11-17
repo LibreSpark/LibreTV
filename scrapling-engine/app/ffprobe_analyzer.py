@@ -67,6 +67,16 @@ def _ratio(value: Any) -> float | None:
         return None
 
 
+def _single_cpu() -> str:
+    try:
+        cpus = os.sched_getaffinity(0)
+    except (AttributeError, OSError) as exc:
+        raise MediaProbeError("Unable to determine the isolated probe CPU set") from exc
+    if not cpus:
+        raise MediaProbeError("The isolated probe has no available CPU")
+    return str(min(cpus))
+
+
 def _run_limited_ffmpeg(command: list[str], timeout_seconds: int) -> tuple[int, str]:
     with tempfile.TemporaryFile(dir="/tmp") as diagnostics:
         completed = subprocess.run(  # noqa: S603
@@ -96,6 +106,9 @@ def _decode_and_extract_frame(media_path: Path, timeout_seconds: int) -> dict[st
         "--nofile=64:64",
         "--fsize=2097152:2097152",
         "--",
+        "taskset",
+        "-c",
+        _single_cpu(),
         "ffmpeg",
         "-nostdin",
         "-hide_banner",
@@ -189,6 +202,9 @@ def analyze_local_media_file(
         "--core=0:0",
         "--nofile=64:64",
         "--",
+        "taskset",
+        "-c",
+        _single_cpu(),
         "ffprobe",
         "-v",
         "error",

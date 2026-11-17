@@ -81,8 +81,9 @@ def test_probe_reports_encoded_dimensions_but_not_native_4k(tmp_path, monkeypatc
 
     def fake_popen(command, **kwargs):
         assert command[0] == "prlimit"
-        assert command[command.index("--") + 1] == "ffprobe"
-        ffprobe_args = command[command.index("--") + 1 :]
+        assert command[command.index("--") + 1] == "taskset"
+        assert command[command.index("taskset") + 1] == "-c"
+        ffprobe_args = command[command.index("ffprobe") :]
         whitelist_index = ffprobe_args.index("-protocol_whitelist")
         assert ffprobe_args[whitelist_index + 1] == "file"
         entries = command[command.index("-show_entries") + 1]
@@ -218,6 +219,7 @@ def test_decode_failure_reports_bounded_ffmpeg_diagnostic(tmp_path, monkeypatch)
         assert "-threads" in command
         assert "-filter_threads" in command
         assert "-filter_complex_threads" in command
+        assert "taskset" in command
         assert "-xerror" in command
         kwargs["stderr"].write(b"fixture-specific decoder error" + b"x" * 1000)
         return SimpleNamespace(returncode=1)

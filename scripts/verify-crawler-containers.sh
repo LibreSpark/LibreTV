@@ -166,7 +166,58 @@ echo "[runtime] Stage the media fixture into the worker-only writable volume"
 "${compose[@]}" exec -T scrapling-workflow-worker cp /probe/outbox/probe-smoke.mp4 /probe/staging/probe-smoke.mp4
 "${compose[@]}" exec -T scrapling-workflow-worker cp /probe/staging/probe-smoke.mp4 /probe/staging/probe-smoke.media
 echo "[runtime] Validate the copied fixture directly with the isolated FFmpeg binary"
-timeout 20s "${compose[@]}" exec -T scrapling-media-probe prlimit --cpu=5:10 --as=536870912 --core=0:0 --nofile=64:64 --fsize=2097152:2097152 -- ffmpeg -nostdin -hide_banner -loglevel error -xerror -err_detect explode -protocol_whitelist file -max_alloc 67108864 -probesize 10485760 -analyzeduration 10000000 -threads 1 -filter_threads 1 -filter_complex_threads 1 -i /probe/staging/probe-smoke.media -t 8 -map 0:v:0 -map '0:a:0?' -f null -
+timeout 20s "${compose[@]}" exec -T scrapling-media-probe python - <<'PY'
+import os
+import subprocess
+
+cpu = str(min(os.sched_getaffinity(0)))
+command = [
+    "prlimit",
+    "--cpu=5:10",
+    "--as=536870912",
+    "--core=0:0",
+    "--nofile=64:64",
+    "--fsize=2097152:2097152",
+    "--",
+    "taskset",
+    "-c",
+    cpu,
+    "ffmpeg",
+    "-nostdin",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-xerror",
+    "-err_detect",
+    "explode",
+    "-protocol_whitelist",
+    "file",
+    "-max_alloc",
+    "67108864",
+    "-probesize",
+    "10485760",
+    "-analyzeduration",
+    "10000000",
+    "-threads",
+    "1",
+    "-filter_threads",
+    "1",
+    "-filter_complex_threads",
+    "1",
+    "-i",
+    "/probe/staging/probe-smoke.media",
+    "-t",
+    "8",
+    "-map",
+    "0:v:0",
+    "-map",
+    "0:a:0?",
+    "-f",
+    "null",
+    "-",
+]
+subprocess.run(command, check=True)
+PY
 echo "[runtime] Exercise the real sidecar handoff and ffprobe analysis"
 timeout 45s "${compose[@]}" exec -T scrapling-workflow-worker python - <<'PY'
 from app.probe_client import probe_media_file
