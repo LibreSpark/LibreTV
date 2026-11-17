@@ -559,10 +559,7 @@ async def test_parallel_http_responses_are_not_serialized_by_site_governor(monke
         async def request(path):
             reader, writer = await asyncio.open_connection("127.0.0.1", proxy_port)
             clients.append(writer)
-            writer.write(
-                f"GET http://example.com{path} HTTP/1.1\r\n".encode()
-                + b"Host: example.com\r\n\r\n"
-            )
+            writer.write(f"GET http://example.com{path} HTTP/1.1\r\n".encode() + b"Host: example.com\r\n\r\n")
             await writer.drain()
             responses.append(await asyncio.wait_for(reader.read(), timeout=4))
 
