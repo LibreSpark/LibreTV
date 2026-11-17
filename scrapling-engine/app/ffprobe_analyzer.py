@@ -67,6 +67,25 @@ def _ratio(value: Any) -> float | None:
         return None
 
 
+def _run_limited_ffmpeg(command: list[str], timeout_seconds: int) -> tuple[int, str]:
+    with tempfile.TemporaryFile(dir="/tmp") as diagnostics:
+        completed = subprocess.run(  # noqa: S603
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=diagnostics,
+            shell=False,
+            cwd=str(_probe_root()),
+            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C"},
+            close_fds=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+        diagnostics.seek(0)
+        detail = " ".join(diagnostics.read(4096).decode("utf-8", "replace").split())
+    return completed.returncode, detail[:240]
+
+
 def _decode_and_extract_frame(media_path: Path, timeout_seconds: int) -> dict[str, Any]:
     phase_timeout = max(1, timeout_seconds // 2)
     base = [
@@ -93,51 +112,42 @@ def _decode_and_extract_frame(media_path: Path, timeout_seconds: int) -> dict[st
         str(10 * 1024 * 1024),
         "-analyzeduration",
         str(10 * 1000 * 1000),
+        "-threads",
+        "1",
         "-i",
         str(media_path),
     ]
-    common = {
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "shell": False,
-        "cwd": str(_probe_root()),
-        "env": {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C"},
-        "close_fds": True,
-        "timeout": phase_timeout,
-        "check": False,
-    }
     try:
-        decoded = subprocess.run(  # noqa: S603
-            [*base, "-t", "8", "-map", "0:v:0", "-map", "0:a:0?", "-f", "null", "-"],
-            **common,
-        )
-        if decoded.returncode != 0:
-            raise MediaProbeError("FFmpeg detected a decode error in the media sample")
+        decode_command = [*base, "-t", "8", "-map", "0:v:0", "-map", "0:a:0?", "-f", "null", "-"]
+        decode_code, decode_detail = _run_limited_ffmpeg(decode_command, phase_timeout)
+        if decode_code != 0:
+            suffix = f": {decode_detail}" if decode_detail else ""
+            raise MediaProbeError(f"FFmpeg detected a decode error (exit {decode_code}){suffix}")
         with tempfile.NamedTemporaryFile(
             prefix="libretv-frame-", suffix=".jpg", dir="/tmp", delete=False
         ) as output:
             frame_path = Path(output.name)
         try:
-            extracted = subprocess.run(  # noqa: S603
-                [
-                    *base,
-                    "-frames:v",
-                    "1",
-                    "-vf",
-                    "scale='min(640,iw)':-2",
-                    "-an",
-                    "-f",
-                    "image2",
-                    "-vcodec",
-                    "mjpeg",
-                    "-y",
-                    str(frame_path),
-                ],
-                **common,
-            )
-            if extracted.returncode != 0:
-                raise MediaProbeError("FFmpeg could not extract a sample frame")
+            extract_command = [
+                *base,
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale='min(640,iw)':-2",
+                "-an",
+                "-f",
+                "image2",
+                "-vcodec",
+                "mjpeg",
+                "-y",
+                str(frame_path),
+            ]
+            extract_code, extract_detail = _run_limited_ffmpeg(extract_command, phase_timeout)
+            if extract_code != 0:
+                suffix = f": {extract_detail}" if extract_detail else ""
+                raise MediaProbeError(
+                    f"FFmpeg could not extract a sample frame (exit {extract_code}){suffix}"
+                )
             size = frame_path.stat().st_size
             if not 1 <= size <= 2 * 1024 * 1024:
                 raise MediaProbeError("Extracted sample frame is empty or exceeds 2 MiB")

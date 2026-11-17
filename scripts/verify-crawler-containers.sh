@@ -157,13 +157,16 @@ fi
 # no-network sidecar, stage it in the worker-only volume, and request a real probe.
 echo "[runtime] Generate a probe fixture in the isolated sidecar"
 timeout 30s "${compose[@]}" exec -T scrapling-media-probe ffmpeg -hide_banner -loglevel error \
-  -f lavfi -i "color=c=black:s=320x240:r=25:d=2" -t 2 \
-  -an -c:v mpeg4 -pix_fmt yuv420p -threads 1 -movflags +faststart \
+  -f lavfi -i "testsrc2=size=320x240:rate=25:duration=2" -frames:v 50 \
+  -an -c:v libx264 -preset ultrafast -crf 32 -pix_fmt yuv420p -threads 1 -movflags +faststart \
   -y /probe/outbox/probe-smoke.mp4
 "${compose[@]}" exec -T scrapling-media-probe test -s /probe/outbox/probe-smoke.mp4
 worker_container=$("${compose[@]}" ps -q scrapling-workflow-worker)
 echo "[runtime] Stage the media fixture into the worker-only writable volume"
 "${compose[@]}" exec -T scrapling-workflow-worker cp /probe/outbox/probe-smoke.mp4 /probe/staging/probe-smoke.mp4
+"${compose[@]}" exec -T scrapling-workflow-worker cp /probe/staging/probe-smoke.mp4 /probe/staging/probe-smoke.media
+echo "[runtime] Validate the copied fixture directly with the isolated FFmpeg binary"
+timeout 20s "${compose[@]}" exec -T scrapling-media-probe prlimit --cpu=5:10 --as=536870912 --core=0:0 --nofile=64:64 --fsize=2097152:2097152 -- ffmpeg -nostdin -hide_banner -loglevel error -xerror -err_detect explode -protocol_whitelist file -max_alloc 67108864 -probesize 10485760 -analyzeduration 10000000 -threads 1 -i /probe/staging/probe-smoke.media -t 8 -map 0:v:0 -map '0:a:0?' -f null -
 echo "[runtime] Exercise the real sidecar handoff and ffprobe analysis"
 timeout 45s "${compose[@]}" exec -T scrapling-workflow-worker python - <<'PY'
 from app.probe_client import probe_media_file
@@ -176,7 +179,7 @@ assert report["video"]["width"] == 320, report
 assert report["video"]["height"] == 240, report
 print("End-to-end isolated ffprobe handoff passed.")
 PY
-"${compose[@]}" exec -T scrapling-workflow-worker rm -f /probe/staging/probe-smoke.mp4
+"${compose[@]}" exec -T scrapling-workflow-worker rm -f /probe/staging/probe-smoke.mp4 /probe/staging/probe-smoke.media
 "${compose[@]}" exec -T scrapling-media-probe rm -f /probe/outbox/probe-smoke.mp4
 grep -q 'no-new-privileges' <<<"$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$probe_container")"
 "${compose[@]}" exec -T scrapling-media-probe python - <<'PY'

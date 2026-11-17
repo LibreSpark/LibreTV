@@ -6,7 +6,10 @@ import sys
 
 import pytest
 
-from app.ffprobe_analyzer import MediaProbeError, analyze_local_media_file
+from app.ffprobe_analyzer import (
+    MediaProbeError,
+    analyze_local_media_file,
+)
 
 
 def _media_file(tmp_path):
@@ -199,6 +202,28 @@ def test_probe_stops_process_when_stdout_exceeds_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", oversized)
     with pytest.raises(MediaProbeError, match="exceeds the 1 MiB limit"):
         analyze_local_media_file(media)
+
+
+def test_decode_failure_reports_bounded_ffmpeg_diagnostic(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.ffprobe_analyzer import _decode_and_extract_frame
+
+    root = tmp_path / "probe"
+    root.mkdir()
+    monkeypatch.setenv("MEDIA_PROBE_ROOT", str(root))
+
+    def fail_decode(command, **kwargs):
+        assert kwargs["shell"] is False
+        assert "-threads" in command
+        assert "-xerror" in command
+        kwargs["stderr"].write(b"fixture-specific decoder error" + b"x" * 1000)
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr("app.ffprobe_analyzer.subprocess.run", fail_decode)
+    with pytest.raises(MediaProbeError, match="fixture-specific decoder error") as error:
+        _decode_and_extract_frame(root / "fixture.media", timeout_seconds=10)
+    assert len(str(error.value)) < 300
 
 
 def test_pixel_format_bit_depth_inference():
