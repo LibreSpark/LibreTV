@@ -49,10 +49,16 @@ jobs:
       - name: Install collector and acceptance dependencies
         working-directory: scrapling-engine
         run: python -m pip install -e ".[dev]"
+      - name: Prepare private acceptance evidence directory
+        run: mkdir -p scrapling-engine/acceptance-artifacts
       - name: Verify live AI supervisor against one authorized page
         if: inputs.acceptance_type == 'ai-supervisor' || inputs.acceptance_type == 'both'
         working-directory: scrapling-engine
-        run: python -m scripts.verify_live_supervisor
+        run: |
+          set -o pipefail
+          python -m scripts.verify_live_supervisor \
+            2> acceptance-artifacts/ai-supervisor.stderr.log \
+            | tee acceptance-artifacts/ai-supervisor.json
       - name: Materialize explicitly authorized URL list in runner temp
         if: inputs.acceptance_type == 'live-scale' || inputs.acceptance_type == 'both'
         working-directory: scrapling-engine
@@ -70,7 +76,18 @@ jobs:
         if: inputs.acceptance_type == 'live-scale' || inputs.acceptance_type == 'both'
         working-directory: scrapling-engine
         run: |
+          set -o pipefail
           python -m scripts.verify_live_authorized_scale \
             --input /tmp/libretv-authorized-urls.txt \
             --allowed-hosts "$LIVE_ACCEPTANCE_ALLOWED_HOSTS" \
-            --max-urls "$MAX_URLS"
+            --max-urls "$MAX_URLS" \
+            2> acceptance-artifacts/live-scale.stderr.log \
+            | tee acceptance-artifacts/live-scale.json
+      - name: Upload live acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authorized-live-collector-${{ github.run_id }}
+          path: scrapling-engine/acceptance-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
