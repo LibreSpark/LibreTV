@@ -114,6 +114,10 @@ def _decode_and_extract_frame(media_path: Path, timeout_seconds: int) -> dict[st
         str(10 * 1000 * 1000),
         "-threads",
         "1",
+        "-filter_threads",
+        "1",
+        "-filter_complex_threads",
+        "1",
         "-i",
         str(media_path),
     ]
@@ -196,6 +200,8 @@ def analyze_local_media_file(
         str(10 * 1024 * 1024),
         "-analyzeduration",
         str(10 * 1000 * 1000),
+        "-threads",
+        "1",
         "-show_entries",
         "format=format_name,duration,size,bit_rate:"
         "stream=index,codec_type,codec_name,profile,width,height,pix_fmt,"
