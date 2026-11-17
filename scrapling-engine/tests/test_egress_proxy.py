@@ -616,11 +616,7 @@ async def test_fragmented_http_429_status_is_recorded_by_site_governor(monkeypat
         writer.write(b"HTTP/1.1 4")
         await writer.drain()
         await asyncio.sleep(0.01)
-        writer.write(
-            b"29 Too Many Requests\r\n"
-            b"Content-Length: 0\r\n"
-            b"Connection: close\r\n\r\n"
-        )
+        writer.write(b"29 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         await writer.drain()
         writer.close()
         await writer.wait_closed()
@@ -647,10 +643,7 @@ async def test_fragmented_http_429_status_is_recorded_by_site_governor(monkeypat
     proxy_port = proxy_server.sockets[0].getsockname()[1]
     try:
         reader, writer = await asyncio.open_connection("127.0.0.1", proxy_port)
-        writer.write(
-            b"GET http://example.com/catalog HTTP/1.1\r\n"
-            b"Host: example.com\r\n\r\n"
-        )
+        writer.write(b"GET http://example.com/catalog HTTP/1.1\r\nHost: example.com\r\n\r\n")
         await writer.drain()
         response = await asyncio.wait_for(reader.read(), timeout=3)
         assert response.startswith(b"HTTP/1.1 429 Too Many Requests")
