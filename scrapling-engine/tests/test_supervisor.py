@@ -265,3 +265,21 @@ async def test_supervisor_permanent_http_error_is_not_retryable() -> None:
             "<html><body>fixture</body></html>",
         )
     assert not isinstance(error.value, RetryableSupervisorError)
+
+
+@pytest.mark.asyncio
+async def test_supervisor_transport_error_is_retryable() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("temporary connection failure")
+
+    client = SupervisorClient(
+        "https://model.example/v1",
+        "test-secret",
+        "test-model",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(RetryableSupervisorError):
+        await client.plan_discovery(
+            "Find public movie pages",
+            ["https://example.com/"],
+        )
