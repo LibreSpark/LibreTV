@@ -11,6 +11,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/thousand-scale-intelligent-collector
       - feature/friday-quality-aware-source-ranking-2026-11-08
       - feature/libretv-v4-pc-light-homepage-2026-11-09
       - feature/auto-rank-best-vod-sources-2026-11-10
