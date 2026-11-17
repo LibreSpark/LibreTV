@@ -119,6 +119,58 @@ async def test_connect_proxy_tunnels_tls_bytes_to_pinned_peer(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_parallel_connect_tunnels_are_not_serialized_by_site_governor(monkeypatch):
+    from app import egress_proxy
+    from app.site_governor import SiteGovernor
+
+    release_targets = asyncio.Event()
+    accepted = 0
+
+    async def target(_reader, writer):
+        nonlocal accepted
+        accepted += 1
+        await release_targets.wait()
+        writer.close()
+        await writer.wait_closed()
+
+    target_server = await asyncio.start_server(target, "127.0.0.1", 0)
+    target_port = target_server.sockets[0].getsockname()[1]
+    monkeypatch.setattr(egress_proxy, "site_governor", SiteGovernor(minimum_interval_seconds=0))
+
+    async def fake_open_pinned_connection(host, port):
+        assert host == "example.com"
+        assert port == 443
+        reader, writer = await asyncio.open_connection("127.0.0.1", target_port)
+        return reader, writer, ipaddress.ip_address("93.184.216.34")
+
+    monkeypatch.setattr(egress_proxy, "open_pinned_connection", fake_open_pinned_connection)
+    proxy_server = await asyncio.start_server(egress_proxy.handle_client, "127.0.0.1", 0)
+    proxy_port = proxy_server.sockets[0].getsockname()[1]
+    clients = []
+    try:
+        for _ in range(2):
+            reader, writer = await asyncio.open_connection("127.0.0.1", proxy_port)
+            clients.append(writer)
+            writer.write(
+                b"CONNECT example.com:443 HTTP/1.1\\r\\n"
+                b"Host: example.com:443\\r\\n\\r\\n"
+            )
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readuntil(b"\\r\\n\\r\\n"), timeout=3)
+            assert response.startswith(b"HTTP/1.1 200")
+        assert accepted == 2
+    finally:
+        release_targets.set()
+        for writer in clients:
+            writer.close()
+            await writer.wait_closed()
+        proxy_server.close()
+        target_server.close()
+        await proxy_server.wait_closed()
+        await target_server.wait_closed()
+
+
+@pytest.mark.asyncio
 async def test_http_proxy_rewrites_absolute_target_and_closes_connection(monkeypatch):
     from app import egress_proxy
 
