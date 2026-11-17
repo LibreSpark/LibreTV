@@ -129,3 +129,8 @@ python -m scripts.verify_live_authorized_scale \
 ```
 
 该探针只请求文件中明确列出的 URL，不跟随页面链接扩张；遵守 robots.txt，按域名单并发、至少 1 秒间隔，并使用采集器已配置的安全出口代理。目标主机不在 allowlist、URL 不安全或超过数量上限时立即拒绝。输出包含提交数、成功数、失败/缺失数和 Spider 统计。只有实际运行并保存报告后，才能声称完成了真实公网规模验收。测试必须遵守站点授权方另行规定的更严格频率限制；当前探针默认不支持提高请求频率。
+
+
+## 端到端真实验收
+
+真实 AI 网关、授权公网采集和持续 4K 浏览器播放的手动验收入口、所需 GitHub Actions Secrets/Variables 与证据等级，见 [`docs/authorized-live-acceptance.md`](../docs/authorized-live-acceptance.md)。这些测试只在显式手动触发并提供授权目标后执行；普通 CI 不会访问用户未授权的目标。
