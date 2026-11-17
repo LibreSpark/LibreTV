@@ -70,6 +70,9 @@ beforeAll(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('POST /api/search', () => {
   it('聚合多源结果：同源去重、成人内容过滤、失败源进 failures', async () => {
@@ -90,6 +93,32 @@ describe('POST /api/search', () => {
     expect(data.failures).toHaveLength(1);
     expect(data.failures[0].sourceKey).toBe('b');
     expect(data.failures[0].error).toContain('500');
+  });
+
+  it('merges approved resources from the internal intelligent collector into search', async () => {
+    vi.stubEnv('SCRAPLING_ENGINE_URL', 'http://scrapling-engine:8787');
+    vi.stubEnv('SCRAPLING_ENGINE_API_KEY', 'a'.repeat(32));
+    const resource = {
+      id: 'candidate-1',
+      candidate_id: 'candidate-1',
+      title: '已审核资源',
+      resource_type: 'DIRECT_MEDIA' as const,
+      url: 'https://93.184.216.34/movie.m3u8',
+      media_format: 'hls' as const,
+      access_state: 'PUBLIC',
+      validation_state: 'VALIDATED',
+      playback_state: 'PLAYER_CONFIRMED',
+    };
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('http://scrapling-engine:8787/v1/registry/search?q=%E6%B5%8B%E8%AF%95');
+      return Response.json({ resources: [resource], queued: [] });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const response = await POST(makeRequest({ wd: '测试', sources: [] }));
+    expect(response.status).toBe(200);
+    const data = await response.json() as SearchResponse;
+    expect(data.registryResources).toEqual([resource]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('uses browser-local Collector credentials only on an authenticated search request', async () => {

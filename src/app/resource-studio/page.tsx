@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { collectorFetch } from '@/lib/collector-browser-config';
+import { IntelligentCollectorPanel } from '@/components/resource-studio/IntelligentCollectorPanel';
 
 type Resource = {
   id: string;
@@ -161,12 +162,14 @@ export default function ResourceStudioPage() {
 
         </section>
 
+        <IntelligentCollectorPanel />
+
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
           <div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-semibold">采集任务</h2><p className="mt-1 text-sm text-[var(--muted)]">持久化队列状态与最近执行记录。</p></div><span className="text-xs text-[var(--muted)]">{jobs.length} 条</span></div>
           {jobs.length === 0 ? <p className="py-6 text-center text-sm text-[var(--muted)]">暂无任务记录</p> : <div className="divide-y divide-[var(--border)]">{jobs.map((job) => <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="text-sm font-medium">{job.job_type} <span className="ml-2 font-mono text-xs text-[var(--muted)]">{job.id.slice(0, 10)}</span></p><p className="mt-1 text-xs text-[var(--muted)]">{formatTime(job.created_at)} · 尝试 {job.attempt} 次</p>{job.error ? <p className="mt-1 text-xs text-red-600">{job.error}</p> : null}</div><div className="flex items-center gap-2"><span className="rounded-full border border-[var(--border)] px-3 py-1 text-xs">{statusLabel[job.status] || job.status}</span>{['failed','partial'].includes(job.status) ? <button type="button" disabled={Boolean(busy)} onClick={() => void jobAction(job,'retry')} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">重试</button> : null}{['queued','running'].includes(job.status) ? <button type="button" disabled={Boolean(busy)} onClick={() => void jobAction(job,'cancel')} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">取消</button> : null}</div></div>)}</div>}
         </section>
 
-        <p className="mt-6 text-xs leading-6 text-[var(--muted)]">说明：这是资源管理网页与现有 Scrapling Collector 的第一阶段连接，不代表完整 AI Agent Runtime 已上线。AI 自主研究、Connector 自动生成/修复、DAG 调度和独立 PlayerShell 回归仍需后续实现。不会绕过登录、付费墙、DRM、验证码或其他访问限制，也不会自动启用未通过验收的片源。</p>
+        <p className="mt-6 text-xs leading-6 text-[var(--muted)]">智能采集使用持久化 PostgreSQL 批次和有界 Worker；站点访问遵守 robots.txt、同源边界、速率限制与熔断策略。候选需通过媒体质量检查、真实播放器验收和人工审批后才会进入正式资源库；不会绕过登录、付费墙、DRM、验证码或其他访问控制。</p>
       </div>
     </main>
   );

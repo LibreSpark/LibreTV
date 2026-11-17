@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guardPrivateFeatureRequest } from '@/lib/api-guard';
-import { collectorRequest } from '@/lib/resource-collector-client';
+import { collectorRequest, intelligentCollectorRequest } from '@/lib/resource-collector-client';
+import { getVerifiedReviewerSubject } from '@/lib/reviewer-identity';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,12 +10,18 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ candidateId: string }> },
 ) {
-  const guarded = guardPrivateFeatureRequest(request);
-  if (guarded) return guarded;
-
   const { candidateId } = await context.params;
-  if (!/^[a-f0-9]{32}$/i.test(candidateId)) {
+  const intelligentCandidate = /^[a-f0-9]{24}$/.test(candidateId);
+  if (!intelligentCandidate && !/^[a-f0-9]{32}$/i.test(candidateId)) {
     return NextResponse.json({ error: 'Invalid candidate ID.' }, { status: 400 });
+  }
+  const subject = intelligentCandidate ? await getVerifiedReviewerSubject(request) : null;
+  if (intelligentCandidate && !subject) {
+    return NextResponse.json({ error: '需要有效的管理员登录或 OIDC 身份。' }, { status: 401 });
+  }
+  if (!intelligentCandidate) {
+    const guarded = guardPrivateFeatureRequest(request);
+    if (guarded) return guarded;
   }
 
   const contentLength = Number(request.headers.get('content-length') ?? '0');
@@ -48,14 +55,15 @@ export async function POST(
     selected_rendition_bitrate_kbps: evidence.selectedRenditionBitrateKbps ?? evidence.selected_rendition_bitrate_kbps ?? 0,
   };
 
-  return collectorRequest(
-    `/v1/candidates/${candidateId}/playback`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(normalized),
+  const init: RequestInit = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(subject ? { 'X-LibreTV-Reviewer-Sub': subject } : {}),
     },
-    10_000,
-    request,
-  );
+    body: JSON.stringify(normalized),
+  };
+  return intelligentCandidate
+    ? intelligentCollectorRequest(`/v1/candidates/${candidateId}/playback`, init, 10_000)
+    : collectorRequest(`/v1/candidates/${candidateId}/playback`, init, 10_000, request);
 }

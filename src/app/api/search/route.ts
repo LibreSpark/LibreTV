@@ -5,7 +5,12 @@ import {
 } from '@/lib/search';
 import type { RegistrySearchResource, SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
 import { guardPrivateFeatureRequest, guardRequest } from '@/lib/api-guard';
-import { collectorRequest } from '@/lib/resource-collector-client';
+import {
+  collectorRequest,
+  intelligentCollectorConfigured,
+  intelligentCollectorRequest,
+} from '@/lib/resource-collector-client';
+import { mergeRegistryPayloads } from '@/lib/registry-merge';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -243,17 +248,22 @@ function setCachedOutcomes(key: string, outcomes: SourceSearchOutcome[]): void {
 
 async function searchVerifiedRegistry(keyword: string, request?: Request): Promise<RegistrySearchResource[]> {
   try {
-    const response = await collectorRequest(
+    const legacyPromise = collectorRequest(
       `/v1/registry/search?q=${encodeURIComponent(keyword)}`,
       {},
       1_500,
       request,
     );
-    if (!response.ok) return [];
-    const payload = await response.json() as { resources?: unknown };
-    return Array.isArray(payload.resources) ? payload.resources as RegistrySearchResource[] : [];
+    const enginePromise = intelligentCollectorConfigured()
+      ? intelligentCollectorRequest(`/v1/registry/search?q=${encodeURIComponent(keyword)}`, {}, 5_000)
+      : Promise.resolve(null);
+    const [legacyResponse, engineResponse] = await Promise.all([legacyPromise, enginePromise]);
+    const payloads = await Promise.all([
+      legacyResponse.ok ? legacyResponse.json().catch(() => null) : null,
+      engineResponse?.ok ? engineResponse.json().catch(() => null) : null,
+    ]);
+    return mergeRegistryPayloads(payloads).resources as RegistrySearchResource[];
   } catch {
-    // Registry is supplemental: a collector outage must never fail normal CMS search.
     return [];
   }
 }

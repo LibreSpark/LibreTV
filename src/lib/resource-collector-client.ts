@@ -71,3 +71,69 @@ export async function collectorRequest(
     );
   }
 }
+
+function intelligentCollectorConfig() {
+  const rawBase = process.env.SCRAPLING_ENGINE_URL?.trim() ?? '';
+  const token = (process.env.SCRAPLING_ENGINE_API_KEY ?? process.env.SCRAPLING_API_KEY)?.trim();
+  if (!rawBase || !token || token.length < 32 || token.length > 4096) return null;
+  try {
+    const parsed = new URL(rawBase);
+    const hostname = parsed.hostname.toLowerCase();
+    const localHost = ['scrapling-engine', 'localhost', '127.0.0.1', '::1'].includes(hostname);
+    if ((parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && localHost)) ||
+      parsed.username || parsed.password || (parsed.pathname !== '' && parsed.pathname !== '/') ||
+      parsed.search || parsed.hash) return null;
+    return { base: parsed.origin, token };
+  } catch {
+    return null;
+  }
+}
+
+export function intelligentCollectorConfigured(): boolean {
+  return intelligentCollectorConfig() !== null;
+}
+
+export async function intelligentCollectorRequest(
+  path: string,
+  init: Pick<RequestInit, 'method' | 'body' | 'headers'> = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+) {
+  const config = intelligentCollectorConfig();
+  if (!config || !path.startsWith('/v1/')) {
+    return NextResponse.json(
+      { code: 'INTELLIGENT_COLLECTOR_NOT_CONFIGURED', error: '千级智能采集服务尚未配置或尚未启动。' },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+  try {
+    const url = new URL(path, config.base);
+    if (url.origin !== config.base || !url.pathname.startsWith('/v1/')) {
+      return NextResponse.json({ error: 'Invalid intelligent collector route.' }, { status: 400 });
+    }
+    const headers = new Headers(init.headers);
+    headers.set('X-API-Key', config.token);
+    headers.set('Accept', 'application/json');
+    const response = await fetch(url, {
+      method: init.method ?? 'GET',
+      ...(init.body !== undefined ? { body: init.body } : {}),
+      headers,
+      cache: 'no-store',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.status >= 300 && response.status < 400) {
+      return NextResponse.json({ code: 'ENGINE_REDIRECT_REJECTED', error: '采集引擎重定向已被安全策略拒绝。' }, { status: 502, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const payload = await response.json().catch(() => null);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return NextResponse.json({ code: 'ENGINE_INVALID_RESPONSE', error: '采集引擎返回了无效响应。' }, { status: 502, headers: { 'Cache-Control': 'no-store' } });
+    }
+    return NextResponse.json(payload, { status: response.status, headers: { 'Cache-Control': 'no-store' } });
+  } catch (reason) {
+    const timedOut = reason instanceof Error && reason.name === 'TimeoutError';
+    return NextResponse.json(
+      { code: timedOut ? 'ENGINE_TIMEOUT' : 'ENGINE_UNREACHABLE', error: timedOut ? '智能采集服务超时。' : '无法连接智能采集服务，请检查 crawler profile 与数据库。' },
+      { status: 502, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+}

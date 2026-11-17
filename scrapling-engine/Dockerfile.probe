@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    MEDIA_PROBE_ROOT=/probe/staging \
+    MEDIA_PROBE_STAGING=/probe/staging \
+    MEDIA_PROBE_INBOX=/probe/inbox \
+    MEDIA_PROBE_OUTBOX=/probe/outbox
+
+WORKDIR /service
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg util-linux \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 libretv \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin libretv \
+    && mkdir -p /service/app /probe/staging /probe/inbox /probe/outbox \
+    && chown -R 10001:10001 /service /probe
+
+COPY app/ffprobe_analyzer.py app/probe_worker.py /service/app/
+
+USER 10001:10001
+CMD ["python", "-m", "app.probe_worker"]

@@ -121,6 +121,18 @@ PASSWORD=your-password npm start   # 监听 8080
 | `DEFAULT_RECOMMEND_SOURCE` | 否 | 首页推荐数据源的默认值（`douban` / `bangumi` / `hot-list`，出厂默认 `hot-list`）；仅对未在设置中主动选择过的用户生效，用户的选择始终优先 |
 | `LIVE_ALLOW_PRIVATE` | 否 | 设为 `1` 时允许直播流代理访问内网/保留地址（自建 IPTV 场景），默认关闭以维持 SSRF 防护 |
 
+## 千级智能采集（可选，管理员）
+
+`/resource-studio` 可一次提交最多 1,000 个独立任务；任务持久化、可恢复、可重试并按全批次统计。全局最多 20,000 个活动任务；默认仅启动一个 Worker，不会因创建 1,000 个任务就同时请求 1,000 个站点。站点限速、熔断、容器资源限制和每批 1 GiB 媒体探测预算共同约束执行。
+
+启用前，在本地 `.env` 设置独立强随机的 `SCRAPLING_API_KEY`（至少 32 字符）和 `SCRAPLING_DB_PASSWORD`，然后运行：
+
+```bash
+docker compose --profile crawler up -d --build
+```
+
+只处理公开可访问的 HTTP(S) 页面，不绕过登录、付费墙、DRM、验证码或其他访问控制。媒体候选必须通过质量检查、当前播放器实际播放验收和人工审批，才会事务性发布到正式资源库；DASH 清单声明不会代替播放器验收。详细架构、部署和验收步骤见 [`scrapling-engine/README.md`](./scrapling-engine/README.md)。
+
 ## 使用说明
 
 1. **添加点播源**：设置 → 源管理 → 点播源 → 添加 API，填入 Apple CMS 采集站地址（如 `https://example.com/api.php/provide/vod`），可选填详情页地址（部分源需要爬详情页提取播放地址）。

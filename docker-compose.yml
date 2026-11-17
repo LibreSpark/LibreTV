@@ -12,6 +12,7 @@ services:
       - "8080:8080"
     networks:
       - collector_net
+      - crawler-app
     # 无状态服务：观看历史在浏览器 IndexedDB、设置在 localStorage，无需挂载卷
     environment:
       # 必填：访问密码（在 .env 中设置，缺失时 compose 启动即报错提醒）
@@ -45,6 +46,10 @@ services:
       # - USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36
       # 可选：影视榜单推荐源（60s API）实例地址，官方公共实例有限流
       # - 60S_API_BASE=https://60s.crystelf.top
+      - SCRAPLING_ENGINE_URL=${SCRAPLING_ENGINE_URL:-http://scrapling-engine:8787}
+      - SCRAPLING_ENGINE_API_KEY=${SCRAPLING_API_KEY:-}
+      - CF_ACCESS_TEAM_DOMAIN=${CF_ACCESS_TEAM_DOMAIN:-}
+      - CF_ACCESS_AUD=${CF_ACCESS_AUD:-}
 
 
   # Optional isolated Python runtime for FMHY discovery + Scrapling crawling.
@@ -127,8 +132,224 @@ services:
       scrapling-collector:
         condition: service_healthy
 
+  scrapling-postgres:
+    profiles: ["crawler"]
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: libretv_scrapling
+      POSTGRES_USER: libretv_scrapling
+      POSTGRES_PASSWORD: ${SCRAPLING_DB_PASSWORD:-local-dev-only-change-me}
+    volumes:
+      - scrapling-postgres-data:/var/lib/postgresql/data
+    networks:
+      - crawler-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U libretv_scrapling -d libretv_scrapling"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 1g
+    cpus: 1.0
+
+  scrapling-engine:
+    profiles: ["crawler"]
+    build:
+      context: ./scrapling-engine
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      SCRAPLING_API_KEY: ${SCRAPLING_API_KEY:-}
+      DATABASE_URL: postgresql://libretv_scrapling:${SCRAPLING_DB_PASSWORD:-local-dev-only-change-me}@scrapling-postgres:5432/libretv_scrapling
+      CRAWL_DATA_DIR: /data
+      SUPERVISOR_API_BASE: ${SUPERVISOR_API_BASE:-https://api.openai.com/v1}
+      SUPERVISOR_API_KEY: ${SUPERVISOR_API_KEY:-}
+      SUPERVISOR_MODEL: ${SUPERVISOR_MODEL:-}
+      SUPERVISOR_TIMEOUT_SECONDS: ${SUPERVISOR_TIMEOUT_SECONDS:-45}
+      SCRAPLING_EGRESS_PROXY: http://scrapling-egress-proxy:8080
+      SCRAPLING_REQUIRE_EGRESS_PROXY: "true"
+    networks:
+      - crawler-app
+      - crawler-clients
+      - crawler-db
+    volumes:
+      - scrapling-crawl-data:/data
+    depends_on:
+      scrapling-postgres:
+        condition: service_healthy
+      scrapling-egress-proxy:
+        condition: service_healthy
+    expose:
+      - "8787"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',8787), timeout=2); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  scrapling-job-worker:
+    profiles: ["crawler"]
+    build:
+      context: ./scrapling-engine
+    command: ["libretv-scrapling-worker", "--worker-id", "crawl-worker-1"]
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+    environment:
+      SCRAPLING_API_KEY: ${SCRAPLING_API_KEY:-}
+      DATABASE_URL: postgresql://libretv_scrapling:${SCRAPLING_DB_PASSWORD:-local-dev-only-change-me}@scrapling-postgres:5432/libretv_scrapling
+      CRAWL_DATA_DIR: /data
+      SCRAPLING_EGRESS_PROXY: http://scrapling-egress-proxy:8080
+      SCRAPLING_REQUIRE_EGRESS_PROXY: "true"
+    networks:
+      - crawler-clients
+      - crawler-db
+    volumes:
+      - scrapling-crawl-data:/data
+    depends_on:
+      scrapling-postgres:
+        condition: service_healthy
+      scrapling-egress-proxy:
+        condition: service_healthy
+      scrapling-engine:
+        condition: service_healthy
+
+  scrapling-workflow-worker:
+    profiles: ["crawler"]
+    build:
+      context: ./scrapling-engine
+    command: ["libretv-workflow-worker"]
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 2g
+    cpus: 2.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+    environment:
+      SCRAPLING_API_KEY: ${SCRAPLING_API_KEY:-}
+      DATABASE_URL: postgresql://libretv_scrapling:${SCRAPLING_DB_PASSWORD:-local-dev-only-change-me}@scrapling-postgres:5432/libretv_scrapling
+      CRAWL_DATA_DIR: /data
+      MEDIA_PROBE_ROOT: /probe/staging
+      MEDIA_PROBE_STAGING: /probe/staging
+      MEDIA_PROBE_INBOX: /probe/inbox
+      MEDIA_PROBE_OUTBOX: /probe/outbox
+      SUPERVISOR_API_BASE: ${SUPERVISOR_API_BASE:-https://api.openai.com/v1}
+      SUPERVISOR_API_KEY: ${SUPERVISOR_API_KEY:-}
+      SUPERVISOR_MODEL: ${SUPERVISOR_MODEL:-}
+      SUPERVISOR_TIMEOUT_SECONDS: ${SUPERVISOR_TIMEOUT_SECONDS:-45}
+      SCRAPLING_EGRESS_PROXY: http://scrapling-egress-proxy:8080
+      SCRAPLING_REQUIRE_EGRESS_PROXY: "true"
+    networks:
+      - crawler-clients
+      - crawler-db
+    volumes:
+      - scrapling-crawl-data:/data
+      - scrapling-probe-staging:/probe/staging
+      - scrapling-probe-inbox:/probe/inbox
+      - scrapling-probe-outbox:/probe/outbox:ro
+    depends_on:
+      scrapling-postgres:
+        condition: service_healthy
+      scrapling-egress-proxy:
+        condition: service_healthy
+      scrapling-engine:
+        condition: service_healthy
+      scrapling-media-probe:
+        condition: service_healthy
+
+  scrapling-egress-proxy:
+    profiles: ["crawler"]
+    build:
+      context: ./scrapling-engine
+      dockerfile: Dockerfile.proxy
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    environment:
+      EGRESS_PROXY_HOST: 0.0.0.0
+      EGRESS_PROXY_PORT: 8080
+    networks:
+      - crawler-clients
+      - crawler-egress
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(1); raise SystemExit(s.connect_ex(('127.0.0.1',8080)) != 0)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  scrapling-media-probe:
+    profiles: ["crawler"]
+    build:
+      context: ./scrapling-engine
+      dockerfile: Dockerfile.probe
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:./scrapling-engine/seccomp-ffprobe.json
+    pids_limit: 64
+    mem_limit: 512m
+    cpus: 1.0
+    network_mode: none
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    environment:
+      MEDIA_PROBE_ROOT: /probe/staging
+      MEDIA_PROBE_STAGING: /probe/staging
+      MEDIA_PROBE_INBOX: /probe/inbox
+      MEDIA_PROBE_OUTBOX: /probe/outbox
+    volumes:
+      - scrapling-probe-staging:/probe/staging:ro
+      - scrapling-probe-inbox:/probe/inbox:ro
+      - scrapling-probe-outbox:/probe/outbox
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; raise SystemExit(0 if Path('/probe/staging').is_dir() and Path('/probe/inbox').is_dir() and Path('/probe/outbox').is_dir() else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
 volumes:
   scrapling_data:
+  scrapling-postgres-data:
+  scrapling-crawl-data:
+  scrapling-probe-staging:
+  scrapling-probe-inbox:
+  scrapling-probe-outbox:
 
 networks:
   collector_net:
@@ -137,3 +358,11 @@ networks:
     ipam:
       config:
         - subnet: ${SCRAPLING_NETWORK_SUBNET:-172.30.60.0/24}
+  crawler-app:
+    internal: true
+  crawler-clients:
+    internal: true
+  crawler-db:
+    internal: true
+  crawler-egress:
+    driver: bridge

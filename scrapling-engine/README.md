@@ -1,49 +1,94 @@
-# LibreTV Scrapling Engine — Phase 1
+# LibreTV 智能采集引擎
 
-An independently runnable Python service that hosts the upstream Scrapling framework for LibreTV. This phase validates the crawler engine only; it does not modify the LibreTV UI, production deployment, or main branch.
+独立的 Scrapling + PostgreSQL 采集服务；与 LibreTV 现有 `/resource-studio` 管理页和正式资源搜索链路连接。它面向可持续扩展的任务队列，不是“同时请求一千个网站”的开关。
 
-## Scope
+## 实现范围
 
-The engine is built on the complete upstream `D4Vinci/Scrapling` package. It does not fork or replace Scrapling with a reduced implementation.
+1. **安全出站**：任务目标必须是公开 HTTP(S)；DNS 固定代理拒绝私网、回环、链路本地和混合危险解析；重定向重新校验。Worker 没有直连公网路由。
+2. **发现与规则**：robots.txt、同源 BFS、页数/深度限制；AI 仅能提出有界发现参数和 CSS/XPath 规则。规则版本化、先测试、默认不启用，人工审核后才能激活；连续失败自动停用。
+3. **持久任务运行时**：一次批次最多 1,000 个独立工作流；幂等提交、PostgreSQL 事务、事件日志、状态快照、租约与 fencing token、指数退避、人工重试。全局活动任务设 20,000 上限。
+4. **媒体质量**：HLS/DASH 清单只作为声明；MP4/WebM 由无网络探测容器抽帧并解码最多 8 秒。不会据此宣称“原生 4K”。检测到 HLS/DASH 加密或保护标记时禁止预览和发布。
+5. **候选审批**：必须先有质量报告，再由当前 PlayerShell 实际解码并推进时间轴，最后由已验证的管理员身份人工批准。批准与写入正式资源库在同一数据库事务中；拒绝不发布。
+6. **管理界面**：`/resource-studio` 可创建批次、查看全部任务汇总、分页任务、回放事件、重试失败任务、预览审核候选，以及人工启停规则。正式资源搜索同时查询旧 Collector 和新资源库。
 
-The eight capability areas are:
+不会绕过 DRM、登录、付费墙、验证码或其他访问控制。当前播放器仅接受 HLS、MP4、WebM；DASH 可分析清单，但不能通过播放器验收，因此不会发布。
 
-1. Fetching: HTTP, async, dynamic-browser and stealth fetchers.
-2. Extraction: CSS, XPath, text, regex and DOM traversal.
-3. Adaptive parsing: saved element fingerprints and relocation after layout changes.
-4. Browser automation: JavaScript rendering, sessions and browser interactions.
-5. Spider crawling: the first integration exposes a seed-URL crawl endpoint backed by Scrapling Spider, with concurrency limits and robots.txt enforcement. Recursive link discovery and persistent job controls remain gated until request-level egress protection is in place.
-6. Public API discovery: capture and inspect page network responses; never assume every endpoint is public or usable.
-7. Network resilience: proxy configuration, retries, blocked-response handling, throttling and robots policy.
-8. AI integration: upstream MCP server/Agent Skill plus a controlled LibreTV adapter surface.
+## 安全并发与资源上限
 
-Some orchestration features (job persistence, API auth, audit logs, policy enforcement and metrics) are service-layer responsibilities, not claims that Scrapling provides them automatically.
+批次只是排队，不代表同时出站。Docker 默认运行 1 个 workflow worker；按主机容量谨慎扩容，例：
 
-## Run locally
+```bash
+docker compose --profile crawler up -d --build
+docker compose --profile crawler up -d --scale scrapling-workflow-worker=4
+```
+
+同一代理内同站点请求默认串行、至少间隔 1.5 秒；robots.txt 的 crawl-delay/request-rate 另行遵守。连续 429、5xx 或连接失败会触发站点熔断。每个媒体候选最多预留 64 MiB，每批媒体探测预算默认 1 GiB，按数据库原子预留；超出预算的候选会被跳过。探测容器无网络、只读挂载输入并单独写报告。Compose 为 PostgreSQL、API、worker、代理、探测容器分别设置 CPU、内存、PID 和文件系统限制。
+
+## 部署
+
+引擎位于根目录 Compose 的可选 `crawler` profile，默认 LibreTV 启动不会启动它。根 `.env` 至少应提供独立强随机值：
+
+```dotenv
+SCRAPLING_API_KEY=至少32字符的随机服务密钥
+SCRAPLING_DB_PASSWORD=另一条独立的强随机数据库密码
+```
+
+随后启动：
+
+```bash
+docker compose --profile crawler up -d --build
+```
+
+LibreTV 经内部网络访问 `http://scrapling-engine:8787`；引擎和数据库端口不发布到宿主机。Next.js 服务持有引擎 API 密钥并作为唯一管理代理。若用 Cloudflare Access 作为审核身份源，还需设置 `CF_ACCESS_TEAM_DOMAIN` 和 `CF_ACCESS_AUD`；服务端会校验 JWT 签名、issuer、audience、期限并从 `sub` 生成审核人身份。未配置 Access 时使用 LibreTV 已签名的管理员会话。审核请求体不接受客户端自报 `reviewer_id`。
+
+AI 规则生成是可选项；配置 `SUPERVISOR_API_BASE`、`SUPERVISOR_API_KEY`、`SUPERVISOR_MODEL` 后，模型请求也只能经验证出口代理。任何凭据都只放在本地 `.env` 或密钥管理器，不要提交到仓库。
+
+## 主要 API
+
+所有 `/v1/*` 路由需 `X-API-Key`，正式部署仅内部网络可达。
+
+| 路由 | 用途 |
+| --- | --- |
+| `POST /v1/batches` | 以 `Idempotency-Key` 提交 1–1,000 个网址，原子创建工作流 |
+| `GET /v1/batches/summary` | 全部批次的任务、成功/失败、重试、候选和媒体预算汇总 |
+| `GET /v1/batches`、`GET /v1/batches/{id}` | 批次列表与任务分页 |
+| `GET /v1/batches/{id}/events`、`POST /v1/batches/{id}/retry` | 批次事件回放与失败项人工重试 |
+| `GET /v1/candidates` | 待审核候选及证据 |
+| `POST /v1/candidates/{id}/playback` | 记录服务端注入的已验证管理员身份及真实播放器证据 |
+| `POST /v1/candidates/{id}/review` | 人工批准/拒绝；批准事务性发布至正式资源库 |
+| `GET /v1/rules`、`POST /v1/rules/{id}/activate|disable` | 查看规则并人工启停 |
+| `GET /v1/workflows/{id}/events`、`GET /v1/workflows/{id}/snapshots` | 工作流事件与可恢复状态快照 |
+
+当前 UI 每页展示 25 个任务、每次读取 100 条事件；可逐页查看，不影响服务端对整批/全库的统计。
+
+## 本地验证
+
+Python 3.12+：
 
 ```bash
 cd scrapling-engine
 python -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev]"
-python -m app
+ruff check .
+ruff format --check app tests
+pytest -q
 ```
 
-Open `http://127.0.0.1:8787/health`.
+PostgreSQL 集成测试需设置 `DATABASE_URL`；不配置时会跳过。根目录网站验证：
 
-The fetch API supports `adaptive_css` and `adaptive_xpath` in addition to ordinary selectors. First call with `adaptive_action: "save"` to persist an element fingerprint; later call with `adaptive_action: "relocate"` to let Scrapling find the matching element after the site's DOM changes. Adaptive fingerprints use Scrapling's SQLite storage at `CRAWL_DATA_DIR/adaptive.sqlite3` and are isolated by page domain.
+```bash
+npm ci
+npm run typecheck
+npm run lint
+npm test
+```
 
-POST /v1/spider remains a synchronous compatibility endpoint. For managed work, POST /v1/jobs accepts 1–20 seed URLs and returns a task_id; GET /v1/jobs/{task_id} returns persistent status; POST /v1/jobs/{task_id}/pause and /resume control the live Spider; GET /v1/jobs/{task_id}/events streams persisted events over SSE. Job metadata, crawl results, and audit events use PostgreSQL when `DATABASE_URL` is configured; otherwise local development falls back to SQLite (`CRAWL_JOB_DATABASE_PATH`, default `./crawl_data/jobs.sqlite3`). Scrapling checkpoints live under `CRAWL_DATA_DIR` (default `./crawl_data`). The PostgreSQL schema is initialized by both the API service and worker on startup. A task_id is immutable with respect to its seed URL list. On process restart, queued jobs remain queued and are re-scheduled at service startup; jobs that were running or pausing are marked interrupted. Resuming an interrupted crawl still requires a persisted Scrapling checkpoint file. The async Spider stream avoids calling Spider.start() and its process signal handlers from a worker thread. The crawler obeys robots.txt, limits concurrency and per-domain requests, uses an explicit service User-Agent without stealth header or TLS browser impersonation, and does not recursively follow page links yet. `max_response_bytes` prevents oversized responses from entering extraction, but Scrapling has already received the response body; it is not a network-transfer memory cap. Browser subrequests, DNS rebinding and private-address egress still require deployment-level network enforcement before recursive or browser crawling is enabled. Stealth browser sessions remain disabled.
+GitHub Actions 对引擎、PostgreSQL 集成、隔离容器验收和网站 API/UI 分别运行检查。公网 Smoke test 只访问公开的 `example.com`，不会访问私人站点。
 
-Browser-backed fetchers require the optional browser dependencies and browser installation described by the upstream Scrapling documentation. With SQLite, run the API as a single process; SQLite remains a local-development fallback. With PostgreSQL, the API only accepts and reports managed jobs, while independent workers claim jobs using `FOR UPDATE SKIP LOCKED` leases. Install the package and run `libretv-scrapling-worker --worker-id worker-a`; run multiple worker processes with unique IDs against the same PostgreSQL database. Workers heartbeat their leases and fence result/completion writes by current lease ownership, so a worker that loses its lease cannot persist late results. All workers must share the same durable `CRAWL_DATA_DIR` checkpoint volume; local per-container disks are not sufficient for recovery. The API's current pause endpoint remains process-local and returns a conflict for jobs not owned by its process; cross-process pause/resume signaling is a subsequent runtime capability, not claimed as implemented. Keep local development bound to localhost. The Docker image binds to `0.0.0.0` using the same `HOST` and `PORT` settings as the application, so it must be started with a `SCRAPLING_API_KEY` of at least 32 characters. Any non-loopback bind without this key fails closed; all `/v1/*` routes then require the matching `X-API-Key` header. Terminate TLS at a trusted reverse proxy; do not send the API key over plain public HTTP. This is a single service key, not per-user tenant isolation. Before a multi-user remote deployment, add per-user authorization/quotas, audit retention, and network-level egress filtering that blocks private, loopback, link-local and metadata-service ranges even after DNS resolution and redirects.
+## 重要限制
 
-## Safety boundary
-
-- Phase 1 does not crawl FMHY yet; FMHY directory ingestion is Phase 2.
-- Only public HTTP(S) pages are in scope. No DRM, paywall, login or access-control circumvention.
-- Respect robots.txt, rate limits and site terms. Do not treat a discovered website URL as a playable source.
-- The service rejects localhost, private, link-local and reserved IP destinations to reduce SSRF risk.
-
-## Verification
-
-Run `pytest` and `ruff check .`. The CI workflow starts PostgreSQL 16 and runs the PostgreSQL persistence integration test in addition to the SQLite unit tests. CI verifies unit/API behavior without relying on arbitrary public targets. CI also runs a controlled public-site smoke test against example.com through both the HTTP Fetcher and async Spider; broader target-site acceptance remains a separate step.
+- Worker 自动采集只能在同一网站来源内继续发现页面；不跨站扩张到任意域名。
+- HLS/DASH 的码率、分辨率和 HDR 是清单声明，不等于真实画质；抽帧探测也不是全片损坏扫描或视觉质量评估。
+- 人工批准仅发布当前播放器能实际验收且未检测到加密/DRM保护的来源。
+- 公网采集与任意站点兼容性仍需在部署方授权范围内验证；CI 容器通过不代表任意目标网站都能抓取。

@@ -1,0 +1,158 @@
+name: Thousand-Scale Collector CI
+
+on:
+  push:
+    branches:
+      - feat/thousand-scale-intelligent-collector
+      - feature/scrapling-engine-phase1
+      - feature/ai-scrapling-autonomous-integration
+    paths:
+      - "scrapling-engine/**"
+      - "src/app/api/resource-collector/**"
+      - "src/app/resource-studio/**"
+      - "src/components/resource-studio/**"
+      - "src/lib/resource-collector-client.ts"
+      - "src/lib/registry-merge.ts"
+      - "src/lib/reviewer-identity.ts"
+      - "src/lib/registry-merge.test.ts"
+      - "src/lib/reviewer-identity.test.ts"
+      - ".env.example"
+      - "scrapling-engine/README.md"
+      - "README.md"
+      - "docker-compose.yml"
+      - "scripts/verify-crawler-containers.sh"
+      - "scripts/check-egress-client-boundary.py"
+      - ".github/workflows/scrapling-engine.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scrapling-engine/**"
+      - "src/app/api/resource-collector/**"
+      - "src/app/resource-studio/**"
+      - "src/components/resource-studio/**"
+      - "src/lib/resource-collector-client.ts"
+      - "src/lib/registry-merge.ts"
+      - "src/lib/reviewer-identity.ts"
+      - "src/lib/registry-merge.test.ts"
+      - "src/lib/reviewer-identity.test.ts"
+      - ".env.example"
+      - "scrapling-engine/README.md"
+      - "README.md"
+      - "docker-compose.yml"
+      - "scripts/verify-crawler-containers.sh"
+      - "scripts/check-egress-client-boundary.py"
+      - ".github/workflows/scrapling-engine.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: thousand-scale-collector-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scrapling_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d scrapling_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/scrapling_test
+    defaults:
+      run:
+        working-directory: scrapling-engine
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scrapling-engine/pyproject.toml
+      - name: Install engine and development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Lint and format
+        run: |
+          ruff check .
+          ruff format --check app tests
+      - name: Enforce outbound client import boundary
+        working-directory: .
+        run: python scripts/check-egress-client-boundary.py
+      - name: Test SQLite and unit behavior
+        run: >-
+          pytest -q
+          --ignore=tests/test_batch_store.py
+          --ignore=tests/test_candidate_store.py
+          --ignore=tests/test_rule_store.py
+          --ignore=tests/test_workflow_store.py
+          --ignore=tests/test_postgres_job_store.py
+          --ignore=tests/test_worker.py
+      - name: Test 1000-task batch and byte-budget integration
+        run: pytest -q tests/test_batch_store.py
+      - name: Test candidate, rule, and workflow persistence
+        run: >-
+          pytest -q
+          tests/test_candidate_store.py
+          tests/test_rule_store.py
+          tests/test_workflow_store.py
+      - name: Test leased worker recovery
+        run: >-
+          pytest -q
+          tests/test_postgres_job_store.py
+          tests/test_worker.py
+      - name: Isolated crawler container acceptance
+        working-directory: .
+        env:
+          PASSWORD: ci-password
+          SCRAPLING_API_KEY: ci-scrapling-api-key-0123456789abcdef
+          SCRAPLING_DB_PASSWORD: ci-db-password
+        run: bash scripts/verify-crawler-containers.sh
+      - name: Public Fetcher and Spider smoke test
+        run: |
+          python - <<'PY'
+          import asyncio
+
+          from app.robots import ensure_robots_allowed
+          from app.scraper import ScraplingAdapter
+          from app.security import validate_public_http_url
+          from app.spider import ScraplingSpiderAdapter
+
+          target = validate_public_http_url("https://example.com/")
+          ensure_robots_allowed(target, timeout=15)
+          page = ScraplingAdapter.fetch_page(target, timeout=15)
+          assert page.status == 200
+          assert "Example Domain" in page.get_all_text(strip=True)
+          result = asyncio.run(ScraplingSpiderAdapter.crawl_async([target]))
+          assert result["items"]
+          assert "Example Domain" in result["items"][0]["text"]
+          PY
+
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install website dependencies
+        run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Test website
+        run: npm test
+      - name: Lint website
+        run: npm run lint

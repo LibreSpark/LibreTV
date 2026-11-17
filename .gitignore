@@ -12,3 +12,7 @@ vitest-results.json
 .zcode/
 .codebuddy/
 generated-images/
+.ci-monitor-state.json
+__pycache__/
+*.py[cod]
+*.egg-info/
