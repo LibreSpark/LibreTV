@@ -375,4 +375,3 @@ def test_workflow_retry_uses_exponential_backoff_by_default(
                 "DELETE FROM resource_workflows WHERE workflow_id = %s",
                 (workflow_id,),
             )
-
