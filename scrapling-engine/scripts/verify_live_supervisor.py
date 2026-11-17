@@ -108,7 +108,6 @@ if __name__ == "__main__":
                 {
                     "status": "failed",
                     "error_type": type(exc).__name__,
-                    "message": str(exc)[:300],
                 },
                 ensure_ascii=False,
             ),
