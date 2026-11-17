@@ -517,12 +517,12 @@ async def test_parallel_http_responses_are_not_serialized_by_site_governor(monke
 
     async def target(reader, writer):
         nonlocal accepted
-        await reader.readuntil(b"\\r\\n\\r\\n")
+        await reader.readuntil(b"\r\n\r\n")
         accepted += 1
         if accepted == 2:
             both_requests_accepted.set()
         await asyncio.wait_for(both_requests_accepted.wait(), timeout=3)
-        writer.write(b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\nok")
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
         await writer.drain()
         writer.close()
         await writer.wait_closed()
@@ -560,8 +560,8 @@ async def test_parallel_http_responses_are_not_serialized_by_site_governor(monke
             reader, writer = await asyncio.open_connection("127.0.0.1", proxy_port)
             clients.append(writer)
             writer.write(
-                f"GET http://example.com{path} HTTP/1.1\\r\\n".encode()
-                + b"Host: example.com\\r\\n\\r\\n"
+                f"GET http://example.com{path} HTTP/1.1\r\n".encode()
+                + b"Host: example.com\r\n\r\n"
             )
             await writer.drain()
             responses.append(await asyncio.wait_for(reader.read(), timeout=4))
