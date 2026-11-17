@@ -328,13 +328,16 @@ def test_workflow_retry_uses_exponential_backoff_by_default(
         )
         first = store.claim_ready_node("worker-backoff-1", workflow_id=workflow_id)
         assert first is not None
-        assert store.fail_node(
-            workflow_id,
-            "crawl",
-            "worker-backoff-1",
-            first["lease_generation"],
-            "temporary failure",
-        ) == "retry_wait"
+        assert (
+            store.fail_node(
+                workflow_id,
+                "crawl",
+                "worker-backoff-1",
+                first["lease_generation"],
+                "temporary failure",
+            )
+            == "retry_wait"
+        )
 
         with psycopg.connect(database_url) as db:
             first_available_at = db.execute(
@@ -348,13 +351,16 @@ def test_workflow_retry_uses_exponential_backoff_by_default(
         second = store.claim_ready_node("worker-backoff-2", workflow_id=workflow_id)
         assert second is not None
         assert second["attempt_count"] == 2
-        assert store.fail_node(
-            workflow_id,
-            "crawl",
-            "worker-backoff-2",
-            second["lease_generation"],
-            "temporary failure again",
-        ) == "retry_wait"
+        assert (
+            store.fail_node(
+                workflow_id,
+                "crawl",
+                "worker-backoff-2",
+                second["lease_generation"],
+                "temporary failure again",
+            )
+            == "retry_wait"
+        )
 
         with psycopg.connect(database_url) as db:
             second_available_at = db.execute(
