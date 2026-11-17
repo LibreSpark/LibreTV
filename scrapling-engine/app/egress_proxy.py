@@ -183,7 +183,7 @@ async def _handle_connect_upstream(
         lease.mark_success()
 
     logger.info("Pinned HTTPS tunnel to %s:%s via %s", host, port, pinned_ip)
-    writer.write(b"HTTP/1.1 200 Connection Established\\r\\nProxy-Agent: LibreTV-Egress\\r\\n\\r\\n")
+    writer.write(b"HTTP/1.1 200 Connection Established\r\nProxy-Agent: LibreTV-Egress\r\n\r\n")
     await writer.drain()
     try:
         await _tunnel(reader, writer, target_reader, target_writer)
