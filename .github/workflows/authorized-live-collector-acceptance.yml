@@ -1,0 +1,76 @@
+name: Authorized Live Collector Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      acceptance_type:
+        description: Which live acceptance probe to run
+        required: true
+        type: choice
+        options:
+          - ai-supervisor
+          - live-scale
+          - both
+      max_urls:
+        description: Maximum unique authorized seed URLs (1-1000)
+        required: false
+        default: "1000"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authorized-live-collector-acceptance
+  cancel-in-progress: false
+
+jobs:
+  live-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SUPERVISOR_API_BASE: ${{ secrets.SUPERVISOR_API_BASE || 'https://api.openai.com/v1' }}
+      SUPERVISOR_API_KEY: ${{ secrets.SUPERVISOR_API_KEY }}
+      SUPERVISOR_MODEL: ${{ secrets.SUPERVISOR_MODEL }}
+      SCRAPLING_EGRESS_PROXY: ${{ secrets.SCRAPLING_EGRESS_PROXY }}
+      LIVE_ACCEPTANCE_PAGE_URL: ${{ secrets.LIVE_ACCEPTANCE_PAGE_URL }}
+      LIVE_ACCEPTANCE_ALLOWED_HOSTS: ${{ secrets.LIVE_ACCEPTANCE_ALLOWED_HOSTS }}
+      LIVE_ACCEPTANCE_URL_LIST: ${{ secrets.LIVE_ACCEPTANCE_URL_LIST }}
+      LIVE_ACCEPTANCE_GOAL: "Extract public media listing titles from the authorized catalogue page."
+      ACCEPTANCE_TYPE: ${{ inputs.acceptance_type }}
+      MAX_URLS: ${{ inputs.max_urls }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scrapling-engine/pyproject.toml
+      - name: Install collector and acceptance dependencies
+        working-directory: scrapling-engine
+        run: python -m pip install -e ".[dev]"
+      - name: Verify live AI supervisor against one authorized page
+        if: inputs.acceptance_type == 'ai-supervisor' || inputs.acceptance_type == 'both'
+        working-directory: scrapling-engine
+        run: python -m scripts.verify_live_supervisor
+      - name: Materialize explicitly authorized URL list in runner temp
+        if: inputs.acceptance_type == 'live-scale' || inputs.acceptance_type == 'both'
+        working-directory: scrapling-engine
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          value = os.environ.get("LIVE_ACCEPTANCE_URL_LIST", "")
+          if not value.strip():
+              raise SystemExit("Configure LIVE_ACCEPTANCE_URL_LIST with one authorized URL per line.")
+          Path("/tmp/libretv-authorized-urls.txt").write_text(value, encoding="utf-8")
+          PY
+      - name: Verify live authorized seed crawl (up to 1000 URLs)
+        if: inputs.acceptance_type == 'live-scale' || inputs.acceptance_type == 'both'
+        working-directory: scrapling-engine
+        run: |
+          python -m scripts.verify_live_authorized_scale \
+            --input /tmp/libretv-authorized-urls.txt \
+            --allowed-hosts "$LIVE_ACCEPTANCE_ALLOWED_HOSTS" \
+            --max-urls "$MAX_URLS"
