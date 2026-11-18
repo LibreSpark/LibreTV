@@ -104,6 +104,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
 
           {/* 桌面 / 平板：完整导航 */}
           <nav className="hidden sm:flex items-center gap-1 ml-auto">
+            <HeaderLink href="/browse" active={pathname === '/browse'}>浏览源</HeaderLink>
             <HeaderLink href="/live" active={pathname === '/live'}>
               直播
             </HeaderLink>
@@ -152,6 +153,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           >
             {/* 直播页顶栏有搜索框（<sm 隐藏）：这里补一个入口，进了直播页再搜频道 */}
             <div className="grid grid-cols-2 gap-1.5">
+              <MenuRow href="/browse" active={pathname === '/browse'} icon="link" onNavigate={closeMenu}>浏览源</MenuRow>
               <MenuRow href="/live" active={pathname === '/live'} icon="bolt" onNavigate={closeMenu}>
                 直播
               </MenuRow>
