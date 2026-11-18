@@ -266,7 +266,9 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
     if (idx < 0) return;
     pendingScroll.current = null;
     virtualizer.scrollToIndex(idx, { align: pending.kind === 'group' ? 'start' : 'auto' });
-  }, [rows, virtualizer]);
+    // currentUrl 也要进依赖：同组内切台时 setExpandedGroup 是 no-op、rows 引用不变，
+    // 少了它这次切台就不会滚动，pending 会残留到下一次 rows 变化才突然跳过去
+  }, [rows, virtualizer, currentUrl]);
 
   const scrollToRow = useCallback(
     (index: number) => {
@@ -284,6 +286,10 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
       const next = Math.min(Math.max(base + delta, 0), rows.length - 1);
       setCursor(next);
       scrollToRow(next);
+      // 焦点若停在行内按钮（点过分组/收藏），移到列表容器：
+      // 否则接下来的 Enter 会被 closest('button') 放行，触发旧按钮的原生 click，
+      // 例如点开分组后按 ↓ + Enter 会再次收起分组而不是播放频道
+      if ((e.target as HTMLElement).closest('button')) listRef.current?.focus();
       return;
     }
     if (e.key === 'Enter' && cursor >= 0 && cursor < rows.length) {
