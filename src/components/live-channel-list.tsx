@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-} from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/lib/utils';
 import { SmartImage } from './smart-image';
@@ -29,13 +20,15 @@ import type { LiveChannel } from '@/lib/types';
 import { EmptyState } from './states';
 
 /**
- * 直播频道侧栏：全部/收藏/最近三个视图 + 分组横向标签条 + 关键字搜索 + 排序。
+ * 直播频道侧栏：全部/收藏/最近三个视图 + 分组折叠菜单 + 关键字搜索 + 排序。
+ * - 全部视图下是纵向分组列表：点分组行展开其下频道（手风琴，同时只展开一个）；
+ *   搜索时改为跨分组扁平结果，收藏/最近视图保持按收藏或最近顺序的扁平列表；
  * - 搜索对分隔符归一化（cctv1 命中 CCTV-1），并匹配分组名；输入防抖后过滤；
  * - 可用性两档筛选（绿点=分片级验证 / 可播=含弱验证）；
  * - 支持批量测活：频道名前显示可达性状态点；
- * - 虚拟列表（@tanstack/react-virtual）：仅渲染可视区内的频道行，数千频道下 DOM 恒定，
- *   电视盒子 / 低端设备滑动不掉帧；行高动态测量（有无分组名两档）；
- * - 键盘：容器聚焦后 ↑↓ 移动光标、Enter 播放；
+ * - 虚拟列表（@tanstack/react-virtual）：分组行与频道行同一行模型参与虚拟化，
+ *   数千频道下 DOM 恒定，电视盒子 / 低端设备滑动不掉帧；行高动态测量；
+ * - 键盘：容器聚焦后 ↑↓ 移动行光标、Enter 展开分组或播放频道；
  * - 性能：本组件与 ChannelRow 均精确订阅 store，探测节流写回不会全列表重渲染。
  */
 
@@ -69,6 +62,11 @@ interface ChannelListProps {
 
 type View = 'all' | 'fav' | 'recent';
 
+/** 列表行模型：分组行（可展开）与频道行共用同一虚拟列表 */
+type ListRow =
+  | { kind: 'group'; key: string; group: string; label: string; count: number; expanded: boolean }
+  | { kind: 'channel'; key: string; channel: LiveChannelItem };
+
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -76,80 +74,6 @@ function useDebouncedValue<T>(value: T, delay: number): T {
     return () => clearTimeout(timer);
   }, [value, delay]);
   return debounced;
-}
-
-/**
- * 分组标签条：鼠标按住拖动横向滚动 + 左右边缘渐隐。
- *
- * PC 上这条带子只能靠滚动条：`.scrollbar-thin` 把轨道压到 6px 高，
- * 分组一多滑块还会变短，实际点不中（issue #948），所以补一套拖拽。
- * 触摸设备不接管：原生滑动带惯性，比手动跟手好。
- */
-function useChipStrip(itemCount: number) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [edges, setEdges] = useState({ left: false, right: false });
-  const drag = useRef({ startX: 0, startLeft: 0, moved: false });
-
-  // 边缘渐隐：没有它，用户不知道右边还藏着分组
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => {
-      const left = el.scrollLeft > 4;
-      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
-      // 拖动时 scroll 事件很密：值没变就复用旧对象，避免每帧重渲染整个频道列表
-      setEdges((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
-    };
-    update();
-    el.addEventListener('scroll', update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener('scroll', update);
-      ro.disconnect();
-    };
-  }, [itemCount]);
-
-  // 拖动过程挂 document，而不是 setPointerCapture：
-  // 一旦捕获指针，click 会被重定向到容器，点分组就失效了
-  useEffect(() => {
-    if (!dragging) return;
-    const onMove = (e: PointerEvent) => {
-      const el = ref.current;
-      if (!el) return;
-      const dx = e.clientX - drag.current.startX;
-      if (!drag.current.moved && Math.abs(dx) > 3) drag.current.moved = true;
-      if (drag.current.moved) el.scrollLeft = drag.current.startLeft - dx;
-    };
-    const onUp = () => setDragging(false);
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
-    return () => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onUp);
-    };
-  }, [dragging]);
-
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== 'mouse' || e.button !== 0) return;
-    const el = ref.current;
-    if (!el) return;
-    drag.current = { startX: e.clientX, startLeft: el.scrollLeft, moved: false };
-    setDragging(true);
-  };
-
-  // 拖完松手仍会触发一次 click，不能让它落到分组按钮上（等于误切分组）
-  const onClickCapture = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!drag.current.moved) return;
-    drag.current.moved = false;
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  return { ref, dragging, edges, onPointerDown, onClickCapture };
 }
 
 export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilteredChange }: ChannelListProps) {
@@ -160,15 +84,14 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
   const customImageProxy = useAppStore((s) => s.customImageProxy);
 
   const [view, setView] = useState<View>('all');
-  const [group, setGroup] = useState<string>('');
+  /** 当前展开的分组名；null = 全部折叠。同时只展开一个（手风琴） */
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
   const debouncedKeyword = useDebouncedValue(keyword, SEARCH_DEBOUNCE_MS);
   const [sortMode, setSortMode] = useState<LiveSortMode>('default');
   const [aliveFilter, setAliveFilter] = useState<AliveFilter>('off');
-  /** 键盘光标（filtered 的下标），与"正在播放"高亮独立 */
+  /** 键盘光标（rows 的下标，分组行与频道行共用），与"正在播放"高亮独立 */
   const [cursor, setCursor] = useState(-1);
-  /** 分组标签条的拖拽滚动与边缘渐隐 */
-  const chipStrip = useChipStrip(groups.length);
   const listRef = useRef<HTMLDivElement>(null);
   const {
     results: probeResults,
@@ -192,8 +115,9 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
   const recentOrder = useMemo(() => new Map(liveRecent.map((r, i) => [r.url, i] as const)), [liveRecent]);
   const normalizedKeyword = useMemo(() => normalizeForSearch(debouncedKeyword.trim()), [debouncedKeyword]);
 
-  // 先做视图/分组/搜索/排序（不含可用性筛选）：可用性计数必须基于这份列表，
-  // 否则点击筛选后 filtered 收缩，两个计数会跟着变小、与实际展示对不上
+  // 先做视图/搜索/排序（不含可用性筛选）：可用性计数必须基于这份列表，
+  // 否则点击筛选后 filtered 收缩，两个计数会跟着变小、与实际展示对不上。
+  // 分组筛选不在这里做：分组是折叠菜单的一层结构，由 rows 决定哪些分组展开。
   const matched = useMemo(() => {
     let list: LiveChannelItem[];
     if (view === 'fav') {
@@ -206,14 +130,11 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
     } else {
       list = channels;
     }
-    if (view !== 'recent' && group) {
-      list = list.filter((c) => c.group === group);
-    }
     if (normalizedKeyword) {
       list = list.filter((c) => matchesKeyword(c, normalizedKeyword));
     }
     return sortChannels(list, sortMode, { recentOrder, probeOf: (url) => probeResults.get(url) });
-  }, [channels, favSet, liveRecent, view, group, normalizedKeyword, sortMode, recentOrder, probeResults]);
+  }, [channels, favSet, liveRecent, view, normalizedKeyword, sortMode, recentOrder, probeResults]);
 
   const filtered = useMemo(
     () =>
@@ -223,10 +144,51 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
     [matched, aliveFilter, probeResults]
   );
 
-  // 上报筛选排序结果给页面（键盘换台用）；列表存父组件 ref，不触发父组件重渲染
+  // 上报筛选排序结果给页面（键盘换台用）；列表存父组件 ref，不触发父组件重渲染。
+  // 上报的是"全部命中频道"而非仅展开分组内的：页面级 ↑↓ 换台要能跨分组走
   useEffect(() => {
     onFilteredChange?.(filtered);
   }, [filtered, onFilteredChange]);
+
+  /** 全部视图且无关键字时按分组折叠展示；收藏/最近/搜索结果保持扁平列表 */
+  const accordion = view === 'all' && !normalizedKeyword;
+
+  const rows = useMemo<ListRow[]>(() => {
+    if (!accordion) {
+      return filtered.map((c) => ({ kind: 'channel' as const, key: c.url, channel: c }));
+    }
+    // filtered 已按 sortMode 排序：组内保持其相对顺序，组间沿用 groups 的原始顺序
+    const byGroup = new Map<string, LiveChannelItem[]>();
+    for (const c of filtered) {
+      const k = c.group || '';
+      const bucket = byGroup.get(k);
+      if (bucket) bucket.push(c);
+      else byGroup.set(k, [c]);
+    }
+    // 空分组名（上游没写 group-title）排在最后
+    const order = groups.filter((g) => byGroup.has(g));
+    if (byGroup.has('')) order.push('');
+    // 兜底：filtered 里出现但 groups 未列出的分组，按首次出现顺序补在后面
+    for (const k of byGroup.keys()) if (!order.includes(k)) order.push(k);
+
+    const out: ListRow[] = [];
+    for (const g of order) {
+      const list = byGroup.get(g) ?? [];
+      out.push({
+        kind: 'group',
+        key: `g:${g || '__ungrouped__'}`,
+        group: g,
+        label: g || '未分组',
+        count: list.length,
+        expanded: expandedGroup === g,
+      });
+      if (expandedGroup === g) {
+        for (const c of list) out.push({ kind: 'channel', key: c.url, channel: c });
+      }
+    }
+    return out;
+  }, [accordion, filtered, groups, expandedGroup]);
+
 
   // 口径与两个筛选按钮一致：绿点=分片级验证且吞吐达标（排除限速源），可播=任何验证级别通过
   const aliveCounts = useMemo(() => {
@@ -241,56 +203,97 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
     return { ok, green };
   }, [matched, probeResults]);
 
-  // 键盘/锚定滚动需要按 URL 反查索引；filtered 随测活结果变化（排序含可用性），
-  // 用 ref 读取最新值，避免测活写回触发重新锚定打断用户滚动
-  const filteredRef = useRef(filtered);
-  filteredRef.current = filtered;
-
   const virtualizer = useVirtualizer({
-    count: filtered.length,
+    count: rows.length,
     getScrollElement: () => listRef.current,
-    // 行高两档：带分组名的双行 / 无分组名单行（含 4px 行距），measureElement 会修正估值
-    estimateSize: (i) => (filtered[i].group ? 51 : 47),
+    // 分组行单行；频道行两档：带分组名的双行 / 无分组名单行（均含 4px 行距），measureElement 会修正
+    estimateSize: (i) => {
+      const row = rows[i];
+      if (!row) return 47;
+      return row.kind === 'group' ? 44 : row.channel.group ? 51 : 47;
+    },
     overscan: 10,
-    getItemKey: (i) => filtered[i].url,
+    getItemKey: (i) => rows[i]?.key ?? i,
   });
 
-  // 切换筛选/排序/频道时：重置键盘光标，并把当前播放频道锚定到可视区（找不到则回顶部）
+  const expandedRef = useRef(expandedGroup);
+  expandedRef.current = expandedGroup;
+
+  /**
+   * 待滚动目标：只在行模型变化后消费。
+   * 展开分组 / 切台都会先改变 expandedGroup，目标行要在下一次渲染才存在，
+   * 所以不能当场滚——否则滚的是一份还没有子频道的旧列表。
+   */
+  const pendingScroll = useRef<{ kind: 'group'; group: string } | { kind: 'channel'; url: string } | null>(null);
+
+  const toggleGroup = useCallback((g: string) => {
+    // 展开时把该分组滚到列表顶部（收起不滚，避免列表跳动）；
+    // 真正的滚动交给 pendingScroll 消费，此时子频道行还不存在
+    const willExpand = expandedRef.current !== g;
+    setExpandedGroup(willExpand ? g : null);
+    pendingScroll.current = willExpand ? { kind: 'group', group: g } : null;
+  }, []);
+
+  // 切换视图/排序/搜索/可用性筛选：回顶部并清光标
   useEffect(() => {
     setCursor(-1);
-    if (!currentUrl) {
-      virtualizer.scrollToOffset(0);
-      return;
-    }
-    const idx = filteredRef.current.findIndex((c) => c.url === currentUrl);
-    if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'auto' });
-    else virtualizer.scrollToOffset(0);
-  }, [view, group, sortMode, debouncedKeyword, aliveFilter, currentUrl, virtualizer]);
+    pendingScroll.current = null;
+    virtualizer.scrollToOffset(0);
+  }, [view, sortMode, debouncedKeyword, aliveFilter, virtualizer]);
 
-  const scrollToChannelRow = useCallback(
-    (url: string) => {
-      const idx = filteredRef.current.findIndex((c) => c.url === url);
-      if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'auto' });
+  // 切台：展开该频道所在分组（否则折叠态下看不到正在播放的行），并把它滚进视野。
+  // 只跟随 currentUrl：channels 每次拉取都是新引用，跟着它会覆盖用户手动折叠
+  const channelsRef = useRef(channels);
+  channelsRef.current = channels;
+  useEffect(() => {
+    setCursor(-1);
+    if (!currentUrl) return;
+    const target = channelsRef.current.find((c) => c.url === currentUrl);
+    if (target) setExpandedGroup(target.group || '');
+    pendingScroll.current = { kind: 'channel', url: currentUrl };
+  }, [currentUrl]);
+
+  // 行模型变化后消费待滚动目标：分组滚到列表顶部，频道滚进视野
+  useEffect(() => {
+    const pending = pendingScroll.current;
+    if (!pending) return;
+    const idx = rows.findIndex((r) =>
+      pending.kind === 'group'
+        ? r.kind === 'group' && r.group === pending.group
+        : r.kind === 'channel' && r.channel.url === pending.url
+    );
+    // 目标行还没出现（如分组尚未展开）：保留目标，等下一次 rows 变化
+    if (idx < 0) return;
+    pendingScroll.current = null;
+    virtualizer.scrollToIndex(idx, { align: pending.kind === 'group' ? 'start' : 'auto' });
+  }, [rows, virtualizer]);
+
+  const scrollToRow = useCallback(
+    (index: number) => {
+      if (index >= 0) virtualizer.scrollToIndex(index, { align: 'auto' });
     },
     [virtualizer]
   );
 
   const onListKeyDown = (e: React.KeyboardEvent) => {
-    if (filtered.length === 0) return;
+    if (rows.length === 0) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const delta = e.key === 'ArrowDown' ? 1 : -1;
       const base = cursor === -1 ? (delta === 1 ? -1 : 0) : cursor;
-      const next = Math.min(Math.max(base + delta, 0), filtered.length - 1);
+      const next = Math.min(Math.max(base + delta, 0), rows.length - 1);
       setCursor(next);
-      virtualizer.scrollToIndex(next, { align: 'auto' });
+      scrollToRow(next);
       return;
     }
-    if (e.key === 'Enter' && cursor >= 0 && cursor < filtered.length) {
+    if (e.key === 'Enter' && cursor >= 0 && cursor < rows.length) {
       // 焦点在行内按钮（收藏/删除）上时，Enter 交给按钮自身
       if ((e.target as HTMLElement).closest('button')) return;
+      const row = rows[cursor];
+      if (!row) return;
       e.preventDefault();
-      onSelect(filtered[cursor]);
+      if (row.kind === 'group') toggleGroup(row.group);
+      else onSelect(row.channel);
     }
   };
 
@@ -331,11 +334,14 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
           maxLength={60}
           onChange={(e) => setKeyword(e.target.value)}
           onKeyDown={(e) => {
-            // 搜索框内按 ↓ 进入列表光标导航
-            if (e.key === 'ArrowDown' && filtered.length > 0) {
+            // 搜索框内按 ↓ 进入列表光标导航；落点取第一个频道行
+            // （分组行也在 rows 里，第 0 行不一定是频道）
+            if (e.key === 'ArrowDown' && rows.length > 0) {
               e.preventDefault();
-              setCursor(0);
-              scrollToChannelRow(filtered[0].url);
+              const first = rows.findIndex((r) => r.kind === 'channel');
+              const target = first >= 0 ? first : 0;
+              setCursor(target);
+              scrollToRow(target);
               listRef.current?.focus();
             }
           }}
@@ -426,37 +432,7 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
         )}
       </div>
 
-      {/* 分组标签条（横向可滑动：滚轮/滚动条之外，鼠标可直接拖动） */}
-      {view === 'all' && groups.length > 0 && (
-        <div className="px-3 pb-2 shrink-0">
-          <div className="relative">
-            <div
-              ref={chipStrip.ref}
-              onPointerDown={chipStrip.onPointerDown}
-              onClickCapture={chipStrip.onClickCapture}
-              className={cn(
-                // select-none 常驻：拖动时若允许选字，会变成"选中标签文字"而不是滚动
-                'flex gap-1.5 overflow-x-auto scrollbar-thin pb-1 select-none',
-                chipStrip.dragging ? 'cursor-grabbing' : 'cursor-grab'
-              )}
-            >
-              <GroupChip active={!group} label="全部分组" onClick={() => setGroup('')} />
-              {groups.map((g) => (
-                <GroupChip key={g} active={group === g} label={g} onClick={() => setGroup(g === group ? '' : g)} />
-              ))}
-            </div>
-            {/* 左右渐隐：提示这一栏还能横向拖动 */}
-            {chipStrip.edges.left && (
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-surface-raised to-transparent" />
-            )}
-            {chipStrip.edges.right && (
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-surface-raised to-transparent" />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 频道列表（容器可聚焦，↑↓/Enter 光标导航） */}
+      {/* 频道/分组列表（容器可聚焦，↑↓/Enter 光标导航） */}
       <div
         ref={listRef}
         data-channel-list
@@ -482,35 +458,49 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
           />
         ) : (
           <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-            {virtualizer.getVirtualItems().map((vi) => (
-              <div
-                key={vi.key}
-                data-index={vi.index}
-                ref={virtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${vi.start}px)`,
-                  // 原 space-y-1 的 4px 行距；padding 计入 measureElement 量得的高度
-                  paddingBottom: 4,
-                }}
-              >
-                <ChannelRow
-                  channel={filtered[vi.index]}
-                  active={filtered[vi.index].url === currentUrl}
-                  cursor={cursor === vi.index}
-                  isFav={favSet.has(filtered[vi.index].url)}
-                  probe={probeResults.get(filtered[vi.index].url)}
-                  logo={filtered[vi.index].logo}
-                  imageProxyMode={imageProxyMode}
-                  customProxy={customImageProxy}
-                  onSelect={onSelect}
-                  onRemoveRecent={view === 'recent' ? removeRecent : undefined}
-                />
-              </div>
-            ))}
+            {virtualizer.getVirtualItems().map((vi) => {
+              const row = rows[vi.index];
+              if (!row) return null;
+              return (
+                <div
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${vi.start}px)`,
+                    // 原 space-y-1 的 4px 行距；padding 计入 measureElement 量得的高度
+                    paddingBottom: 4,
+                  }}
+                >
+                  {row.kind === 'group' ? (
+                    <GroupRow
+                      label={row.label}
+                      count={row.count}
+                      expanded={row.expanded}
+                      cursor={cursor === vi.index}
+                      onClick={() => toggleGroup(row.group)}
+                    />
+                  ) : (
+                    <ChannelRow
+                      channel={row.channel}
+                      active={row.channel.url === currentUrl}
+                      cursor={cursor === vi.index}
+                      isFav={favSet.has(row.channel.url)}
+                      probe={probeResults.get(row.channel.url)}
+                      logo={row.channel.logo}
+                      imageProxyMode={imageProxyMode}
+                      customProxy={customImageProxy}
+                      onSelect={onSelect}
+                      onRemoveRecent={view === 'recent' ? removeRecent : undefined}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -518,18 +508,43 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
   );
 }
 
-function GroupChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+/** 分组行：纵向分组菜单的一行，点击展开/折叠其下的频道 */
+function GroupRow({
+  label,
+  count,
+  expanded,
+  cursor,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  expanded: boolean;
+  cursor: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
+      type="button"
+      aria-expanded={expanded}
       className={cn(
-        'shrink-0 px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-colors border',
-        active
-          ? 'bg-accent text-on-accent border-accent'
-          : 'bg-chip text-muted border-line hover:text-content hover:bg-hover'
+        'w-full flex items-center gap-2 px-2 py-2 rounded-md text-left transition-colors',
+        expanded ? 'bg-accent/10' : 'hover:bg-hover',
+        cursor && 'ring-1 ring-accent/70'
       )}
       onClick={onClick}
     >
-      {label}
+      <svg
+        className={cn('w-3.5 h-3.5 shrink-0 text-muted transition-transform', expanded && 'rotate-90')}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        aria-hidden="true"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+      <span className="flex-1 min-w-0 truncate text-xs font-medium text-content">{label}</span>
+      <span className="shrink-0 text-[10px] text-faint tabular-nums">{count}</span>
     </button>
   );
 }
