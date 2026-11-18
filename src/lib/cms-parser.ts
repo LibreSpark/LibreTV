@@ -35,9 +35,13 @@ export function parseSearchList(
       sourceName: source.name,
       vodId: String(vod.vod_id ?? ''),
       name: String(vod.vod_name ?? ''),
+      alternateNames: [vod.vod_sub, vod.vod_alias, vod.vod_en]
+        .filter((value): value is string => typeof value === 'string')
+        .flatMap((value) => value.split(/[,，;；|/]+/u))
+        .map((value) => value.trim()).filter((value) => value.length > 0 && value.length <= 100).slice(0, 8),
       pic: typeof vod.vod_pic === 'string' ? vod.vod_pic : undefined,
       typeName: typeof vod.type_name === 'string' ? vod.type_name : undefined,
-      year: typeof vod.vod_year === 'string' ? vod.vod_year : undefined,
+      year: typeof vod.vod_year === 'string' || typeof vod.vod_year === 'number' ? String(vod.vod_year) : undefined,
       area: typeof vod.vod_area === 'string' ? vod.vod_area : undefined,
       remarks: typeof vod.vod_remarks === 'string' ? vod.vod_remarks : undefined,
       sourceUrl: source.url,
@@ -278,8 +282,10 @@ export function isRelevant(name: string, wd: string): boolean {
 }
 
 /** 丢弃无关结果；即使全部不相关，也不能返回源站的原始目录。 */
-export function filterRelevantResults<T extends { name?: string }>(items: T[], wd: string): T[] {
-  const query = prepareQuery(wd);
-  if (!query) return items;
-  return items.filter((item) => isRelevantPrepared(item.name || '', query));
+export function filterRelevantResults<T extends { name?: string; alternateNames?: string[] }>(items: T[], wd: string | string[]): T[] {
+  const queries = (Array.isArray(wd) ? wd : [wd]).map(prepareQuery).filter((query): query is PreparedQuery => Boolean(query));
+  if (!queries.length) return items;
+  return items.filter((item) => queries.some((query) =>
+    [item.name || '', ...(item.alternateNames || [])].some((name) => isRelevantPrepared(name, query))
+  ));
 }

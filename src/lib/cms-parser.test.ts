@@ -225,6 +225,13 @@ describe('isRelevant', () => {
 });
 
 describe('filterRelevantResults', () => {
+  it('matches verified Chinese aliases or original-title metadata while rejecting unrelated results', () => {
+    const chinese = { name: '盗梦空间' };
+    const original = { name: '盗梦空间', alternateNames: ['Inception'] };
+    const unrelated = { name: '盗梦侦探' };
+    expect(filterRelevantResults([original, unrelated], 'Inception')).toEqual([original]);
+    expect(filterRelevantResults([chinese, unrelated], ['Inception', '盗梦空间'])).toEqual([chinese]);
+  });
   const wd = '摔跤吧！爸爸';
   const items = [
     { name: '摔跤吧！爸爸' },

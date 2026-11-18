@@ -300,6 +300,12 @@ function HomeContent() {
               </h2>
             </div>
 
+            {!!searchQuery.data?.searchedTitles?.length && (
+              <p className="mb-3 text-xs text-muted" role="status">
+                已匹配片名：{searchQuery.data.searchedTitles.join(' / ')}
+              </p>
+            )}
+
             {failures.length > 0 && (
               <div className="mb-3 text-xs bg-chip rounded-lg px-3 py-2 flex flex-wrap gap-x-3 gap-y-1">
                 <span className="text-faint">{isSearching ? '以下源暂时无响应：' : '部分点播源请求失败：'}</span>
