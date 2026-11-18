@@ -556,4 +556,16 @@ describe('底部细进度条设置项', () => {
     expect(options.partialize(store()).miniProgressBar).toBe(false);
     store().updateSettings({ miniProgressBar: true });
   });
+
+  it('doubanCategories 默认空（内置分类），updateSettings 可写入且 partialize 会持久化', () => {
+    const options = useAppStore.persist.getOptions() as unknown as {
+      partialize: (s: unknown) => Record<string, unknown>;
+    };
+    expect(store().doubanCategories).toEqual([]);
+    const categories = [{ id: 'c1', name: '悬疑', type: 'tv' as const, tag: '悬疑' }];
+    store().updateSettings({ doubanCategories: categories });
+    expect(store().doubanCategories).toEqual(categories);
+    expect(options.partialize(store()).doubanCategories).toEqual(categories);
+    store().updateSettings({ doubanCategories: [] });
+  });
 });

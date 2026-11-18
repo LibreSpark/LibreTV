@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { QualityEntry, SourceConfig, LiveSourceConfig, SourceSearchOutcome } from './types';
+import { normalizeDoubanCategories, type DoubanCategory } from './douban-categories';
 import { migrateSkipMarks, type SkipMark, type SkipSegment } from './skip-marks';
 import { isQualityEntryFresh, mergeQualityEntries, qualityKey } from './quality';
 import { clearLiveProbeResultsDb, loadLiveProbeResults, saveLiveProbeResults } from './db';
@@ -23,6 +24,11 @@ export interface AppSettings {
   recommendSource: 'douban' | 'bangumi' | 'hot-list';
   /** 用户是否在设置中主动选择过推荐数据源；为 false 时部署者的 DEFAULT_RECOMMEND_SOURCE 默认值可生效 */
   recommendSourceTouched: boolean;
+  /**
+   * 首页豆瓣推荐的自定义栏目（栏目名 + type + tag）。
+   * 空数组 = 使用内置预设标签；非空时首页按此顺序展示栏目并覆盖内置分类。
+   */
+  doubanCategories: DoubanCategory[];
   autoplayNext: boolean;
   /**
    * 音量放大（Web Audio 增益链，约 1.8 倍）：默认关闭。
@@ -348,6 +354,7 @@ export const useAppStore = create<AppState>()(
       doubanEnabled: true,
       recommendSource: 'hot-list',
       recommendSourceTouched: false,
+      doubanCategories: [],
       autoplayNext: true,
       // 音量放大默认关闭：开启后对所有音量档位整体抬高约 1.8 倍，交给用户显式选择
       volumeBoost: false,
@@ -871,8 +878,9 @@ export const useAppStore = create<AppState>()(
       // v7：片尾结束也并入同一开关（不再单独提供 autoSkipOutro）。
       // v8：订阅新增 refreshDays / failStreak——两者都缺省即「纯手动 + 无失败记录」，
       //     与旧行为完全一致，因此无需改写存量数据，仅借版本号让 migrate 跑一遍。
+      // v9：首页推荐新增自定义栏目列表；老快照补空数组，继续使用内置分类。
       // 此前未声明 version 的存量数据会被视为 v0 并走 migrate 补齐。
-      version: 8,
+      version: 9,
       migrate: (persisted, version) => {
         const state = { ...((persisted ?? {}) as Partial<AppState>) };
         if (!Array.isArray(state.liveRecent)) state.liveRecent = [];
@@ -927,6 +935,9 @@ export const useAppStore = create<AppState>()(
             };
           });
         }
+        if (version < 9) {
+          state.doubanCategories = normalizeDoubanCategories(state.doubanCategories);
+        }
         return state as AppState;
       },
       // envSources 由服务端每次下发，不进 localStorage；
@@ -949,6 +960,7 @@ export const useAppStore = create<AppState>()(
         doubanEnabled: s.doubanEnabled,
         recommendSource: s.recommendSource,
         recommendSourceTouched: s.recommendSourceTouched,
+        doubanCategories: s.doubanCategories,
         autoplayNext: s.autoplayNext,
         volumeBoost: s.volumeBoost,
         miniProgressBar: s.miniProgressBar,

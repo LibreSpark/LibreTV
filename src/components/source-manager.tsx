@@ -30,6 +30,12 @@ import { copyToClipboard } from '@/lib/clipboard';
 import { useAuth } from './auth';
 import { api } from '@/lib/client-api';
 import { AUTO_REFRESH_MAX_FAIL_STREAK, syncSourceSubscription } from '@/lib/subscription-sync';
+import {
+  DOUBAN_NAME_MAX_LENGTH,
+  DOUBAN_TAG_MAX_LENGTH,
+  MAX_DOUBAN_CATEGORIES,
+  type DoubanCategory,
+} from '@/lib/douban-categories';
 import { describeParseStats } from '@/lib/tvbox-parser';
 
 /**
@@ -769,8 +775,138 @@ function HomePanel() {
             { value: 'hot-list', label: '影视榜单', hint: '豆瓣周榜 / 百度热播' },
           ]}
         />
+        <DoubanCategoryEditor />
       </div>
     </section>
+  );
+}
+
+/** 自定义栏目的电影/剧集选择：与设置面板其他下拉共用同一套自定义组件 */
+const DOUBAN_TYPE_OPTIONS: DropdownOption[] = [
+  { value: 'movie', label: '电影' },
+  { value: 'tv', label: '剧集' },
+];
+
+/**
+ * 自定义豆瓣推荐栏目：栏目名 + 电影/剧集 + 豆瓣标签，按列表顺序在首页展示。
+ * 留空即沿用内置分类；编辑时允许暂存的空名称/空标签，首页侧会忽略未填完的条目。
+ */
+function DoubanCategoryEditor() {
+  const categories = useAppStore((s) => s.doubanCategories);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+
+  const replace = (next: DoubanCategory[]) => updateSettings({ doubanCategories: next });
+  const patchAt = (index: number, patch: Partial<DoubanCategory>) =>
+    replace(categories.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+
+  const add = () => {
+    if (categories.length >= MAX_DOUBAN_CATEGORIES) return;
+    replace([
+      ...categories,
+      {
+        id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: '新栏目',
+        type: 'movie',
+        tag: '热门',
+      },
+    ]);
+  };
+
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= categories.length) return;
+    const next = [...categories];
+    [next[index], next[target]] = [next[target], next[index]];
+    replace(next);
+  };
+
+  return (
+    <div className="rounded-xl border border-line bg-card/50 p-2.5 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-medium text-content">自定义推荐栏目</p>
+          <p className="text-[10px] text-faint mt-0.5">留空则使用内置分类；需把上方「推荐数据源」设为豆瓣才生效</p>
+        </div>
+        <button
+          type="button"
+          className="btn-ghost btn-sm shrink-0 disabled:opacity-40"
+          onClick={add}
+          disabled={categories.length >= MAX_DOUBAN_CATEGORIES}
+        >
+          添加
+        </button>
+      </div>
+
+      {categories.length === 0 ? (
+        <p className="text-[10px] text-faint">当前使用内置分类（热门 / 华语 / 韩国 / 美剧 …）</p>
+      ) : (
+        <div className="space-y-1.5">
+          {categories.map((c, i) => (
+            <div key={c.id} className="flex items-center gap-1 rounded-lg bg-surface/60 p-1">
+              <input
+                className="input !py-1 !px-2 !rounded-lg text-xs w-20 shrink-0"
+                aria-label={`栏目 ${i + 1} 名称`}
+                placeholder="栏目名"
+                maxLength={DOUBAN_NAME_MAX_LENGTH}
+                value={c.name}
+                onChange={(e) => patchAt(i, { name: e.target.value })}
+              />
+              <Dropdown
+                value={c.type}
+                onChange={(v) => patchAt(i, { type: v === 'tv' ? 'tv' : 'movie' })}
+                options={DOUBAN_TYPE_OPTIONS}
+                ariaLabel={`栏目 ${i + 1} 类型`}
+                className="w-16 shrink-0 [&>button]:!py-1 [&>button]:!px-1.5 [&>button]:!text-xs [&>button]:!rounded-lg"
+              />
+              <input
+                className="input !py-1 !px-2 !rounded-lg text-xs flex-1 min-w-0"
+                aria-label={`栏目 ${i + 1} 豆瓣标签`}
+                placeholder="豆瓣标签，如 悬疑"
+                maxLength={DOUBAN_TAG_MAX_LENGTH}
+                value={c.tag}
+                onChange={(e) => patchAt(i, { tag: e.target.value })}
+              />
+              <button
+                type="button"
+                className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted transition-colors hover:bg-hover hover:text-content disabled:opacity-30"
+                aria-label={`栏目 ${i + 1} 上移`}
+                onClick={() => move(i, -1)}
+                disabled={i === 0}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted transition-colors hover:bg-hover hover:text-content disabled:opacity-30"
+                aria-label={`栏目 ${i + 1} 下移`}
+                onClick={() => move(i, 1)}
+                disabled={i === categories.length - 1}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+                aria-label={`删除栏目 ${i + 1}`}
+                onClick={() => replace(categories.filter((_, j) => j !== i))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {categories.length > 0 && (
+        <button
+          type="button"
+          className="text-[10px] text-muted hover:text-content"
+          onClick={() => replace([])}
+        >
+          清空并恢复内置分类
+        </button>
+      )}
+    </div>
   );
 }
 

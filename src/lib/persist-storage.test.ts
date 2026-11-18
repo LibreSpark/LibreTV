@@ -193,7 +193,7 @@ describe('多标签配置持久化', () => {
     a.flush();
     expect(saved().autoplayNext).toBe(false);
     expect(saved().customAPIs).toEqual(sources);
-    expect(JSON.parse(disk.get(KEY)!).version).toBe(8);
+    expect(JSON.parse(disk.get(KEY)!).version).toBe(a.store.persist.getOptions().version);
   });
 
   it('本标签 flush 同步新基线后，后续普通更新仍保留远端源', async () => {

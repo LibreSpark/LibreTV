@@ -6,11 +6,15 @@ import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
+import {
+  MOVIE_TAGS,
+  TV_TAGS,
+  normalizeDoubanCategories,
+  type DoubanCategory,
+} from '@/lib/douban-categories';
 import { mergeRecommendationPages, nextRecommendationOffset, RECOMMEND_PAGE_SIZE } from '@/lib/recommendation-pages';
 import { DoubanCard } from './video-card';
 
-const MOVIE_TAGS = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动画'];
-const TV_TAGS = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧', '港剧', '日本动画', '综艺', '纪录片'];
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 /** 首页推荐区：数据源由设置决定（豆瓣热门 / Bangumi 新番放送 / 影视热榜），二选一展示 */
@@ -25,14 +29,34 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
 }
 
 /**
- * 豆瓣推荐：影视切换 + 标签筛选。
+ * 豆瓣推荐：影视切换 + 标签筛选；设置里配置了自定义栏目时改为按栏目切换。
  * 首批 50 条，滚动接近列表末尾时获取下一批真实数据；分类之间隔离缓存。
  * 空页/完全重复页停止；下一页失败时保留现有卡片，用户可以重试。
  */
 function DoubanView({ onPick }: { onPick: (title: string) => void }) {
-  const [type, setType] = useState<'movie' | 'tv'>('movie');
-  const [tag, setTag] = useState('热门');
+  const rawCategories = useAppStore((s) => s.doubanCategories);
+  // 编辑中的空名称/空标签条目不会进入首页；填完即自动生效
+  const categories = useMemo(() => normalizeDoubanCategories(rawCategories), [rawCategories]);
+  const custom = categories.length > 0;
+  const first = categories[0];
+  const [activeId, setActiveId] = useState<string | null>(first?.id ?? null);
+  const [type, setType] = useState<'movie' | 'tv'>(first?.type ?? 'movie');
+  const [tag, setTag] = useState(first?.tag ?? '热门');
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // 设置里增删/重排栏目后，保证当前选中项仍然有效（失效则回到第一个）
+  useEffect(() => {
+    if (!custom) {
+      if (activeId !== null) setActiveId(null);
+      return;
+    }
+    if (!categories.some((c) => c.id === activeId)) {
+      const next = categories[0];
+      setActiveId(next.id);
+      setType(next.type);
+      setTag(next.tag);
+    }
+  }, [custom, categories, activeId]);
 
   const query = useInfiniteQuery({
     queryKey: ['douban-scroll', type, tag, RECOMMEND_PAGE_SIZE],
@@ -62,35 +86,61 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
     setTag('热门');
   };
 
+  const selectCategory = (c: DoubanCategory) => {
+    if (c.id === activeId) return;
+    setActiveId(c.id);
+    setType(c.type);
+    setTag(c.tag);
+  };
+
   return (
     <section aria-label="影视推荐">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="flex bg-chip rounded-lg p-0.5">
-            <TypeButton active={type === 'movie'} onClick={() => switchType('movie')}>
-              电影
-            </TypeButton>
-            <TypeButton active={type === 'tv'} onClick={() => switchType('tv')}>
-              剧集
-            </TypeButton>
+      {!custom && (
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="flex bg-chip rounded-lg p-0.5">
+              <TypeButton active={type === 'movie'} onClick={() => switchType('movie')}>
+                电影
+              </TypeButton>
+              <TypeButton active={type === 'tv'} onClick={() => switchType('tv')}>
+                剧集
+              </TypeButton>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {tags.map((t) => (
-          <button
-            key={t}
-            className={cn(
-              'px-2.5 py-1 rounded-full text-xs transition-colors',
-              t === tag ? 'bg-accent text-on-accent' : 'bg-chip text-muted hover:text-content hover:bg-hover'
-            )}
-            onClick={() => setTag(t)}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      {custom ? (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-xs transition-colors',
+                c.id === activeId ? 'bg-accent text-on-accent' : 'bg-chip text-muted hover:text-content hover:bg-hover'
+              )}
+              onClick={() => selectCategory(c)}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {tags.map((t) => (
+            <button
+              key={t}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-xs transition-colors',
+                t === tag ? 'bg-accent text-on-accent' : 'bg-chip text-muted hover:text-content hover:bg-hover'
+              )}
+              onClick={() => setTag(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
 
       {query.isError && items.length === 0 ? (
         <div className="text-center text-sm text-faint py-8">
