@@ -77,15 +77,16 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-4">
+      <div className="flex flex-wrap gap-2 mb-5" role="group" aria-label="推荐分类">
         {tags.map((t) => (
           <button
             key={t}
             className={cn(
-              'px-2.5 py-1 rounded-full text-xs transition-colors',
+              'min-h-9 px-3 rounded-full text-sm transition-colors',
               t === tag ? 'bg-accent text-on-accent' : 'bg-chip text-muted hover:text-content hover:bg-hover'
             )}
             onClick={() => setTag(t)}
+            aria-pressed={t === tag}
           >
             {t}
           </button>
