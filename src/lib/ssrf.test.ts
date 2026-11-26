@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import http from 'node:http';
-import { isPrivateIP, isValidProxyUrl, runWithSSRFProtection } from './ssrf';
+import {
+  createUpstreamDispatcher,
+  getUpstreamProxyUrl,
+  isNoProxyHost,
+  isPrivateIP,
+  isValidProxyUrl,
+  runWithSSRFProtection,
+} from './ssrf';
 
 describe('isPrivateIP', () => {
   it.each([
@@ -223,5 +230,87 @@ describe('DNS Rebinding & Connection SSRF Protection (#941)', () => {
     } finally {
       server.close();
     }
+  });
+});
+
+
+describe('出网代理支持（#P1）', () => {
+  const PROXY_ENV_KEYS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'] as const;
+  const NO_PROXY_ENV_KEYS = ['NO_PROXY', 'no_proxy'] as const;
+
+  function withEnv<T>(patch: Record<string, string | undefined>, fn: () => T): T {
+    const saved: Record<string, string | undefined> = {};
+    for (const key of [...PROXY_ENV_KEYS, ...NO_PROXY_ENV_KEYS]) {
+      saved[key] = process.env[key];
+      if (patch[key] === undefined) delete process.env[key];
+      else process.env[key] = patch[key];
+    }
+    try {
+      return fn();
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  it('未配置代理时返回 null', () => {
+    withEnv(
+      { HTTPS_PROXY: undefined, https_proxy: undefined, HTTP_PROXY: undefined, http_proxy: undefined },
+      () => {
+        expect(getUpstreamProxyUrl()).toBeNull();
+      }
+    );
+  });
+
+  it('读取 HTTPS_PROXY / http_proxy（小写）并忽略非法协议', () => {
+    withEnv(
+      { HTTPS_PROXY: undefined, https_proxy: undefined, HTTP_PROXY: undefined, http_proxy: undefined },
+      () => {
+        process.env.HTTPS_PROXY = 'http://127.0.0.1:7897';
+        expect(getUpstreamProxyUrl()).toBe('http://127.0.0.1:7897/');
+        delete process.env.HTTPS_PROXY;
+        process.env.http_proxy = 'http://127.0.0.1:7898';
+        expect(getUpstreamProxyUrl()).toBe('http://127.0.0.1:7898/');
+        delete process.env.http_proxy;
+        process.env.HTTPS_PROXY = 'socks5://127.0.0.1:1080';
+        expect(getUpstreamProxyUrl()).toBeNull();
+      }
+    );
+  });
+
+  it('NO_PROXY 命中时判定为直连', () => {
+    withEnv({ NO_PROXY: undefined, no_proxy: undefined }, () => {
+      process.env.NO_PROXY = 'localhost,127.0.0.1,.example.com';
+      expect(isNoProxyHost('localhost')).toBe(true);
+      expect(isNoProxyHost('127.0.0.1')).toBe(true);
+      expect(isNoProxyHost('api.example.com')).toBe(true);
+      expect(isNoProxyHost('example.com')).toBe(true);
+      expect(isNoProxyHost('notexample.com')).toBe(false);
+      expect(isNoProxyHost('api.other.com')).toBe(false);
+      delete process.env.NO_PROXY;
+      process.env.no_proxy = '*';
+      expect(isNoProxyHost('anything.com')).toBe(true);
+    });
+  });
+
+  it('配置代理后 dispatcher 走代理，未配置时走连接级 SSRF Agent', () => {
+    withEnv(
+      { HTTPS_PROXY: undefined, https_proxy: undefined, HTTP_PROXY: undefined, http_proxy: undefined, NO_PROXY: undefined, no_proxy: undefined },
+      () => {
+        const direct = createUpstreamDispatcher({ url: 'https://example.com/x' });
+        expect(direct.constructor.name).toBe('Agent');
+
+        process.env.HTTPS_PROXY = 'http://127.0.0.1:7897';
+        const proxied = createUpstreamDispatcher({ url: 'https://example.com/x' });
+        expect(proxied.constructor.name).toBe('ProxyAgent');
+
+        // 命中 NO_PROXY 的目标仍然直连
+        process.env.NO_PROXY = 'example.com';
+        const bypassed = createUpstreamDispatcher({ url: 'https://example.com/x' });
+        expect(bypassed.constructor.name).toBe('Agent');
+      }
+    );
   });
 });

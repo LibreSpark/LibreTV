@@ -120,6 +120,8 @@ PASSWORD=your-password npm start   # 监听 8080
 | `DEFAULT_SUBSCRIPTIONS` | 否 | 预置数据源订阅（LibreTV-SourceList JSON 链接，也接受 TVBOX 配置与接口目录地址），JSON 数组：`["https://.../sources.json", {"url":"https://.../list.json","name":"名称","refreshDays":10}]`。首次访问自动导入点播源与直播源，之后按 `refreshDays`（1-365，缺省 1 天）静默刷新；用户删除后不再自动加回。`refreshDays` 只是初始值，用户在源管理面板改过之后以面板设置为准 |
 | `DEFAULT_RECOMMEND_SOURCE` | 否 | 首页推荐数据源的默认值（`douban` / `bangumi` / `hot-list`，出厂默认 `hot-list`）；仅对未在设置中主动选择过的用户生效，用户的选择始终优先 |
 | `LIVE_ALLOW_PRIVATE` | 否 | 设为 `1` 时允许直播流代理访问内网/保留地址（自建 IPTV 场景），默认关闭以维持 SSRF 防护 |
+| `HTTPS_PROXY` / `HTTP_PROXY` | 否 | 出网代理地址（如 `http://127.0.0.1:7897`）。采集站被 Cloudflare 拦截、或目标站在本地网络不可达时使用；不设置则直连。**系统代理设置（macOS/Windows 系统代理）不会被 Node 继承，必须在此显式配置**，否则表现为「浏览器能访问、服务端请求却 403/超时」 |
+| `NO_PROXY` / `no_proxy` | 否 | 例外列表（逗号分隔），命中的目标直连不走代理。建议把视频 CDN 域名加进来，避免播放流量绕行代理导致卡顿 |
 
 ## 使用说明
 
