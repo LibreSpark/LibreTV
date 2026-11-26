@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { LookupAddress } from 'node:dns';
 import { lookup as callbackLookup } from 'node:dns';
 import dns from 'node:dns/promises';
-import { Agent, buildConnector, fetch as undiciFetch } from 'undici';
+import { Agent, buildConnector, fetch as undiciFetch, ProxyAgent } from 'undici';
+import type { Dispatcher } from 'undici';
 
 /** 去掉 URL.hostname 对 IPv6 附加的方括号（"[::1]" → "::1"） */
 function stripBrackets(host: string): string {
@@ -206,6 +207,78 @@ export function createSSRFAgent(options: { allowPrivate?: boolean } = {}): Agent
   });
 }
 
+/**
+ * 读取部署者显式配置的出网代理地址；未配置返回 null。
+ *
+ * 只认 HTTPS_PROXY / https_proxy / HTTP_PROXY / http_proxy。macOS 的系统代理
+ * 设置（networksetup）不会被 Node/undici 继承，必须通过环境变量显式告知应用，
+ * 否则应用仍然直连，表现为「curl 走代理能通、应用里 403/超时」。
+ */
+export function getUpstreamProxyUrl(): string | null {
+  const raw =
+    process.env.HTTPS_PROXY ??
+    process.env.https_proxy ??
+    process.env.HTTP_PROXY ??
+    process.env.http_proxy;
+  if (!raw) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  return parsed.href;
+}
+
+/** 目标主机是否命中 NO_PROXY / no_proxy（命中则直连，不走代理） */
+export function isNoProxyHost(hostname: string): boolean {
+  const raw = process.env.NO_PROXY ?? process.env.no_proxy;
+  if (!raw) return false;
+  const host = stripBrackets(hostname).toLowerCase();
+  for (const entry of raw.split(/[,\s]+/)) {
+    const item = entry.trim().toLowerCase();
+    if (!item) continue;
+    if (item === '*') return true;
+    const bare = item.startsWith('.') ? item.slice(1) : item;
+    if (host === bare || host.endsWith(`.${bare}`)) return true;
+  }
+  return false;
+}
+
+/** 从 fetch 入参里取出目标 URL（string / URL / Request 三种形态） */
+function requestTargetUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return (input as Request).url ?? '';
+}
+
+/**
+ * 创建出网 dispatcher：配置了代理且目标未命中 NO_PROXY 时走 ProxyAgent，
+ * 否则走连接级 SSRF Agent。
+ *
+ * 走代理时连接层 SSRF 校验（safeLookup / ssrfConnect）不再生效——TCP 连接由
+ * 代理建立、目标域名也由代理解析。应用层校验（isValidProxyUrl + isBlockedByDNS）
+ * 在每次请求前仍然执行，内网/保留地址目标依旧会被拦下。
+ */
+export function createUpstreamDispatcher(
+  options: { allowPrivate?: boolean; url?: string } = {}
+): Dispatcher {
+  const proxyUrl = getUpstreamProxyUrl();
+  if (proxyUrl) {
+    let targetHost = '';
+    try {
+      targetHost = new URL(options.url ?? '').hostname;
+    } catch {
+      targetHost = '';
+    }
+    if (!targetHost || !isNoProxyHost(targetHost)) {
+      return new ProxyAgent({ uri: proxyUrl });
+    }
+  }
+  return createSSRFAgent({ allowPrivate: options.allowPrivate });
+}
+
 const GLOBAL_FETCH_WRAPPED = Symbol.for('libretv.ssrf.fetch.wrapped');
 
 /**
@@ -241,7 +314,10 @@ export function installFetchSSRFProtection(): void {
     }
 
     // 在受保护作用域内，如果未提供专属 dispatcher，自动注入安全专用的 Agent
-    const agent = createSSRFAgent({ allowPrivate: ctx.allowPrivate });
+    const agent = createUpstreamDispatcher({
+      allowPrivate: ctx.allowPrivate,
+      url: requestTargetUrl(input),
+    });
     try {
       // input/init 走 undici 自己的重载签名：DOM 的 Request 类型与 undici 的
       // Request 类型在 duplex 上要求不同，直接传会报类型不兼容，这里只是同族对象互转
