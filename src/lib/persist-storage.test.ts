@@ -70,6 +70,24 @@ afterEach(() => {
 });
 
 describe('多标签配置持久化', () => {
+  it('升级时清除平台超限误停用记录，保留勾选和实际源站故障', async () => {
+    const state = saved();
+    const health = { ok: false, failStreak: 2, disableCount: 1, disabledUntil: Date.now() + 100000, timestamp: Date.now() };
+    state.sourceHealth = {
+      custom_0: { ...health, error: 'Too many subrequests by single Worker invocation.' },
+      custom_1: { ...health, error: 'HTTP 403' },
+    };
+    disk.set(KEY, JSON.stringify({ version: 9, state }));
+    const { store } = await openTab();
+    expect(store.getState().selectedKeys).toEqual(['custom_0', 'custom_1']);
+    expect(store.getState().customAPIs).toEqual(sources);
+    expect(store.getState().sourceHealth).toEqual({ custom_1: state.sourceHealth.custom_1 });
+    expect(store.getState().recordSourceHealth([
+      { sourceKey: 'custom_0', ok: false, list: [], error: 'Too many subrequests by single Worker invocation.' },
+    ])).toEqual([]);
+    expect(store.getState().sourceHealth.custom_0).toBeUndefined();
+  });
+
   it('未收到 storage 通知的旧标签更新健康度，不覆盖另一标签新增的源', async () => {
     const a = await openTab();
     const b = await openTab();

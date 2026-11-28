@@ -88,9 +88,13 @@ export async function checkUpstreamAllowed(urlString: string): Promise<UpstreamV
   return { ok: true };
 }
 
-/** 直播场景是否放行内网地址（自建 IPTV）；由部署者显式开启 */
+export function isCloudflareWorkers(): boolean {
+  return globalThis.navigator?.userAgent === 'Cloudflare-Workers';
+}
+
+/** 内网 IPTV 仅允许在支持连接级防护的 Node.js 部署中显式开启。 */
 export function allowLivePrivate(): boolean {
-  return process.env.LIVE_ALLOW_PRIVATE === '1';
+  return !isCloudflareWorkers() && process.env.LIVE_ALLOW_PRIVATE === '1';
 }
 
 /**

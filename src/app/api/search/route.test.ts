@@ -62,6 +62,15 @@ afterEach(() => {
 });
 
 describe('POST /api/search', () => {
+  it.each([true, false])('Workers 请求超过两源时要求分批，不发出上游请求 (stream=%s)', async (stream) => {
+    vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await POST(makeRequest({ wd: '测试剧', sources: [...SOURCES, { ...SOURCES[0], key: 'c' }] }, stream));
+    expect(response.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('聚合多源结果：同源去重、成人内容过滤、失败源进 failures', async () => {
     mockUpstream();
     const res = await POST(makeRequest({ wd: '测试剧', sources: SOURCES, filterAdult: true }));

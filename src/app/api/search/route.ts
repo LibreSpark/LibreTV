@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
-import { cmsRequestHeaders, filterAdultResults, filterRelevantResults, normalizeTitle, parseSearchList } from '@/lib/cms-parser';
+import { cmsRequestHeaders, filterAdultResults, filterRelevantResults, parseSearchList, sortSearchResults } from '@/lib/cms-parser';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
-import { checkUpstreamAllowed } from '@/lib/ssrf';
+import { isCloudflareWorkers } from '@/lib/ssrf';
+import { isSearchInfrastructureError, MAX_SEARCH_SOURCES, WORKERS_SEARCH_BATCH_SIZE } from '@/lib/search-batching';
 import type { SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -66,11 +67,7 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   if (!/^https?:\/\//.test(source.url || '')) {
     return finish({ sourceKey: source.key, ok: false, list: [], error: '无效的源地址' });
   }
-  // 用户可控地址发起服务端请求，必须先过 SSRF 校验（协议白名单 + 内网/保留地址）
-  const verdict = await checkUpstreamAllowed(source.url);
-  if (!verdict.ok) {
-    return finish({ sourceKey: source.key, ok: false, list: [], error: verdict.reason });
-  }
+  // fetchUpstream 会校验每次实际请求及重定向目标；这里不重复解析 DNS。
 
   // 死线到点中断该源所有在途分页请求，避免后台继续空耗
   const controller = new AbortController();
@@ -107,7 +104,9 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
     const list = parseSearchList(first, source);
     // 源站真实总页数与配置上限取较小者；pagecount 缺失或非法时视为 1 页
     const rawPageCount = parseInt(String((first as { pagecount?: unknown }).pagecount ?? '1'), 10);
-    const pageCount = Math.min(Number.isFinite(rawPageCount) ? Math.max(1, rawPageCount) : 1, SEARCH_MAX_PAGES);
+    // Workers 批次除了 HTTP 还需要 DNS 校验；不要允许自定义页数把配额重新打满。
+    const pageLimit = isCloudflareWorkers() ? Math.min(SEARCH_MAX_PAGES, 5) : SEARCH_MAX_PAGES;
+    const pageCount = Math.min(Number.isFinite(rawPageCount) ? Math.max(1, rawPageCount) : 1, pageLimit);
     if (pageCount > 1) {
       const extraPages = await Promise.all(
         Array.from({ length: pageCount - 1 }, (_, i) => i + 2).map(async (page) => {
@@ -164,16 +163,7 @@ function aggregateOutcomes(outcomes: SourceSearchOutcome[], wd: string, filterAd
   // 部分源站做分词/OR 模糊搜索（搜「摔跤吧！爸爸」返回一堆「爸爸XXX」），按关键词过滤
   list = filterRelevantResults(list, wd);
 
-  // 精确命中（忽略标点差异）排在最前，其余按名称（与旧版一致），名称相同按源名
-  const exact = normalizeTitle(wd);
-  list.sort((a, b) => {
-    const aExact = normalizeTitle(a.name || '') === exact ? 0 : 1;
-    const bExact = normalizeTitle(b.name || '') === exact ? 0 : 1;
-    if (aExact !== bExact) return aExact - bExact;
-    const nameCompare = (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN');
-    if (nameCompare !== 0) return nameCompare;
-    return (a.sourceName || '').localeCompare(b.sourceName || '', 'zh-Hans-CN');
-  });
+  sortSearchResults(list, wd);
 
   const failures = outcomes
     .filter((o) => !o.ok)
@@ -206,7 +196,11 @@ export async function POST(req: Request) {
   if (!Array.isArray(body.sources) || body.sources.length === 0) {
     return NextResponse.json({ error: '请至少选择一个点播源' }, { status: 400 });
   }
-  const sources = body.sources.slice(0, 50);
+  if (isCloudflareWorkers() && body.sources.length > WORKERS_SEARCH_BATCH_SIZE) {
+    // 不能静默截断源列表；客户端收到 413 后分成独立 Worker 调用。
+    return NextResponse.json({ error: '此部署需要分批搜索' }, { status: 413 });
+  }
+  const sources = body.sources.slice(0, MAX_SEARCH_SOURCES);
   const filterAdult = body.filterAdult !== false;
 
   const cacheKey = searchCacheKey(wd, sources, filterAdult);
@@ -226,7 +220,9 @@ export async function POST(req: Request) {
   if (!isStream) {
     const outcomes = await Promise.all(sources.map((source) => searchSource(source, wd)));
     const payload = aggregateOutcomes(outcomes, wd, filterAdult);
-    setCache(cacheKey, payload, SEARCH_CACHE_TTL);
+    if (!payload.failures.some((failure) => isSearchInfrastructureError(failure.error))) {
+      setCache(cacheKey, payload, SEARCH_CACHE_TTL);
+    }
     return NextResponse.json(payload);
   }
 
@@ -256,7 +252,9 @@ export async function POST(req: Request) {
       );
 
       const payload = aggregateOutcomes(outcomes, wd, filterAdult);
-      setCache(cacheKey, payload, SEARCH_CACHE_TTL);
+      if (!payload.failures.some((failure) => isSearchInfrastructureError(failure.error))) {
+        setCache(cacheKey, payload, SEARCH_CACHE_TTL);
+      }
       send({ type: 'done', list: payload.list, failures: payload.failures });
       closed = true;
       try {

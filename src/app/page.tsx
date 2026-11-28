@@ -127,7 +127,12 @@ function HomeContent() {
       return;
     }
     if (selectedSources.length === 0) {
-      toast('请先在设置中添加并勾选点播源', 'warning');
+      const reason = disabledSources.length > 0
+        ? '已勾选的点播源当前不可用：到设置 → 点播源 → 已停用检查并恢复'
+        : offSubscriptionSources.length > 0
+          ? '点播源所属的订阅已停用：到设置 → 数据源订阅重新启用'
+          : '请先在设置中添加并勾选点播源';
+      toast(reason, 'warning');
       return;
     }
     router.push(`/?s=${encodeURIComponent(query)}`, { scroll: false });
@@ -304,7 +309,7 @@ function HomeContent() {
               <div className="mb-3 text-xs bg-chip rounded-lg px-3 py-2 flex flex-wrap gap-x-3 gap-y-1">
                 <span className="text-faint">{isSearching ? '以下源暂时无响应：' : '部分点播源请求失败：'}</span>
                 {failures.map((f) => (
-                  <span key={f.sourceKey} className={f.timedOut ? 'text-warning' : 'text-faint'}>
+                  <span key={f.sourceKey} title={f.error} className={f.timedOut ? 'text-warning' : 'text-faint'}>
                     {f.timedOut ? '⏱' : '✗'} {sourceName(f.sourceKey)}
                     {f.timedOut ? ' 超时' : ''}
                   </span>
@@ -327,7 +332,9 @@ function HomeContent() {
             )}
 
             {selectedSources.length === 0 ? (
-              <NoSourceGuide hasSources={customAPIs.length > 0 || envSources.length > 0} />
+              disabledSources.length || offSubscriptionSources.length ? null : (
+                <NoSourceGuide hasSources={customAPIs.length > 0 || envSources.length > 0} />
+              )
             ) : list.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
@@ -353,6 +360,10 @@ function HomeContent() {
               </>
             ) : isSearching ? (
               <ResultsSkeleton />
+            ) : searchQuery.isError ? (
+              <EmptyState icon="search" title="搜索请求失败" description={searchQuery.error.message} />
+            ) : failures.length >= selectedSources.length ? (
+              <EmptyState icon="search" title="本次搜索的点播源均请求失败" description="可查看上方各源的错误，或稍后重试。" />
             ) : (
               <EmptyState
                 icon="search"

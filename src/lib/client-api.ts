@@ -1,5 +1,8 @@
 'use client';
 
+import { sortSearchResults } from './cms-parser';
+import { MAX_SEARCH_SOURCES, WORKERS_SEARCH_BATCH_SIZE } from './search-batching';
+
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload, QualityProbeItem, QualityProbeResult } from './types';
 
 /**
@@ -128,17 +131,49 @@ export const api = {
     filterAdult: boolean,
     opts?: { signal?: AbortSignal; onSource?: (outcome: SourceSearchOutcome) => void }
   ): Promise<SearchResponse> => {
-    const signal = opts?.signal;
-    const onSource = opts?.onSource;
-    if (!onSource) {
-      return request<SearchResponse>('/api/search', {
+    const { signal, onSource } = opts ?? {};
+    const selected = sources.slice(0, MAX_SEARCH_SOURCES);
+    const run = (batch: SourceConfig[]) => onSource
+      ? searchStream(wd, batch, filterAdult, onSource, signal)
+      : request<SearchResponse>('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wd, sources, filterAdult }),
+        body: JSON.stringify({ wd, sources: batch, filterAdult }),
         signal,
       });
+
+    try {
+      return await run(selected);
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 413 || selected.length <= WORKERS_SEARCH_BATCH_SIZE) throw err;
     }
-    return searchStream(wd, sources, filterAdult, onSource, signal);
+
+    // 每批有独立的 Workers 子请求配额。限制浏览器在途批次，保留逐源结果。
+    const chunks: SourceConfig[][] = [];
+    for (let i = 0; i < selected.length; i += WORKERS_SEARCH_BATCH_SIZE) {
+      chunks.push(selected.slice(i, i + WORKERS_SEARCH_BATCH_SIZE));
+    }
+    const results: SearchResponse[] = [];
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, chunks.length) }, async () => {
+      while (next < chunks.length) {
+        signal?.throwIfAborted();
+        const i = next++;
+        const chunk = chunks[i];
+        try {
+          results[i] = await run(chunk);
+        } catch (err) {
+          signal?.throwIfAborted();
+          if (err instanceof ApiError && (err.status === 401 || err.status === 503)) throw err;
+          // 批次级网络错误要告诉用户，但不是逐源探测失败，不更新健康度。
+          results[i] = {
+            list: [],
+            failures: chunk.map(({ key }) => ({ sourceKey: key, error: err instanceof Error ? err.message : '搜索批次失败' })),
+          };
+        }
+      }
+    }));
+    return { list: sortSearchResults(results.flatMap((res) => res.list), wd), failures: results.flatMap((res) => res.failures) };
   },
 
   detail: (id: string, source: SourceConfig, signal?: AbortSignal) => {
@@ -337,8 +372,7 @@ async function searchStream(
     throwForAuthStatus(res);
     if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
 
-    // done 事件缺失（流被截断）时退化为空结果，不让整次搜索报错
-    let final: SearchResponse = { list: [], failures: [] };
+    let final: SearchResponse | undefined;
     await consumeNdjson<SearchStreamEvent>(res, (event) => {
       if (event.type === 'source') {
         onSource(event);
@@ -346,6 +380,7 @@ async function searchStream(
         final = { list: event.list, failures: event.failures };
       }
     });
+    if (!final) throw new ApiError('搜索响应未完整返回，请重试', 0);
     return final;
   }
 

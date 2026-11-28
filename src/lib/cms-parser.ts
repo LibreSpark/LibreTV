@@ -283,3 +283,15 @@ export function filterRelevantResults<T extends { name?: string }>(items: T[], w
   if (!query) return items;
   return items.filter((item) => isRelevantPrepared(item.name || '', query));
 }
+
+/** 跨请求批次也使用相同顺序，避免精确匹配排在后面的分页结果之后。 */
+export function sortSearchResults(list: SearchResultItem[], wd: string): SearchResultItem[] {
+  const exact = normalizeTitle(wd);
+  return list.sort((a, b) => {
+    const aExact = normalizeTitle(a.name || '') === exact;
+    const bExact = normalizeTitle(b.name || '') === exact;
+    if (aExact !== bExact) return aExact ? -1 : 1;
+    return (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN')
+      || (a.sourceName || '').localeCompare(b.sourceName || '', 'zh-Hans-CN');
+  });
+}
