@@ -121,6 +121,12 @@ PASSWORD=your-password npm start   # 监听 8080
 | `DEFAULT_RECOMMEND_SOURCE` | 否 | 首页推荐数据源的默认值（`douban` / `bangumi` / `hot-list`，出厂默认 `hot-list`）；仅对未在设置中主动选择过的用户生效，用户的选择始终优先 |
 | `LIVE_ALLOW_PRIVATE` | 否 | 设为 `1` 时允许直播流代理访问内网/保留地址（自建 IPTV 场景），默认关闭以维持 SSRF 防护 |
 
+### Cloudflare Workers 出网配置
+
+在托管的 Cloudflare Workers 上部署时，保留 `nodejs_compat`，启用 `global_fetch_strictly_public`，并在 Worker 的运行时环境变量中设置 `LIBRETV_WORKERS_PUBLIC_EGRESS=1`。共用的服务端上游请求使用 Workers 原生 `fetch`，避免 Node TLS 兼容层的 `ALPNProtocols` 错误。
+
+此变量仅可用于**实际连接阶段限制为公网**的部署。`global_fetch_strictly_public` 限制同域请求走 Cloudflare 公网入口，不能替代自托管的出网策略。不要在默认 Wrangler/Miniflare 或允许私网出网的自托管 workerd 上设置此变量；未配置时上游请求会被拒绝。Workers 不支持用 `LIVE_ALLOW_PRIVATE` 访问内网 IPTV；需要此功能时使用 Node.js/Docker 部署。
+
 ## 使用说明
 
 1. **添加点播源**：设置 → 源管理 → 点播源 → 添加 API，填入 Apple CMS 采集站地址（如 `https://example.com/api.php/provide/vod`），可选填详情页地址（部分源需要爬详情页提取播放地址）。

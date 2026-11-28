@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LookupAddress } from 'node:dns';
 import dns from 'node:dns/promises';
-import { fetchSourceSubscription, fetchUpstream, fetchWorkersCompatibleUpstream } from './fetch-utils';
+import { fetchSourceSubscription, fetchUpstream, fetchUpstreamWithMeta, fetchWithSafeRedirects } from './fetch-utils';
 import * as ssrf from './ssrf';
 
 /**
@@ -23,6 +23,7 @@ function mockFetch(handlers: Array<(url: string) => Response>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -133,125 +134,125 @@ describe('fetchUpstream 安全跳转', () => {
   });
 });
 
-describe('Cloudflare Workers 固定源站请求', () => {
-  const raw = 'https://raw.githubusercontent.com/owner/repo/main/sources.json';
+describe('Cloudflare Workers 统一公网出网', () => {
+  const feed = 'https://feed.example.com/sources.json';
 
-  function useWorker() {
+  function useWorker(publicFlag = true) {
     vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' });
+    vi.stubGlobal('Cloudflare', { compatibilityFlags: { global_fetch_strictly_public: publicFlag } });
+    vi.stubEnv('LIBRETV_WORKERS_PUBLIC_EGRESS', '1');
     const lookup = vi.spyOn(dns as { lookup: (host: string, options: { all: true }) => Promise<LookupAddress[]> }, 'lookup');
-    return lookup.mockResolvedValue([{ address: '185.199.108.133', family: 4 }]);
+    return lookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
   }
 
-  it('使用手动跳转的原生请求拉取 GitHub Raw JSON', async () => {
+  it('在非托管公网配置或未开启兼容标志时拒绝出网，不回退到 undici', async () => {
+    const lookup = useWorker(false);
+    const fetchMock = mockFetch([]);
+    const protection = vi.spyOn(ssrf, 'runWithSSRFProtection');
+    await expect(fetchUpstream(feed)).rejects.toThrow('出网未配置');
     useWorker();
-    const fetchMock = mockFetch([() => new Response('{"sources":[]}')]);
-    const res = await fetchSourceSubscription(raw);
-    expect(await res.json()).toEqual({ sources: [] });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(raw, expect.objectContaining({
-      headers: { Accept: 'application/json' },
-      redirect: 'manual',
-      signal: expect.any(AbortSignal),
-    }));
-  });
-
-  it('只跟随相对或同源跳转，并共享同一个超时信号', async () => {
-    useWorker();
-    const fetchMock = mockFetch([
-      () => new Response(null, { status: 302, headers: { location: './current.json' } }),
-      () => new Response('{"sources":[]}'),
-    ]);
-    await expect(fetchSourceSubscription(raw)).resolves.toMatchObject({ status: 200 });
-    const [[, first], [next, second]] = fetchMock.mock.calls as [string, RequestInit][];
-    expect(next).toBe('https://raw.githubusercontent.com/owner/repo/main/current.json');
-    expect(second.signal).toBe(first.signal);
-  });
-
-  it.each([
-    'http://raw.githubusercontent.com/owner/repo/main/sources.json',
-    'https://raw.githubusercontent.com:8443/owner/repo/main/sources.json',
-    'https://raw.githubusercontent.com.example.com/sources.json',
-    'https://user@raw.githubusercontent.com/owner/repo/main/sources.json',
-  ])('拦截跨源、降级或带凭据的跳转 (%s)', async (target) => {
-    useWorker();
-    const fetchMock = mockFetch([
-      () => new Response(null, { status: 302, headers: { location: target } }),
-    ]);
-    await expect(fetchSourceSubscription(raw)).rejects.toThrow('只能跳转到原 HTTPS 源站');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('保留公网校验及重定向次数限制', async () => {
-    useWorker().mockResolvedValueOnce([{ address: '192.168.1.2', family: 4 }]);
-    const fetchMock = mockFetch(Array.from({ length: 6 }, () => () =>
-      new Response(null, { status: 302, headers: { location: './sources.json' } })
-    ));
-    await expect(fetchSourceSubscription(raw)).rejects.toThrow('目标地址解析到私有/保留网络');
+    vi.stubEnv('LIBRETV_WORKERS_PUBLIC_EGRESS', undefined);
+    await expect(fetchUpstream(feed)).rejects.toThrow('出网未配置');
+    expect(lookup).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-    await expect(fetchSourceSubscription(raw)).rejects.toThrow('重定向次数过多');
-    expect(fetchMock).toHaveBeenCalledTimes(6);
-  });
-
-  it.each([
-    ['Node.js', raw],
-    ['Cloudflare-Workers', 'https://feed.example.com/sources.json'],
-  ])('%s 的非适用请求仍走原来的连接层防护', async (userAgent, url) => {
-    useWorker();
-    vi.stubGlobal('navigator', { userAgent });
-    const protection = vi.spyOn(ssrf, 'runWithSSRFProtection');
-    const error = Object.assign(new TypeError('fetch failed'), {
-      cause: { code: 'ERR_SSRF_BLOCKED', message: '原连接层拒绝' },
-    });
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(error));
-    await expect(fetchSourceSubscription(url)).rejects.toThrow('连接目标被拒绝: 原连接层拒绝');
-    expect(protection).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    ['doubanRecommend', 'https://movie.douban.com/j/search_subjects?type=movie'],
-    ['livePlaylist', 'https://iptv-org.github.io/iptv/countries/cn.m3u'],
-    ['livePlaylist', 'https://raw.githubusercontent.com/YueChan/Live/main/GNTV.m3u'],
-  ] as const)('%s 的 %s 使用 Workers 原生 fetch', async (upstream, url) => {
-    useWorker();
-    const protection = vi.spyOn(ssrf, 'runWithSSRFProtection');
-    const fetchMock = mockFetch([() => new Response('ok')]);
-    const headers = { Accept: 'application/json' };
-    await expect(fetchWorkersCompatibleUpstream(upstream, url, { headers })).resolves.toMatchObject({ status: 200 });
-    expect(fetchMock).toHaveBeenCalledWith(url, expect.objectContaining({ headers, redirect: 'manual' }));
     expect(protection).not.toHaveBeenCalled();
   });
 
-  it('不允许跳转到同一入口白名单内的另一个 HTTPS 源站', async () => {
+  it('任意公网源都使用原生 fetch，而不进入 undici 作用域', async () => {
     useWorker();
+    const protection = vi.spyOn(ssrf, 'runWithSSRFProtection');
+    const fetchMock = mockFetch([() => new Response('{"sources":[]}')]);
+    const res = await fetchSourceSubscription(feed);
+    expect(await res.json()).toEqual({ sources: [] });
+    expect(fetchMock).toHaveBeenCalledWith(feed, expect.objectContaining({ redirect: 'manual' }));
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get('accept')).toBe('application/json');
+    expect(protection).not.toHaveBeenCalled();
+  });
+
+  it('相对与跨源跳转均复查 DNS、不转发跨源凭据，并保留最终 URL 和流', async () => {
+    const lookup = useWorker();
+    const cancel = vi.fn();
+    const redirect = new Response(new ReadableStream({ cancel }), { status: 302, headers: { location: './current' } });
+    const final = new Response('stream');
     const fetchMock = mockFetch([
-      () => new Response(null, { status: 302, headers: { location: raw } }),
+      () => redirect,
+      () => new Response(null, { status: 307, headers: { location: 'https://cdn.example.com/path/file' } }),
+      () => final,
     ]);
-    await expect(fetchWorkersCompatibleUpstream('livePlaylist', 'https://iptv-org.github.io/list.m3u', { retries: 1 }))
-      .rejects.toThrow('只能跳转到原 HTTPS 源站');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const result = await fetchUpstreamWithMeta(feed, { headers: { Authorization: 'test', Cookie: 'private', Host: 'not-the-url.example', Range: 'bytes=0-' } });
+    const [[, first], [relative, second], [cross, third]] = fetchMock.mock.calls as [string, RequestInit][];
+    expect(relative).toBe('https://feed.example.com/current');
+    expect(cross).toBe('https://cdn.example.com/path/file');
+    expect(lookup.mock.calls.map(([host]) => host)).toEqual(['feed.example.com', 'feed.example.com', 'cdn.example.com']);
+    expect(third.signal).toBe(first.signal);
+    expect(second.headers).toBe(first.headers);
+    expect(new Headers(first.headers).has('host')).toBe(false);
+    expect(new Headers(second.headers).has('authorization')).toBe(true);
+    expect(new Headers(third.headers).has('authorization')).toBe(false);
+    expect(new Headers(third.headers).has('cookie')).toBe(false);
+    expect(new Headers(third.headers).get('range')).toBe('bytes=0-');
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(result.finalUrl).toBe(cross);
+    expect(result.res).toBe(final);
+    expect(result.res.bodyUsed).toBe(false);
+    expect(await result.res.text()).toBe('stream');
   });
 
-  it('即使开启私网直播，固定源站仍拒绝私网解析', async () => {
+  it.each(['http://127.0.0.1/secret', 'https://user@feed.example.com/secret', 'ftp://feed.example.com/file'])
+    ('即使请求自动跟随或允许内网直播也拒绝不安全重定向 (%s)', async (target) => {
+      useWorker();
+      vi.stubEnv('LIVE_ALLOW_PRIVATE', '1');
+      const fetchMock = mockFetch([() => new Response(null, { status: 302, headers: { location: target } })]);
+      await expect(fetchUpstream(feed, { allowPrivate: true, safeRedirects: false, redirect: 'follow' })).rejects.toThrow('跳转目标被拒绝');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(feed, expect.objectContaining({ redirect: 'manual' }));
+    });
+
+  it('目标域名解析到私网时拒绝，不发出请求', async () => {
     useWorker().mockResolvedValueOnce([{ address: '192.168.1.2', family: 4 }]);
-    vi.stubEnv('LIVE_ALLOW_PRIVATE', '1');
     const fetchMock = mockFetch([]);
-    try {
-      await expect(fetchWorkersCompatibleUpstream('livePlaylist', raw, { allowPrivate: true }))
-        .rejects.toThrow('目标地址解析到私有/保留网络');
-      expect(fetchMock).not.toHaveBeenCalled();
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    await expect(fetchUpstream(feed)).rejects.toThrow('目标地址解析到私有/保留网络');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('网络失败时最多按配置重试，并保留同一超时信号', async () => {
+  it('外部中断在 DNS 查询期间生效', async () => {
+    const controller = new AbortController();
+    const abort = new DOMException('cancelled', 'AbortError');
+    useWorker().mockImplementationOnce(async () => {
+      controller.abort(abort);
+      return [{ address: '93.184.216.34', family: 4 }];
+    });
+    const fetchMock = mockFetch([]);
+    await expect(fetchUpstream(feed, { signal: controller.signal })).rejects.toBe(abort);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('超时或中断会传给原生传输，不进入自动重试的下一跳', async () => {
     useWorker();
-    const fetchMock = vi.fn()
-      .mockRejectedValueOnce(new TypeError('temporary failure'))
-      .mockResolvedValueOnce(new Response('ok'));
+    const ctrl = new AbortController();
+    const reason = new DOMException('deadline', 'TimeoutError');
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_, reject) => {
+      init.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      ctrl.abort(reason);
+    }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(fetchWorkersCompatibleUpstream('livePlaylist', raw, { retries: 1 })).resolves.toMatchObject({ status: 200 });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0][1].signal).toBe(fetchMock.mock.calls[1][1].signal);
+    await expect(fetchUpstream(feed, { signal: ctrl.signal, retries: 2 })).rejects.toBe(reason);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('仅等待响应头的超时不会切断最终的流', async () => {
+    useWorker();
+    vi.useFakeTimers();
+    try {
+      const fetchMock = mockFetch([() => new Response('live body')]);
+      const { res } = await fetchWithSafeRedirects(feed, {}, { headerTimeoutMs: 10 });
+      vi.advanceTimersByTime(20);
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(init.signal?.aborted).toBe(false);
+      expect(await res.text()).toBe('live body');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

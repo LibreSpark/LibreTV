@@ -1,13 +1,13 @@
 /** 服务端上游请求工具：超时、重试、安全跳转、JSON 解析 */
 
-import { allowLivePrivate, checkLiveUrlAllowed, checkUpstreamAllowed, runWithSSRFProtection } from './ssrf';
+import { allowLivePrivate, checkLiveUrlAllowed, checkUpstreamAllowed, isCloudflareWorkers, runWithSSRFProtection } from './ssrf';
 
 export interface FetchOptions extends RequestInit {
   timeoutMs?: number;
   retries?: number;
   /**
    * 安全跳转（默认开启）：禁用 fetch 的自动跟随，改为手动逐跳跟随，
-   * 每一跳重新执行 SSRF 校验——否则公网 URL 可 302 跳转到内网地址绕过预检。
+   * 每一跳重新执行 SSRF 校验。Workers 始终逐跳校验，忽略 false。
    */
   safeRedirects?: boolean;
   /**
@@ -92,6 +92,21 @@ function normalizeSSRFError(err: unknown): never {
 }
 
 /**
+ * Workers 的 node:tls 不接受 undici 传入的 ALPNProtocols。改用平台 fetch，
+ * 但 DNS 预检不能钉住连接地址，必须由部署的实际出网层在连接时拒绝私网。
+ * 自托管 workerd/Wrangler 的网络配置可能与托管 Workers 不同，不可自动信任。
+ */
+function requirePublicWorkersEgress(): void {
+  const runtime = globalThis as typeof globalThis & {
+    Cloudflare?: { compatibilityFlags?: Record<string, boolean> };
+  };
+  if (process.env.LIBRETV_WORKERS_PUBLIC_EGRESS !== '1'
+    || runtime.Cloudflare?.compatibilityFlags?.global_fetch_strictly_public !== true) {
+    throw new Error('Cloudflare Workers 出网未配置：请在仅允许公网出网的部署上启用 global_fetch_strictly_public 并设置 LIBRETV_WORKERS_PUBLIC_EGRESS=1');
+  }
+}
+
+/**
  * 手动逐跳跟随重定向，每一跳重新执行 SSRF 校验。
  * 不能用 redirect:'follow'——预检之后 fetch 自动跟随的 3xx 可把请求
  * 带进内网/元数据地址，绕过对首跳的校验。
@@ -110,8 +125,20 @@ export async function fetchWithSafeRedirects(
   // 取交集而非直接用开关：点播路径（allowPrivate=false）不受该开关影响，仍与
   // 修复前一样严格，开关只作用于本来就声明走直播口径的调用方。
   const connectAllowPrivate = allowPrivate && allowLivePrivate();
-  return runWithSSRFProtection({ allowPrivate: connectAllowPrivate }, async () => {
-    let current = url;
+  const workers = isCloudflareWorkers();
+  if (workers) requirePublicWorkersEgress();
+
+  const followRedirects = async () => {
+    let current = new URL(url);
+    let { headers, method, body } = init;
+    const requestInit = { ...init };
+    if (workers) {
+      // 不允许调用方的 Host 或 Workers 专属 cf 选项改变经过校验的实际目标。
+      const safeHeaders = new Headers(headers);
+      safeHeaders.delete('host');
+      headers = safeHeaders;
+      if ('cf' in requestInit) delete requestInit.cf;
+    }
     // headerTimeout 超时即 abort 内部 controller；外部 signal（调用方死线/客户端断开）链入同一 controller
     const controller = new AbortController();
     if (init.signal) {
@@ -119,109 +146,62 @@ export async function fetchWithSafeRedirects(
       else init.signal.addEventListener('abort', () => controller.abort(init.signal?.reason), { once: true });
     }
     for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+      controller.signal.throwIfAborted();
+      if (current.username || current.password) throw new Error('跳转目标被拒绝: URL 不允许包含凭据');
       const verdict = allowPrivate
-        ? await checkLiveUrlAllowed(current)
-        : await checkUpstreamAllowed(current);
+        ? await checkLiveUrlAllowed(current.href)
+        : await checkUpstreamAllowed(current.href);
+      controller.signal.throwIfAborted();
       if (!verdict.ok) {
         throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
       }
       const timer = headerTimeoutMs ? setTimeout(() => controller.abort(), headerTimeoutMs) : null;
       let res: Response;
       try {
-        res = await fetch(current, { ...init, signal: controller.signal, redirect: 'manual' });
+        res = await fetch(current.href, { ...requestInit, headers, method, body, signal: controller.signal, redirect: 'manual' });
       } catch (err: unknown) {
         normalizeSSRFError(err);
       } finally {
         if (timer) clearTimeout(timer);
       }
-      if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
-      const location = res.headers.get('location');
-      if (!location) return { res, finalUrl: current };
-      current = new URL(location, current).href;
+      const location = REDIRECT_STATUSES.has(res.status) && res.headers.get('location');
+      if (!location) return { res, finalUrl: current.href };
+      // 只释放被丢弃的跳转响应；最终响应仍原样流式返回。
+      void res.body?.cancel().catch(() => {});
+      const next = new URL(location, current);
+      if (next.origin !== current.origin) {
+        const safeHeaders = new Headers(headers);
+        for (const name of ['authorization', 'proxy-authorization', 'cookie', 'cookie2', 'host']) {
+          safeHeaders.delete(name);
+        }
+        headers = safeHeaders;
+      }
+      const verb = (method ?? 'GET').toUpperCase();
+      if (((res.status === 301 || res.status === 302) && verb === 'POST')
+        || (res.status === 303 && verb !== 'GET' && verb !== 'HEAD')) {
+        method = 'GET';
+        body = undefined;
+        const safeHeaders = new Headers(headers);
+        for (const name of ['content-type', 'content-length', 'content-encoding', 'content-language', 'content-location']) {
+          safeHeaders.delete(name);
+        }
+        headers = safeHeaders;
+      }
+      current = next;
     }
     throw new Error('重定向次数过多');
-  });
+  };
+
+  return workers ? followRedirects()
+    : runWithSSRFProtection({ allowPrivate: connectAllowPrivate }, followRedirects);
 }
 
 export async function fetchUpstream(url: string, options: FetchOptions = {}): Promise<Response> {
   return (await fetchUpstreamWithMeta(url, options)).res;
 }
 
-const WORKER_UPSTREAM_ORIGINS = {
-  sourceSubscription: ['https://raw.githubusercontent.com'],
-  livePlaylist: ['https://raw.githubusercontent.com', 'https://iptv-org.github.io'],
-  doubanRecommend: ['https://movie.douban.com'],
-} satisfies Record<string, readonly string[]>;
-
-type WorkerUpstream = keyof typeof WORKER_UPSTREAM_ORIGINS;
-type WorkerUpstreamOptions = Pick<FetchOptions, 'timeoutMs' | 'retries' | 'headers' | 'signal' | 'allowPrivate'>;
-
-function matchesOrigin(url: URL, origin: string): boolean {
-  return url.origin === origin && !url.username && !url.password;
-}
-
-/**
- * Workers 的 node:tls 不支持 undici 连接器使用的 ALPNProtocols。仅对对应入口的固定 HTTPS
- * 源站使用平台 fetch，逐跳校验并禁止跨源。其他地址、Node.js/Docker 和其他接口仍走原连接层防护。
- * 此路径始终按公网口径预检，不继承 LIVE_ALLOW_PRIVATE。
- */
-export async function fetchWorkersCompatibleUpstream(
-  upstream: WorkerUpstream,
-  url: string,
-  options: WorkerUpstreamOptions = {}
-): Promise<Response> {
-  if (globalThis.navigator?.userAgent !== 'Cloudflare-Workers') return fetchUpstream(url, options);
-  let original: URL;
-  try {
-    original = new URL(url);
-  } catch {
-    return fetchUpstream(url, options);
-  }
-  const origin = original.origin;
-  if (!WORKER_UPSTREAM_ORIGINS[upstream].includes(origin) || !matchesOrigin(original, origin)) {
-    return fetchUpstream(url, options);
-  }
-
-  const { timeoutMs = 8000, retries = 0, headers } = options;
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
-
-  async function fetchHop(current: URL): Promise<Response> {
-    try {
-      return await fetch(current.href, { headers, signal, redirect: 'manual' });
-    } catch (err) {
-      normalizeSSRFError(err);
-    }
-  }
-
-  for (let attempt = 0; ; attempt++) {
-    let current = original;
-    for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
-      signal.throwIfAborted();
-      if (!matchesOrigin(current, origin)) {
-        throw new Error('跳转目标被拒绝: 只能跳转到原 HTTPS 源站');
-      }
-      const verdict = await checkUpstreamAllowed(current.href);
-      if (!verdict.ok) throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
-
-      let res: Response;
-      try {
-        res = await fetchHop(current);
-      } catch (err) {
-        if (attempt >= retries || signal.aborted) throw err;
-        break; // 仅网络异常重试；不重试被安全策略拒绝的 URL。
-      }
-      const location = res.headers.get('location');
-      if (!REDIRECT_STATUSES.has(res.status) || !location) return res;
-      void res.body?.cancel().catch(() => {});
-      if (hop === MAX_REDIRECT_HOPS) throw new Error('重定向次数过多');
-      current = new URL(location, current);
-    }
-  }
-}
-
 export async function fetchSourceSubscription(url: string): Promise<Response> {
-  return fetchWorkersCompatibleUpstream('sourceSubscription', url, { headers: { Accept: 'application/json' } });
+  return fetchUpstream(url, { headers: { Accept: 'application/json' } });
 }
 
 /** 同 fetchUpstream，额外返回重定向后的最终 URL */
@@ -237,7 +217,7 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      if (!safeRedirects) {
+      if (!safeRedirects && !isCloudflareWorkers()) {
         try {
           const res = await runWithSSRFProtection({ allowPrivate: connectAllowPrivate }, () =>
             fetch(url, {
