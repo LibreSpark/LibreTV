@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
 import { checkLiveUrlAllowed, checkUpstreamAllowed, isValidProxyUrl } from '@/lib/ssrf';
-import { fetchUpstream } from '@/lib/fetch-utils';
+import { fetchSourceSubscription } from '@/lib/fetch-utils';
 import { describeParseStats, parseSubscriptionJson, parseSubscriptionPayload, withSkipped } from '@/lib/tvbox-parser';
 import type { SourceListPayload } from '@/lib/types';
 
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const res = await fetchUpstream(target, { timeoutMs: 8000, headers: { Accept: 'application/json' } });
+    const res = await fetchSourceSubscription(target);
     if (!res.ok) {
       return NextResponse.json({ error: `订阅地址返回 HTTP ${res.status}` }, { status: 502 });
     }

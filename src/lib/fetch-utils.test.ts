@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchUpstream } from './fetch-utils';
+import type { LookupAddress } from 'node:dns';
+import dns from 'node:dns/promises';
+import { fetchSourceSubscription, fetchUpstream } from './fetch-utils';
 
 /**
  * 安全跳转测试：mock 全局 fetch，验证 302 跳转到内网地址会被拒绝，
@@ -20,6 +22,7 @@ function mockFetch(handlers: Array<(url: string) => Response>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** 取拒绝原因：直接用 .catch 会和成功值 Response 联成一个联合类型，断言 name/code 时反而报错 */
@@ -126,5 +129,78 @@ describe('fetchUpstream 安全跳转', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(err)));
     const thrown = await rejection(fetchUpstream(PUBLIC_URL));
     expect(thrown).toBe(err);
+  });
+});
+
+describe('Cloudflare Workers GitHub Raw 订阅', () => {
+  const raw = 'https://raw.githubusercontent.com/owner/repo/main/sources.json';
+
+  function useWorker() {
+    vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' });
+    const lookup = vi.spyOn(dns as { lookup: (host: string, options: { all: true }) => Promise<LookupAddress[]> }, 'lookup');
+    return lookup.mockResolvedValue([{ address: '185.199.108.133', family: 4 }]);
+  }
+
+  it('使用手动跳转的原生请求拉取 GitHub Raw JSON', async () => {
+    useWorker();
+    const fetchMock = mockFetch([() => new Response('{"sources":[]}')]);
+    const res = await fetchSourceSubscription(raw);
+    expect(await res.json()).toEqual({ sources: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(raw, expect.objectContaining({
+      headers: { Accept: 'application/json' },
+      redirect: 'manual',
+      signal: expect.any(AbortSignal),
+    }));
+  });
+
+  it('只跟随相对或同源跳转，并共享同一个超时信号', async () => {
+    useWorker();
+    const fetchMock = mockFetch([
+      () => new Response(null, { status: 302, headers: { location: './current.json' } }),
+      () => new Response('{"sources":[]}'),
+    ]);
+    await expect(fetchSourceSubscription(raw)).resolves.toMatchObject({ status: 200 });
+    const [[, first], [next, second]] = fetchMock.mock.calls as [string, RequestInit][];
+    expect(next).toBe('https://raw.githubusercontent.com/owner/repo/main/current.json');
+    expect(second.signal).toBe(first.signal);
+  });
+
+  it.each([
+    'http://raw.githubusercontent.com/owner/repo/main/sources.json',
+    'https://raw.githubusercontent.com:8443/owner/repo/main/sources.json',
+    'https://raw.githubusercontent.com.example.com/sources.json',
+    'https://user@raw.githubusercontent.com/owner/repo/main/sources.json',
+  ])('拦截跨源、降级或带凭据的跳转 (%s)', async (target) => {
+    useWorker();
+    const fetchMock = mockFetch([
+      () => new Response(null, { status: 302, headers: { location: target } }),
+    ]);
+    await expect(fetchSourceSubscription(raw)).rejects.toThrow('只能跳转到原 HTTPS 源站');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('保留公网校验及重定向次数限制', async () => {
+    useWorker().mockResolvedValueOnce([{ address: '192.168.1.2', family: 4 }]);
+    const fetchMock = mockFetch(Array.from({ length: 6 }, () => () =>
+      new Response(null, { status: 302, headers: { location: './sources.json' } })
+    ));
+    await expect(fetchSourceSubscription(raw)).rejects.toThrow('目标地址解析到私有/保留网络');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(fetchSourceSubscription(raw)).rejects.toThrow('重定向次数过多');
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([
+    ['Node.js', raw],
+    ['Cloudflare-Workers', 'https://feed.example.com/sources.json'],
+  ])('%s 的非适用请求仍走原来的连接层防护', async (userAgent, url) => {
+    useWorker();
+    vi.stubGlobal('navigator', { userAgent });
+    const error = Object.assign(new TypeError('fetch failed'), {
+      cause: { code: 'ERR_SSRF_BLOCKED', message: '原连接层拒绝' },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(error));
+    await expect(fetchSourceSubscription(url)).rejects.toThrow('连接目标被拒绝: 原连接层拒绝');
   });
 });

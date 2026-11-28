@@ -18,7 +18,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/fetch-utils', () => ({
-  fetchUpstream: vi.fn(
+  fetchSourceSubscription: vi.fn(
     async () =>
       new Response(state.rawText ?? JSON.stringify(state.body), {
         status: 200,

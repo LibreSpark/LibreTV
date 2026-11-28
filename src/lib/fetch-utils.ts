@@ -147,6 +147,41 @@ export async function fetchUpstream(url: string, options: FetchOptions = {}): Pr
   return (await fetchUpstreamWithMeta(url, options)).res;
 }
 
+const GITHUB_RAW_ORIGIN = 'https://raw.githubusercontent.com';
+
+function isGitHubRawUrl(url: URL): boolean {
+  return url.origin === GITHUB_RAW_ORIGIN && !url.username && !url.password;
+}
+
+/**
+ * Workers 的 node:tls 不支持 undici 连接器使用的 ALPNProtocols。只为 GitHub Raw 订阅
+ * 使用 Workers 原生 fetch；逐跳限制到固定的 HTTPS 源站，不为任意用户域名绕开 DNS 绑定。
+ * Node.js/Docker、其他订阅源及其他接口仍使用原来的连接层 SSRF 防护。
+ */
+export async function fetchSourceSubscription(url: string): Promise<Response> {
+  const headers = { Accept: 'application/json' };
+  if (globalThis.navigator?.userAgent !== 'Cloudflare-Workers' || !isGitHubRawUrl(new URL(url))) {
+    return fetchUpstream(url, { timeoutMs: 8000, headers });
+  }
+
+  const signal = AbortSignal.timeout(8000);
+  let current = new URL(url);
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+    if (!isGitHubRawUrl(current)) {
+      throw new Error('跳转目标被拒绝: GitHub Raw 订阅只能跳转到原 HTTPS 源站');
+    }
+    const verdict = await checkUpstreamAllowed(current.href);
+    if (!verdict.ok) throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
+
+    const res = await fetch(current.href, { headers, signal, redirect: 'manual' });
+    const location = res.headers.get('location');
+    if (!REDIRECT_STATUSES.has(res.status) || !location) return res;
+    void res.body?.cancel().catch(() => {});
+    current = new URL(location, current);
+  }
+  throw new Error('重定向次数过多');
+}
+
 /** 同 fetchUpstream，额外返回重定向后的最终 URL */
 export async function fetchUpstreamWithMeta(url: string, options: FetchOptions = {}): Promise<FetchResult> {
   const { timeoutMs = 8000, retries = 0, safeRedirects = true, allowPrivate = false, ...init } = options;
