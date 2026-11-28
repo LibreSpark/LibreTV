@@ -1,5 +1,5 @@
 import type { DoubanItem } from './types';
-import { fetchUpstream, getCache, setCache } from './fetch-utils';
+import { fetchUpstream, fetchWorkersCompatibleUpstream, getCache, setCache } from './fetch-utils';
 
 /**
  * 豆瓣推荐数据获取（服务端直连，带内存缓存与降级链）。
@@ -42,7 +42,7 @@ export async function fetchDoubanRecommend(
 
   // 1) 服务端直连
   try {
-    const res = await fetchUpstream(target, {
+    const res = await fetchWorkersCompatibleUpstream('doubanRecommend', target, {
       timeoutMs: 8000,
       headers: { 'User-Agent': UA, Referer: 'https://movie.douban.com/', Accept: 'application/json' },
     });

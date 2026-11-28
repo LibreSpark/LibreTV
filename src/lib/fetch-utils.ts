@@ -147,39 +147,81 @@ export async function fetchUpstream(url: string, options: FetchOptions = {}): Pr
   return (await fetchUpstreamWithMeta(url, options)).res;
 }
 
-const GITHUB_RAW_ORIGIN = 'https://raw.githubusercontent.com';
+const WORKER_UPSTREAM_ORIGINS = {
+  sourceSubscription: ['https://raw.githubusercontent.com'],
+  livePlaylist: ['https://raw.githubusercontent.com', 'https://iptv-org.github.io'],
+  doubanRecommend: ['https://movie.douban.com'],
+} satisfies Record<string, readonly string[]>;
 
-function isGitHubRawUrl(url: URL): boolean {
-  return url.origin === GITHUB_RAW_ORIGIN && !url.username && !url.password;
+type WorkerUpstream = keyof typeof WORKER_UPSTREAM_ORIGINS;
+type WorkerUpstreamOptions = Pick<FetchOptions, 'timeoutMs' | 'retries' | 'headers' | 'signal' | 'allowPrivate'>;
+
+function matchesOrigin(url: URL, origin: string): boolean {
+  return url.origin === origin && !url.username && !url.password;
 }
 
 /**
- * Workers 的 node:tls 不支持 undici 连接器使用的 ALPNProtocols。只为 GitHub Raw 订阅
- * 使用 Workers 原生 fetch；逐跳限制到固定的 HTTPS 源站，不为任意用户域名绕开 DNS 绑定。
- * Node.js/Docker、其他订阅源及其他接口仍使用原来的连接层 SSRF 防护。
+ * Workers 的 node:tls 不支持 undici 连接器使用的 ALPNProtocols。仅对对应入口的固定 HTTPS
+ * 源站使用平台 fetch，逐跳校验并禁止跨源。其他地址、Node.js/Docker 和其他接口仍走原连接层防护。
+ * 此路径始终按公网口径预检，不继承 LIVE_ALLOW_PRIVATE。
  */
-export async function fetchSourceSubscription(url: string): Promise<Response> {
-  const headers = { Accept: 'application/json' };
-  if (globalThis.navigator?.userAgent !== 'Cloudflare-Workers' || !isGitHubRawUrl(new URL(url))) {
-    return fetchUpstream(url, { timeoutMs: 8000, headers });
+export async function fetchWorkersCompatibleUpstream(
+  upstream: WorkerUpstream,
+  url: string,
+  options: WorkerUpstreamOptions = {}
+): Promise<Response> {
+  if (globalThis.navigator?.userAgent !== 'Cloudflare-Workers') return fetchUpstream(url, options);
+  let original: URL;
+  try {
+    original = new URL(url);
+  } catch {
+    return fetchUpstream(url, options);
+  }
+  const origin = original.origin;
+  if (!WORKER_UPSTREAM_ORIGINS[upstream].includes(origin) || !matchesOrigin(original, origin)) {
+    return fetchUpstream(url, options);
   }
 
-  const signal = AbortSignal.timeout(8000);
-  let current = new URL(url);
-  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
-    if (!isGitHubRawUrl(current)) {
-      throw new Error('跳转目标被拒绝: GitHub Raw 订阅只能跳转到原 HTTPS 源站');
+  const { timeoutMs = 8000, retries = 0, headers } = options;
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+
+  async function fetchHop(current: URL): Promise<Response> {
+    try {
+      return await fetch(current.href, { headers, signal, redirect: 'manual' });
+    } catch (err) {
+      normalizeSSRFError(err);
     }
-    const verdict = await checkUpstreamAllowed(current.href);
-    if (!verdict.ok) throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
-
-    const res = await fetch(current.href, { headers, signal, redirect: 'manual' });
-    const location = res.headers.get('location');
-    if (!REDIRECT_STATUSES.has(res.status) || !location) return res;
-    void res.body?.cancel().catch(() => {});
-    current = new URL(location, current);
   }
-  throw new Error('重定向次数过多');
+
+  for (let attempt = 0; ; attempt++) {
+    let current = original;
+    for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+      signal.throwIfAborted();
+      if (!matchesOrigin(current, origin)) {
+        throw new Error('跳转目标被拒绝: 只能跳转到原 HTTPS 源站');
+      }
+      const verdict = await checkUpstreamAllowed(current.href);
+      if (!verdict.ok) throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
+
+      let res: Response;
+      try {
+        res = await fetchHop(current);
+      } catch (err) {
+        if (attempt >= retries || signal.aborted) throw err;
+        break; // 仅网络异常重试；不重试被安全策略拒绝的 URL。
+      }
+      const location = res.headers.get('location');
+      if (!REDIRECT_STATUSES.has(res.status) || !location) return res;
+      void res.body?.cancel().catch(() => {});
+      if (hop === MAX_REDIRECT_HOPS) throw new Error('重定向次数过多');
+      current = new URL(location, current);
+    }
+  }
+}
+
+export async function fetchSourceSubscription(url: string): Promise<Response> {
+  return fetchWorkersCompatibleUpstream('sourceSubscription', url, { headers: { Accept: 'application/json' } });
 }
 
 /** 同 fetchUpstream，额外返回重定向后的最终 URL */

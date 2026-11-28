@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LookupAddress } from 'node:dns';
 import dns from 'node:dns/promises';
-import { fetchSourceSubscription, fetchUpstream } from './fetch-utils';
+import { fetchSourceSubscription, fetchUpstream, fetchWorkersCompatibleUpstream } from './fetch-utils';
+import * as ssrf from './ssrf';
 
 /**
  * 安全跳转测试：mock 全局 fetch，验证 302 跳转到内网地址会被拒绝，
@@ -132,7 +133,7 @@ describe('fetchUpstream 安全跳转', () => {
   });
 });
 
-describe('Cloudflare Workers GitHub Raw 订阅', () => {
+describe('Cloudflare Workers 固定源站请求', () => {
   const raw = 'https://raw.githubusercontent.com/owner/repo/main/sources.json';
 
   function useWorker() {
@@ -197,10 +198,60 @@ describe('Cloudflare Workers GitHub Raw 订阅', () => {
   ])('%s 的非适用请求仍走原来的连接层防护', async (userAgent, url) => {
     useWorker();
     vi.stubGlobal('navigator', { userAgent });
+    const protection = vi.spyOn(ssrf, 'runWithSSRFProtection');
     const error = Object.assign(new TypeError('fetch failed'), {
       cause: { code: 'ERR_SSRF_BLOCKED', message: '原连接层拒绝' },
     });
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(error));
     await expect(fetchSourceSubscription(url)).rejects.toThrow('连接目标被拒绝: 原连接层拒绝');
+    expect(protection).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['doubanRecommend', 'https://movie.douban.com/j/search_subjects?type=movie'],
+    ['livePlaylist', 'https://iptv-org.github.io/iptv/countries/cn.m3u'],
+    ['livePlaylist', 'https://raw.githubusercontent.com/YueChan/Live/main/GNTV.m3u'],
+  ] as const)('%s 的 %s 使用 Workers 原生 fetch', async (upstream, url) => {
+    useWorker();
+    const protection = vi.spyOn(ssrf, 'runWithSSRFProtection');
+    const fetchMock = mockFetch([() => new Response('ok')]);
+    const headers = { Accept: 'application/json' };
+    await expect(fetchWorkersCompatibleUpstream(upstream, url, { headers })).resolves.toMatchObject({ status: 200 });
+    expect(fetchMock).toHaveBeenCalledWith(url, expect.objectContaining({ headers, redirect: 'manual' }));
+    expect(protection).not.toHaveBeenCalled();
+  });
+
+  it('不允许跳转到同一入口白名单内的另一个 HTTPS 源站', async () => {
+    useWorker();
+    const fetchMock = mockFetch([
+      () => new Response(null, { status: 302, headers: { location: raw } }),
+    ]);
+    await expect(fetchWorkersCompatibleUpstream('livePlaylist', 'https://iptv-org.github.io/list.m3u', { retries: 1 }))
+      .rejects.toThrow('只能跳转到原 HTTPS 源站');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('即使开启私网直播，固定源站仍拒绝私网解析', async () => {
+    useWorker().mockResolvedValueOnce([{ address: '192.168.1.2', family: 4 }]);
+    vi.stubEnv('LIVE_ALLOW_PRIVATE', '1');
+    const fetchMock = mockFetch([]);
+    try {
+      await expect(fetchWorkersCompatibleUpstream('livePlaylist', raw, { allowPrivate: true }))
+        .rejects.toThrow('目标地址解析到私有/保留网络');
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('网络失败时最多按配置重试，并保留同一超时信号', async () => {
+    useWorker();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('temporary failure'))
+      .mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(fetchWorkersCompatibleUpstream('livePlaylist', raw, { retries: 1 })).resolves.toMatchObject({ status: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][1].signal).toBe(fetchMock.mock.calls[1][1].signal);
   });
 });
