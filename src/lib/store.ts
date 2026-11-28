@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { QualityEntry, SourceConfig, LiveSourceConfig, SourceSearchOutcome } from './types';
+import { isSearchInfrastructureError } from './search-batching';
 import { normalizeDoubanCategories, type DoubanCategory } from './douban-categories';
 import { migrateSkipMarks, type SkipMark, type SkipSegment } from './skip-marks';
 import { isQualityEntryFresh, mergeQualityEntries, qualityKey } from './quality';
@@ -728,7 +729,8 @@ export const useAppStore = create<AppState>()(
       },
 
       recordSourceHealth: (outcomes) => {
-        if (outcomes.length === 0) return [];
+        const observed = outcomes.filter((o) => o.ok || !isSearchInfrastructureError(o.error));
+        if (observed.length === 0) return [];
         const now = Date.now();
         const health: Record<string, SourceHealthEntry> = {};
         // 顺带清理陈旧条目：超过 7 天没再参与过搜索的源，其惩罚等级一并作废
@@ -736,7 +738,7 @@ export const useAppStore = create<AppState>()(
           if (now - e.timestamp < 7 * 24 * 60 * 60 * 1000) health[key] = e;
         }
         const events: SourceDisableEvent[] = [];
-        for (const o of outcomes) {
+        for (const o of observed) {
           const prev = health[o.sourceKey];
           // 停用期已过 → 上一次的连续失败已被「停用 + 恢复」打断，重新从 1 开始累计
           const interrupted = !!prev?.disabledUntil && prev.disabledUntil <= now;
@@ -880,9 +882,14 @@ export const useAppStore = create<AppState>()(
       //     与旧行为完全一致，因此无需改写存量数据，仅借版本号让 migrate 跑一遍。
       // v9：首页推荐新增自定义栏目列表；老快照补空数组，继续使用内置分类。
       // 此前未声明 version 的存量数据会被视为 v0 并走 migrate 补齐。
-      version: 9,
+      // v10：仅清理被 Workers 平台错误误记的健康度，保留源和勾选状态。
+      version: 10,
       migrate: (persisted, version) => {
         const state = { ...((persisted ?? {}) as Partial<AppState>) };
+        if (version < 10 && state.sourceHealth) {
+          state.sourceHealth = Object.fromEntries(Object.entries(state.sourceHealth)
+            .filter(([, entry]) => !isSearchInfrastructureError(entry?.error)));
+        }
         if (!Array.isArray(state.liveRecent)) state.liveRecent = [];
         if (!Array.isArray(state.liveSubscriptions)) state.liveSubscriptions = [];
 
